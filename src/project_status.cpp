@@ -13,8 +13,8 @@ std::vector<PhaseStatus> BuildDefaultPhases() {
        "CMake, CLI entrypoint, and local test target exist."},
       {"P3", "Package and storage contract", 100,
        "APK layout and host storage mapping are encoded in code."},
-      {"P4", "Runtime and service contract", 25,
-       "Core runtime boundaries are documented, but not executable."},
+      {"P4", "Runtime and service contract", 45,
+       "Decoded manifests can now be assessed for runtime requirements."},
       {"P5", "Graphics and host integration", 0,
        "No host window or compositor work has started yet."},
       {"P6", "APK execution and validation", 0,
@@ -101,7 +101,7 @@ std::string DescribeMvpFoundation() {
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: container-first Android userspace integration\n";
-  output << "Current Slice: checkpoint engine, package layout planner, and status CLI\n";
+  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, and status CLI\n";
   output << "Why: this keeps the first executable slice aligned with the future core.\n";
   return output.str();
 }

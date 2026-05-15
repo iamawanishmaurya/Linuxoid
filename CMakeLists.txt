@@ -15,6 +15,7 @@ include(CTest)
 add_library(
   wfa_core
   src/checkpoint.cpp
+  src/manifest_assessment.cpp
   src/package_layout.cpp
   src/project_status.cpp
 )

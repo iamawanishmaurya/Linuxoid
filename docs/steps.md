@@ -59,3 +59,43 @@
   Action: Staged the first C++ MVP scaffold, committed it as a feature slice, and created the local `v0.1.1` tag.
   Result: The repository now has a clean, tagged local checkpoint for the first executable MVP foundation.
   Timestamp: 2026-05-16T01:09:19+05:30
+
+- Step: TDD red phase for manifest assessment
+  Action: Added the next Phase 4 test expectations and wired the new manifest-assessment source into CMake before writing the implementation.
+  Result: The configure step failed as expected because `src/manifest_assessment.cpp` does not exist yet.
+  Timestamp: 2026-05-16T01:19:13+05:30
+
+- Step: First green-pass compile attempt for manifest assessment
+  Action: Built the new manifest-assessment slice and ran the full verification command chain, including the keyboard manifest assessment path.
+  Result: The build failed in `src/manifest_assessment.cpp` because several regex string literals were malformed and did not compile.
+  Timestamp: 2026-05-16T01:21:13+05:30
+
+- Step: Second green-pass compile attempt for manifest assessment
+  Action: Rebuilt the manifest-assessment slice after fixing the regex literal syntax.
+  Result: The build advanced further, but failed because the permission scan used `std::sregex_iterator` with incompatible `std::string_view` iterators.
+  Timestamp: 2026-05-16T01:22:02+05:30
+
+- Step: Third green-pass verification attempt for manifest assessment
+  Action: Rebuilt the manifest-assessment slice after the iterator fix and ran the test suite.
+  Result: The code compiled, but the tests failed because one phase-progress expectation still assumed the old `54/100` average instead of the new Phase 4 loading.
+  Timestamp: 2026-05-16T01:22:55+05:30
+
+- Step: Manifest assessment verification success
+  Action: Completed the full build, test, decode, status, and `assess-manifest` verification chain against the real keyboard APK manifest.
+  Result: The new Phase 4 slice passed locally, raised overall phase loading to `58/100`, and classified the keyboard app as loadable in `P4`, settings-launchable in `P6`, and fully usable only in `POST_P6_IME`.
+  Timestamp: 2026-05-16T01:24:00+05:30
+
+- Step: Manifest assessment repeatability rerun
+  Action: Re-ran the local build, test suite, status report, and keyboard manifest assessment after the documentation updates.
+  Result: The rerun remained green and reproduced the same `58/100` phase loading and keyboard-app phase classification.
+  Timestamp: 2026-05-16T01:25:56+05:30
+
+- Step: Review-driven red phase
+  Action: Added targeted tests for `activity-alias` launcher handling, advanced-runtime blockers, and invalid manifest rejection based on reviewer findings.
+  Result: The first new test failed because the current parser does not treat launcher `activity-alias` declarations as launchable components.
+  Timestamp: 2026-05-16T01:27:35+05:30
+
+- Step: Review-driven manifest assessment fixes
+  Action: Updated the parser and assessment logic to recognize launcher `activity-alias` components and to move advanced-runtime apps beyond `P6` for full-use readiness, then reran the expanded test suite and keyboard assessment.
+  Result: The reviewer-driven tests passed, and the keyboard app kept the same verified classification: `P4` for package load, `P6` for settings UI, and `POST_P6_IME` for full use.
+  Timestamp: 2026-05-16T01:28:47+05:30

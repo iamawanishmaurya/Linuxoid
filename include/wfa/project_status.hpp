@@ -2,6 +2,7 @@
 #define WFA_PROJECT_STATUS_HPP
 
 #include "wfa/checkpoint.hpp"
+#include "wfa/manifest_assessment.hpp"
 #include "wfa/package_layout.hpp"
 
 #include <span>

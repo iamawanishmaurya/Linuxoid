@@ -64,7 +64,7 @@ Each phase is shown as a completion value from `0` to `100`.
 | P1 | Research and architecture lock | 100 |
 | P2 | Build and tooling scaffold | 100 |
 | P3 | Package and storage contract | 100 |
-| P4 | Runtime and service contract | 25 |
+| P4 | Runtime and service contract | 45 |
 | P5 | Graphics and host integration | 0 |
 | P6 | APK execution and validation | 0 |
 

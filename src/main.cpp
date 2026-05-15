@@ -1,7 +1,10 @@
+#include "wfa/manifest_assessment.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -13,7 +16,19 @@ void PrintUsage() {
       << "Usage:\n"
       << "  compatctl status\n"
       << "  compatctl foundation\n"
+      << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl layout <package> <install-id> <version-code> [compat-root]\n";
+}
+
+std::string ReadFile(const std::string& path) {
+  std::ifstream input(path);
+  if (!input) {
+    throw std::runtime_error("unable to open file: " + path);
+  }
+
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  return buffer.str();
 }
 
 }  // namespace
@@ -34,6 +49,18 @@ int main(int argc, char** argv) {
 
     if (command == "foundation") {
       std::cout << wfa::DescribeMvpFoundation();
+      return EXIT_SUCCESS;
+    }
+
+    if (command == "assess-manifest") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto profile = wfa::ParseDecodedManifest(ReadFile(argv[2]));
+      const auto assessment = wfa::AssessRuntimeRequirements(profile);
+      std::cout << wfa::RenderManifestAssessmentReport(assessment);
       return EXIT_SUCCESS;
     }
 
