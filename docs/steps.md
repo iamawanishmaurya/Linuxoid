@@ -54,3 +54,8 @@
   Action: Re-ran the local build, test suite, and `compatctl status` after the README and changelog updates.
   Result: The second local verification pass stayed green and reproduced the same `54/100` phase loading and `18/100` runtime checkpoint output.
   Timestamp: 2026-05-16T01:08:47+05:30
+
+- Step: MVP scaffold commit and version tag
+  Action: Staged the first C++ MVP scaffold, committed it as a feature slice, and created the local `v0.1.1` tag.
+  Result: The repository now has a clean, tagged local checkpoint for the first executable MVP foundation.
+  Timestamp: 2026-05-16T01:09:19+05:30
