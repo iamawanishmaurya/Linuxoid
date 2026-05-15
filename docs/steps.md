@@ -34,3 +34,23 @@
   Action: Staged the documentation baseline, committed the bootstrap workflow, and attempted to push `main` to `origin`.
   Result: The local commit succeeded, but the push failed because no `origin` remote is configured in this repository.
   Timestamp: 2026-05-16T01:02:26+05:30
+
+- Step: MVP decision synthesis
+  Action: Re-read the repository state, reviewed the completed research outputs, and translated them into a concrete language choice, MVP scope, and checkpoint strategy for implementation.
+  Result: Locked the first implementation slice to a C++ core scaffold for a container-first Android-on-Linux MVP, with explicit alternatives, risks, and evidence-based progress gates.
+  Timestamp: 2026-05-16T01:04:59+05:30
+
+- Step: TDD red phase for MVP scaffold
+  Action: Added the initial CMake and test targets for the C++ MVP scaffold and ran the configure step before creating the implementation files.
+  Result: The configure step failed as expected because the production source files and headers for the scaffold do not exist yet.
+  Timestamp: 2026-05-16T01:06:01+05:30
+
+- Step: MVP scaffold implementation and verification
+  Action: Implemented the first C++ MVP scaffold, including a status CLI, checkpoint engine, package-layout planner, and test suite, then ran configure, build, tests, and smoke commands.
+  Result: The local build succeeded, tests passed, and the CLI reported `54/100` phase loading and `18/100` runtime checkpoint progress with verified package-layout output.
+  Timestamp: 2026-05-16T01:08:16+05:30
+
+- Step: Local repeatability rerun
+  Action: Re-ran the local build, test suite, and `compatctl status` after the README and changelog updates.
+  Result: The second local verification pass stayed green and reproduced the same `54/100` phase loading and `18/100` runtime checkpoint output.
+  Timestamp: 2026-05-16T01:08:47+05:30
