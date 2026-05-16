@@ -784,3 +784,23 @@
   Action: Staged the browser-architecture docs slice, confirmed the staged release set with `git status`, and created the feature commit `docs: add self-healing browser architecture`.
   Result: Linuxoid now has a clean release candidate commit for the self-healing browser architecture direction, ready to be tagged and pushed as `v0.1.24`.
   Timestamp: 2026-05-16T16:16:02+05:30
+
+- Step: Phased build plan roadmap sync
+  Action: Added the new phased `P0-P6` execution roadmap to `docs/phased-build-plan.md`, rewrote the README roadmap around `P0 Freeze & Triage`, and marked the browser track as researched but frozen until `P5`.
+  Result: The repository now treats native execution as the critical path, keeps the browser track parked behind the execution core, and points GitHub readers at a concrete phase-by-phase plan instead of an open-ended next-step list.
+  Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: P0 stub audit and status honesty refresh
+  Action: Added `docs/p0-stub-audit.md` to map the current native-runtime stop points, updated `src/project_status.cpp` so `compatctl` now distinguishes scaffold readiness from native execution readiness, and bumped release metadata for the phased-plan alignment release.
+  Result: Linuxoid now has a concrete `P0` execution queue in the repo, and the CLI no longer implies that direct Android-on-Linux execution is nearly complete when the execution core is still at `0/100`.
+  Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: Repeated status-heading test failure triage
+  Action: Logged the repeated `expected phase loading heading` CTest failure in `docs/problems/2026-05-16-status-heading-test-stale-build.md`, evaluated three distinct recovery options in `docs/solutions/status-heading-test-stale-build.md`, and selected the rebuild-first fix path.
+  Result: The repeated test failure is now documented with an explicit decision trail, so the next verification run can proceed under the repo's repeated-error rule instead of silently retrying.
+  Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: Phased-plan alignment verification
+  Action: Rebuilt Linuxoid with `cmake --build build`, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, and reran `./build/compatctl foundation` after the phased-plan, P0 audit, and status wording changes.
+  Result: The build is green, tests pass again, and the CLI now reports `scaffold 95/100` plus `execution 0/100` with `P0 -> P2` as the active critical path.
+  Timestamp: 2026-05-16T16:17:54+05:30

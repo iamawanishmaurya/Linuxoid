@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.25 - 2026-05-16
+
+- Add `docs/phased-build-plan.md` as the repo-facing source of truth for the direct-execution roadmap from `P0 Freeze & Triage` through `P6 Polish + Release`.
+- Freeze the browser track behind `P5` in the README and browser architecture note so Linuxoid stops drifting into browser implementation before native execution, graphics, DEX, and Binder work land.
+- Add `docs/p0-stub-audit.md` and update `compatctl status` plus `compatctl foundation` so the project now says `scaffold 95/100, execution 0/100` explicitly and maps the current native stub exits into an ordered `P1` queue.
+
 ## v0.1.24 - 2026-05-16
 
 - Add a researched self-healing Android browser architecture direction for Linuxoid based on an Android `WebView` browser shell, bounded recovery policy, and MCP/harness-friendly artifacts.

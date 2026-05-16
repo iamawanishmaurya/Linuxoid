@@ -7,7 +7,7 @@ Linuxoid currently contains the first executable MVP scaffold for an Android-on-
 - Core language: `C++20`
 - Runtime strategy: backend-neutral attached Android targets on the path to a native Linux compatibility layer
 - Agent integration strategy: stable MCP- and harness-friendly control surfaces, artifact layouts, and verification commands
-- Browser strategy: Linuxoid-owned Android WebView browser shell with a bounded self-healing recovery loop
+- Browser strategy: researched and frozen until `P5`; the target remains a Linuxoid-owned Android WebView browser shell with a bounded self-healing recovery loop
 - Current executable: `compatctl`
 
 ## Current Working Architecture
@@ -92,6 +92,17 @@ This diagram is the current working architecture and should stay in sync with th
 - Update the **Target Architecture** Mermaid graph whenever the long-term no-runtime design changes.
 - Keep the README diagrams GitHub-ready so the current state of Linuxoid is visible without opening source files first.
 
+## Execution Plan
+
+Linuxoid now treats the phased execution plan as the repo-facing source of truth for the direct-runtime push:
+
+- Current state: scaffold `95/100`, execution `0/100`
+- Current focus: `P0 Freeze & Triage`
+- Critical path: `P1 NDK Execution Core -> P2 Window + Graphics`
+- Browser work is frozen until `P5`
+
+Plan document: [docs/phased-build-plan.md](/home/astra/codex/wine-for-android/docs/phased-build-plan.md)
+
 ## Target Architecture
 
 ```mermaid
@@ -153,7 +164,7 @@ flowchart TB
   Recovery --> Trace
 ```
 
-This is the researched browser target slice, not a shipped Linuxoid feature yet. The recommended foundation is a **Linuxoid-owned browser shell on the Android WebView API surface**, with the self-healing logic outside the page and the control surface kept MCP- and harness-friendly from day one.
+This is the researched browser target slice, not a shipped Linuxoid feature yet. It is explicitly frozen until `P5` while Linuxoid focuses on native execution, Wayland graphics, DEX, and Binder. The recommended foundation remains a **Linuxoid-owned browser shell on the Android WebView API surface**, with the self-healing logic outside the page and the control surface kept MCP- and harness-friendly from day one.
 
 ## What Exists Today
 
@@ -221,47 +232,52 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 - The new `native-lifecycle-shim` path proves Linuxoid can own lifecycle/session handoff and service binding artifacts locally, but **it still stops before real app-code execution**.
 - The current live proofs on GitHub are still **runtime-backed**: Waydroid handles the installed-package Linux launch path, and `attached-adb` remains a transition backend plus regression oracle.
 - `attached-adb` is now part of the core contract with target-side launcher and metadata lookup, but it is still not the final goal.
+- Waydroid and `attached-adb` stay in scope as regression oracles through `P0-P4`, but they are not acceptable end-state runtimes for Linuxoid.
 - Future native slices should preserve **MCP and harness compatibility** by keeping commands backend-neutral, outputs inspectable, and artifact paths deterministic for agent workflows.
-- The self-healing browser track should start from **Android WebView + Linuxoid BrowserSession**, not a full Chromium browser shell or `Chrome.apk` port.
+- The self-healing browser track should start from **Android WebView + Linuxoid BrowserSession**, not a full Chromium browser shell or `Chrome.apk` port, and it should remain frozen until `P5`.
 
 ## What To Do Next
 
 These are the next five highest-value moves from the current state if the goal is to run Android apps directly on Linux without depending on Waydroid or any other external Android runtime:
 
-1. Replace the lifecycle shim with a **Linuxoid-owned process bootstrap** that can start a real native app process for the Calculator-like simple app class.
-   The next step is to turn the current session and service artifacts into a process handoff instead of a structured stop.
+1. Audit `native-execute-stub` on Calculator and record the exact stop point.
+   Linuxoid needs one hard execution baseline before changing anything else.
 
-2. Attach **DEX/class loading, resource lookup, and JNI plumbing** to that process bootstrap.
-   This is the next hard boundary between “Linuxoid can prepare the app” and “Linuxoid can actually begin running app code.”
+2. Map every current `not implemented` or stubbed native-runtime exit.
+   The point of `P0` is to turn today’s scattered stops into an ordered queue for `P1+`.
 
-3. Add **native graphics, input, and window integration** for that same simple app class.
-   The first target is one real Calculator-like window with Linux event flow instead of a runtime-backed launcher.
+3. Replace the current native stub with the first `dlopen()` and `ANativeActivity_onCreate` path for the Calculator-like app class.
+   The first real win is not Java, Binder, or browser work. It is a Linux process that loads Android native code and stays alive.
 
-4. Replace the placeholder service bindings with **Binder-compatible runtime services** for the simple app class.
-   The lifecycle shim now reserves the seam; the next step is to start filling it with real behavior instead of stub notes.
+4. Add the smallest viable fake `ANativeActivity`, `JavaVM`, `JNIEnv`, `AAssetManager`, and `ALooper` surfaces needed to keep that process alive for five seconds.
+   That is the real `P1` gate.
 
-5. Expand the native proof to a **three-app compatibility set** while keeping Waydroid and attached-ADB matrix runs as regression baselines.
-  The goal is one native simple app, one native settings-style app, and one honest failure classification for a more complex app.
+5. Move straight into Wayland and EGL once the process stays up.
+   The next meaningful proof after `P1` is a real pixel in a Linux window, not another scaffold layer.
 
 For every step above, keep the interfaces **MCP- and harness-compatible**:
 - machine-readable outputs should remain stable
 - intermediate artifacts should stay discoverable
 - verification commands should stay composable in agent workflows
 
-## Browser Track Next
+## Browser Track Status
 
-These are the next five highest-value moves for the self-healing Android browser track inside Linuxoid:
+The self-healing browser track is researched but frozen until `P5 Audio + Network + Browser`.
 
-1. Build a **BrowserSession skeleton** over the Android WebView surface with a machine-readable session journal.
-2. Add a **bounded self-healing recovery policy** with failure classes, retry budgets, and fail-closed stop conditions.
-3. Add a **DOM/message bridge** plus Android accessibility fallback so the browser can re-anchor when page structure changes.
-4. Add **trace, replay, and eval artifacts** for MCP clients and harnesses: request, result, events, snapshots, replay, and eval outputs.
-5. Add **permission, download, and prompt brokers** so recovery can handle browser/system interruptions without widening scope.
+What stays frozen until then:
 
-Keep this browser track aligned with the broader Linuxoid goal:
-- build on `android.webkit.WebView` first
-- keep self-healing policy separate from browser rendering
-- preserve stable machine-facing contracts for agents and harnesses
+- BrowserSession implementation
+- Self-healing recovery policy implementation
+- DOM and JS bridge work
+- Permission, download, and prompt broker work
+
+Why the freeze exists:
+
+- Linuxoid still has `execution 0/100` on the native path.
+- `P1 -> P2` is the real blocker for the whole project.
+- Browser work only makes sense after Linuxoid can already host Android UI and app code directly.
+
+The browser target architecture is still useful as a design reference and stays documented here:
 
 Detailed architecture note: [docs/browser-self-healing-architecture.md](/home/astra/codex/wine-for-android/docs/browser-self-healing-architecture.md)
 

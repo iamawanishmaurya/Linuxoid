@@ -86,8 +86,10 @@ void TestPackageValidationRejectsInvalidName() {
 void TestStatusRenderingContainsLoadingBars() {
   const auto report = wfa::RenderProjectStatusReport();
 
-  Expect(report.find("Phase Loading") != std::string::npos,
-         "expected phase loading heading");
+  Expect(report.find("Scaffold Readiness") != std::string::npos,
+         "expected scaffold readiness heading");
+  Expect(report.find("Native Execution Readiness") != std::string::npos,
+         "expected native execution readiness heading");
   Expect(report.find("95/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,

@@ -66,7 +66,10 @@ std::string RenderProjectStatusReport() {
   output << "Project: Linuxoid\n";
   output << "Language: C++\n";
   output << "Runtime Strategy: backend-neutral attached Android targets on the path to a native Linux compatibility layer\n";
-  output << "Phase Loading: " << RenderLoadingBar(phase_progress) << "\n";
+  output << "Scaffold Readiness: " << RenderLoadingBar(phase_progress) << "\n";
+  output << "Native Execution Readiness: " << RenderLoadingBar(0) << "\n";
+  output << "Execution Focus: P0 Freeze & Triage -> P1 NDK Execution Core -> P2 Window + Graphics\n";
+  output << "Legacy Scaffold Phases:\n";
 
   for (const auto& phase : phases) {
     output << "  " << phase.id << " " << phase.name << " "
@@ -103,9 +106,11 @@ std::string DescribeMvpFoundation() {
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: backend-neutral attached Android targets on the path to a native Linux compatibility layer\n";
+  output << "Current State: scaffold 95/100, execution 0/100\n";
+  output << "Execution Focus: P0 Freeze & Triage -> P1 NDK Execution Core -> P2 Window + Graphics\n";
   output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, backend-neutral installed-package launch plus target discovery/preflight, attached-target package inspection and launcher resolution, Linux desktop launch artifacts with repeatable generic per-app, matrix, and APK-backed verification, the first native spike planner that writes a Linuxoid-owned bundle layout and bootstrap spec for simple APKs, a Linuxoid-owned native bootstrap surface that emits a manifest, env script, and local entrypoint stub, and the first lifecycle/service shim that turns that bootstrap into deterministic session artifacts and service bindings\n";
-  output << "Golden App Proof: the FUTO keyboard APK now returns Ready for typing: yes through both a Linuxoid-generated launcher and the local-APK verifier on live Waydroid, attached-ADB now auto-resolves installed-app launchers and verifies a live Settings, Calculator, and F-Droid matrix without explicit component input, Calculator now passes `plan-native-spike` with a real native bundle plan and no blockers, and the generated Linuxoid-native lifecycle shim now runs locally with `Lifecycle Handoff Ready: yes` and `Execution Engine Ready: no` without depending on Waydroid at invocation time.\n";
-  output << "Why: this keeps the first executable slice aligned with the future core.\n";
+  output << "Execution Baseline: the FUTO keyboard APK still returns Ready for typing: yes through runtime-backed verification, attached-ADB still verifies a live Settings, Calculator, and F-Droid matrix, Calculator passes `plan-native-spike` with a real native bundle plan and no blockers, and the generated Linuxoid-native lifecycle shim now runs locally with `Lifecycle Handoff Ready: yes` and `Execution Engine Ready: no`. Linuxoid still does not execute Android app code directly on Linux yet.\n";
+  output << "Why: this keeps the scaffold useful while making the missing native execution core impossible to ignore.\n";
   return output.str();
 }
 

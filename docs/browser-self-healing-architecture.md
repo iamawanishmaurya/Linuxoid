@@ -1,5 +1,9 @@
 # Linuxoid Self-Healing Browser Architecture
 
+## Status
+
+This track is a researched target slice only. It is **frozen until `P5 Audio + Network + Browser`** while Linuxoid works through `P0 Freeze & Triage`, `P1 NDK Execution Core`, `P2 Window + Graphics`, `P3 DEX + ART Bridge`, and `P4 Binder + Services`.
+
 ## Goal
 
 Linuxoid should eventually expose an Android browser that keeps trying to satisfy user intent when the page, browser process, or Android system UI gets in the way, while still stopping safely when scope or risk expands.
@@ -196,6 +200,8 @@ Rules:
 - outputs remain backend-neutral
 
 ## Recommended Next Steps
+
+Do not implement these before `P5`. When the browser track is unfrozen, the next steps are:
 
 1. Add a BrowserSession architecture scaffold to Linuxoid docs and command surfaces
 2. Add a recovery policy module with explicit failure codes and retry budgets
