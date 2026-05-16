@@ -204,3 +204,8 @@
   Action: Sent the hardened provisioning diff back through the reviewer subagent after the fail-closed and incremental-readback fixes.
   Result: The reviewer reported no remaining findings in the current scope after rebuilding and rerunning the local test suite.
   Timestamp: 2026-05-16T08:51:19+05:30
+
+- Step: Release commit and local tags
+  Action: Staged the hardened provisioning slice, committed it on `main`, confirmed a clean working tree, created the missing local `v0.1.3` tag on the earlier APK-loader release commit, created the local `v0.1.4` tag on the current release commit, and confirmed that no Git remote is configured yet.
+  Result: The repository now has the feature commit `a48a694`, local tags through `v0.1.4`, and a known remote-publish blocker that still needs an `origin` configuration before any push can succeed.
+  Timestamp: 2026-05-16T08:53:42+05:30
