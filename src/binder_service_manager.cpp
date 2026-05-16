@@ -1,5 +1,9 @@
 #include "wfa/binder_service_manager.hpp"
 
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -105,6 +109,15 @@ void WriteJsonlFile(const fs::path& path,
   WriteTextFile(path, output.str());
 }
 
+struct BinderTransportMessage {
+  std::string message_kind;
+  std::string service_name;
+  std::string interface_name;
+  std::string caller_identity;
+  int handle_id = 0;
+  std::string payload_summary;
+};
+
 std::vector<BinderServiceRegistration> BuildDefaultRegistrations() {
   return {
       {"service_manager", "android.os.IServiceManager",
@@ -155,6 +168,84 @@ std::string RenderServiceRegistryJson(
   return output.str();
 }
 
+std::string RenderTransportMessageJson(const BinderTransportMessage& message) {
+  std::ostringstream output;
+  output << "{"
+         << "\"message_kind\": \"" << EscapeJson(message.message_kind)
+         << "\", "
+         << "\"service_name\": \"" << EscapeJson(message.service_name)
+         << "\", "
+         << "\"interface_name\": \"" << EscapeJson(message.interface_name)
+         << "\", "
+         << "\"caller_identity\": \"" << EscapeJson(message.caller_identity)
+         << "\", "
+         << "\"handle_id\": " << message.handle_id << ", "
+         << "\"payload_summary\": \"" << EscapeJson(message.payload_summary)
+         << "\""
+         << "}";
+  return output.str();
+}
+
+void WriteTransportMessageLog(
+    const fs::path& path,
+    const std::vector<BinderTransportMessage>& messages) {
+  std::vector<std::string> rendered_lines;
+  rendered_lines.reserve(messages.size());
+  for (const auto& message : messages) {
+    rendered_lines.push_back(RenderTransportMessageJson(message));
+  }
+  WriteJsonlFile(path, rendered_lines);
+}
+
+void SendBinderTransportPayload(int fd, const std::string& payload) {
+  const ssize_t written = send(fd, payload.data(), payload.size(), 0);
+  if (written < 0 || static_cast<std::size_t>(written) != payload.size()) {
+    throw std::runtime_error("unable to write binder transport payload");
+  }
+}
+
+std::string ReceiveBinderTransportPayload(int fd) {
+  std::array<char, 2048> buffer{};
+  const ssize_t received = recv(fd, buffer.data(), buffer.size(), 0);
+  if (received < 0) {
+    throw std::runtime_error("unable to read binder transport payload");
+  }
+  return std::string(buffer.data(), static_cast<std::size_t>(received));
+}
+
+void SimulateTransportRoundTrip(const BinderTransportMessage& request,
+                                const BinderTransportMessage& response,
+                                std::vector<BinderTransportMessage>& messages) {
+  int sockets[2] = {-1, -1};
+  if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
+    throw std::runtime_error("unable to create unix socketpair transport");
+  }
+
+  const std::string request_json = RenderTransportMessageJson(request);
+  const std::string response_json = RenderTransportMessageJson(response);
+
+  try {
+    SendBinderTransportPayload(sockets[0], request_json);
+    const std::string server_seen = ReceiveBinderTransportPayload(sockets[1]);
+    messages.push_back(request);
+
+    SendBinderTransportPayload(sockets[1], response_json);
+    const std::string client_seen = ReceiveBinderTransportPayload(sockets[0]);
+    messages.push_back(response);
+
+    if (server_seen != request_json || client_seen != response_json) {
+      throw std::runtime_error("binder transport payload mismatch");
+    }
+  } catch (...) {
+    close(sockets[0]);
+    close(sockets[1]);
+    throw;
+  }
+
+  close(sockets[0]);
+  close(sockets[1]);
+}
+
 }  // namespace
 
 BinderServiceManagerFixtureReport RunBinderServiceManagerFixture(
@@ -163,7 +254,10 @@ BinderServiceManagerFixtureReport RunBinderServiceManagerFixture(
   report.package_name = spec.package_name;
   report.launcher_component = spec.launcher_component;
   report.artifact_root = spec.artifact_root;
-  report.transport_kind = "in_process_binder_shape";
+  report.transport_kind = "unix_socketpair_binder_shape";
+  report.transport_log_path =
+      (fs::path(spec.artifact_root) / "binder" / "transport-messages.jsonl")
+          .string();
   report.metadata_path =
       (fs::path(spec.artifact_root) / "binder" / "service-manager.json").string();
   report.registry_path =
@@ -185,6 +279,7 @@ BinderServiceManagerFixtureReport RunBinderServiceManagerFixture(
     WriteTextFile(report.registry_path, "[]\n");
     WriteTextFile(report.lookup_log_path, "");
     WriteTextFile(report.transaction_log_path, "");
+    WriteTextFile(report.transport_log_path, "");
     return report;
   }
 
@@ -212,6 +307,48 @@ BinderServiceManagerFixtureReport RunBinderServiceManagerFixture(
   }
   WriteJsonlFile(report.transaction_log_path, transaction_lines);
 
+  std::vector<BinderTransportMessage> transport_messages;
+  transport_messages.reserve((report.lookups.size() + report.transactions.size()) *
+                             2);
+
+  for (const auto& lookup : report.lookups) {
+    SimulateTransportRoundTrip(
+        {.message_kind = "lookup_request",
+         .service_name = lookup.service_name,
+         .interface_name = "android.os.IServiceManager",
+         .caller_identity = lookup.caller_identity,
+         .handle_id = 1,
+         .payload_summary = "service=" + lookup.service_name},
+        {.message_kind = "lookup_response",
+         .service_name = lookup.service_name,
+         .interface_name = "android.os.IServiceManager",
+         .caller_identity = lookup.caller_identity,
+         .handle_id = lookup.handle_id,
+         .payload_summary = "result=" + lookup.result},
+        transport_messages);
+  }
+
+  for (const auto& transaction : report.transactions) {
+    const int handle_id = transaction.service_name == "package_manager" ? 2 : 3;
+    SimulateTransportRoundTrip(
+        {.message_kind = "transaction_request",
+         .service_name = transaction.service_name,
+         .interface_name = transaction.interface_name,
+         .caller_identity = transaction.caller_identity,
+         .handle_id = handle_id,
+         .payload_summary = transaction.request_summary},
+        {.message_kind = "transaction_response",
+         .service_name = transaction.service_name,
+         .interface_name = transaction.interface_name,
+         .caller_identity = transaction.caller_identity,
+         .handle_id = handle_id,
+         .payload_summary = transaction.response_summary},
+        transport_messages);
+  }
+  report.transport_round_trips =
+      static_cast<int>(report.lookups.size() + report.transactions.size());
+  WriteTransportMessageLog(report.transport_log_path, transport_messages);
+
   WriteTextFile(report.metadata_path,
                 RenderBinderServiceManagerFixtureJson(report));
   return report;
@@ -231,6 +368,8 @@ std::string RenderBinderServiceManagerFixtureJson(
          << "\",\n"
          << "  \"artifact_root\": \"" << EscapeJson(report.artifact_root)
          << "\",\n"
+         << "  \"transport_log_path\": \""
+         << EscapeJson(report.transport_log_path) << "\",\n"
          << "  \"metadata_path\": \"" << EscapeJson(report.metadata_path)
          << "\",\n"
          << "  \"registry_path\": \"" << EscapeJson(report.registry_path)
@@ -242,6 +381,8 @@ std::string RenderBinderServiceManagerFixtureJson(
          << "  \"registered_services\": " << report.services.size() << ",\n"
          << "  \"lookups_recorded\": " << report.lookups.size() << ",\n"
          << "  \"transactions_recorded\": " << report.transactions.size()
+         << ",\n"
+         << "  \"transport_round_trips\": " << report.transport_round_trips
          << ",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
          << "\"\n"

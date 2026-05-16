@@ -4,6 +4,7 @@
 #include "wfa/native_types.hpp"
 
 #include <string>
+#include <vector>
 
 namespace wfa {
 
@@ -16,6 +17,7 @@ struct AssetReadResult {
 
 AAssetManager* MakeStubAssetManager(const std::string& apk_path,
                                     const std::string& resource_root);
+std::vector<std::string> ListStubAssets(AAssetManager* manager);
 AssetReadResult ReadStubAsset(AAssetManager* manager,
                               const std::string& asset_path);
 

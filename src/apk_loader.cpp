@@ -1,5 +1,7 @@
 #include "wfa/apk_loader.hpp"
+#include "wfa/apk_archive.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -24,6 +26,7 @@ struct DecodedApkInspection {
   std::string manifest_xml;
 };
 
+std::string ExtractFirstMatch(std::string_view text, const std::regex& pattern);
 std::string QuoteForShell(const std::string& value);
 std::string RunCommandCapture(const std::string& command);
 
@@ -125,6 +128,15 @@ std::string ReadFile(const fs::path& path) {
   return buffer.str();
 }
 
+std::string ExtractFirstMatch(std::string_view text, const std::regex& pattern) {
+  std::match_results<std::string_view::const_iterator> match;
+  if (!std::regex_search(text.begin(), text.end(), match, pattern) ||
+      match.size() < 2) {
+    return {};
+  }
+  return std::string(match[1].first, match[1].second);
+}
+
 std::string ExtractYamlString(std::string_view text, const std::string& key) {
   const std::regex pattern("^\\s*" + key + R"(:\s*(.+)$)",
                            std::regex_constants::multiline);
@@ -149,6 +161,42 @@ int ExtractYamlInt(std::string_view text, const std::string& key) {
   return std::stoi(value);
 }
 
+int ExtractManifestSdkInt(std::string_view xml, const std::string& attribute) {
+  const std::regex pattern("<uses-sdk[^>]*" + attribute + "=\"([^\"]+)\"");
+  const std::string value = ExtractFirstMatch(xml, pattern);
+  if (value.empty()) {
+    return 0;
+  }
+  if (!std::regex_match(value, std::regex("[0-9]+"))) {
+    return 0;
+  }
+  return std::stoi(value);
+}
+
+std::string ExtractManifestApplicationName(std::string_view xml) {
+  return ExtractFirstMatch(
+      xml, std::regex("<application[^>]*android:name=\"([^\"]+)\""));
+}
+
+std::vector<std::string> ExtractManifestActivityNames(std::string_view xml) {
+  std::vector<std::string> activity_names;
+  const std::regex pattern(
+      "<(activity|activity-alias)[^>]*android:name=\"([^\"]+)\"");
+  const char* begin = xml.data();
+  const char* end = xml.data() + xml.size();
+  for (std::cregex_iterator it(begin, end, pattern), last; it != last; ++it) {
+    const std::string activity_name = (*it)[2].str();
+    if (activity_name.empty()) {
+      continue;
+    }
+    if (std::find(activity_names.begin(), activity_names.end(), activity_name) ==
+        activity_names.end()) {
+      activity_names.push_back(activity_name);
+    }
+  }
+  return activity_names;
+}
+
 std::string EscapeJson(const std::string& value) {
   std::string escaped;
   escaped.reserve(value.size() + 8);
@@ -169,6 +217,19 @@ std::string EscapeJson(const std::string& value) {
     }
   }
   return escaped;
+}
+
+std::string RenderJsonArray(const std::vector<std::string>& values) {
+  std::ostringstream output;
+  output << "[";
+  for (std::size_t index = 0; index < values.size(); ++index) {
+    if (index != 0) {
+      output << ", ";
+    }
+    output << "\"" << EscapeJson(values[index]) << "\"";
+  }
+  output << "]";
+  return output.str();
 }
 
 std::string SanitizeInstallSegment(const std::string& value) {
@@ -200,6 +261,43 @@ void WriteTextFile(const fs::path& path, const std::string& contents) {
     throw std::runtime_error("unable to write file: " + path.string());
   }
   output << contents;
+}
+
+void AppendUnique(std::vector<std::string>& values, const std::string& value) {
+  if (value.empty()) {
+    return;
+  }
+  if (std::find(values.begin(), values.end(), value) == values.end()) {
+    values.push_back(value);
+  }
+}
+
+std::vector<std::string> CollectFilesystemAssets(const fs::path& asset_root) {
+  std::vector<std::string> assets;
+  if (!fs::exists(asset_root)) {
+    return assets;
+  }
+  for (const auto& entry : fs::recursive_directory_iterator(asset_root)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    assets.push_back(fs::relative(entry.path(), asset_root).generic_string());
+  }
+  std::sort(assets.begin(), assets.end());
+  return assets;
+}
+
+std::vector<std::string> CollectArchiveAssets(
+    const std::vector<ApkArchiveEntry>& entries) {
+  std::vector<std::string> assets;
+  for (const auto& entry : entries) {
+    if (entry.is_directory || entry.path.rfind("assets/", 0) != 0) {
+      continue;
+    }
+    assets.push_back(entry.path.substr(std::string("assets/").size()));
+  }
+  std::sort(assets.begin(), assets.end());
+  return assets;
 }
 
 DecodedApkInspection InspectDecodedApk(const fs::path& apk) {
@@ -267,6 +365,161 @@ std::string BuildInstallId(const ApktoolMetadata& metadata) {
 
 std::string InspectApkPackageName(const std::string& apk_path) {
   return InspectDecodedApk(apk_path).profile.package_name;
+}
+
+ApkResourceReadinessReport InspectApkResourceReadiness(
+    const std::string& apk_path, const std::string& resource_root) {
+  const fs::path apk = apk_path;
+  if (!fs::exists(apk)) {
+    throw std::invalid_argument("apk path does not exist: " + apk.string());
+  }
+
+  ApkResourceReadinessReport report;
+  report.apk_path = apk_path;
+  report.resource_root_path = resource_root;
+
+  std::vector<ApkArchiveEntry> archive_entries;
+  try {
+    archive_entries = ListApkArchiveEntries(apk_path);
+  } catch (const std::exception& error) {
+    report.errors.push_back("archive_open_failed: " + std::string(error.what()));
+  }
+
+  const auto manifest_entry = std::find_if(
+      archive_entries.begin(), archive_entries.end(),
+      [](const ApkArchiveEntry& entry) {
+        return entry.path == "AndroidManifest.xml";
+      });
+  report.manifest.manifest_present = manifest_entry != archive_entries.end();
+
+  if (report.manifest.manifest_present) {
+    const auto manifest_read = ReadApkArchiveEntry(apk_path, "AndroidManifest.xml");
+    if (manifest_read.found && manifest_read.readable &&
+        manifest_read.contents.find("<manifest") != std::string::npos) {
+      const auto profile = ParseDecodedManifest(manifest_read.contents);
+      report.manifest.manifest_ready = true;
+      report.manifest.manifest_source = "archive_plain_xml";
+      report.manifest.package_name = profile.package_name;
+      report.manifest.min_sdk =
+          ExtractManifestSdkInt(manifest_read.contents, "android:minSdkVersion");
+      report.manifest.target_sdk = ExtractManifestSdkInt(
+          manifest_read.contents, "android:targetSdkVersion");
+      report.manifest.application_name =
+          ExtractManifestApplicationName(manifest_read.contents);
+      report.manifest.activity_names =
+          ExtractManifestActivityNames(manifest_read.contents);
+    }
+  }
+
+  if (!report.manifest.manifest_ready) {
+    try {
+      const auto decoded = InspectDecodedApk(apk);
+      report.manifest.manifest_present = true;
+      report.manifest.manifest_ready = true;
+      report.manifest.manifest_source = "apktool_decoded_manifest";
+      report.manifest.package_name = decoded.profile.package_name;
+      report.manifest.min_sdk = decoded.metadata.min_sdk;
+      report.manifest.target_sdk = decoded.metadata.target_sdk;
+      report.manifest.application_name =
+          ExtractManifestApplicationName(decoded.manifest_xml);
+      report.manifest.activity_names =
+          ExtractManifestActivityNames(decoded.manifest_xml);
+    } catch (const std::exception& error) {
+      if (!report.manifest.manifest_present) {
+        report.errors.push_back("manifest_missing");
+      } else {
+        report.errors.push_back("manifest_unavailable: " +
+                                std::string(error.what()));
+      }
+    }
+  }
+
+  const fs::path resource_root_path = resource_root;
+  const fs::path asset_root = resource_root.empty()
+                                  ? fs::path()
+                                  : (resource_root_path / "assets");
+  if (!resource_root.empty() &&
+      (fs::exists(asset_root) || fs::exists(resource_root_path))) {
+    report.asset_source = "staged_resource_root";
+    report.asset_root_path =
+        fs::exists(asset_root) ? asset_root.string() : resource_root;
+    report.asset_paths = CollectFilesystemAssets(
+        fs::exists(asset_root) ? asset_root : resource_root_path);
+    report.asset_listing_ready = true;
+    report.asset_read_ready = true;
+    report.resources_table_present =
+        fs::exists(resource_root_path / "resources.arsc") ||
+        fs::exists(resource_root_path / "res");
+  } else if (!archive_entries.empty()) {
+    report.asset_source = "archive_entries";
+    report.asset_root_path = "zip:" + apk_path + "!/assets";
+    report.asset_paths = CollectArchiveAssets(archive_entries);
+    report.asset_listing_ready = true;
+    report.asset_read_ready =
+        std::any_of(archive_entries.begin(), archive_entries.end(),
+                    [](const ApkArchiveEntry& entry) {
+                      return !entry.is_directory &&
+                             entry.path.rfind("assets/", 0) == 0 &&
+                             entry.compression_method == 0;
+                    }) ||
+        report.asset_paths.empty();
+    report.resources_table_present = std::any_of(
+        archive_entries.begin(), archive_entries.end(),
+        [](const ApkArchiveEntry& entry) { return entry.path == "resources.arsc"; });
+  }
+
+  if (report.asset_listing_ready && report.asset_paths.empty()) {
+    AppendUnique(report.errors, "asset_root_present_but_empty");
+  }
+  if (!report.asset_listing_ready) {
+    AppendUnique(report.errors, "asset_listing_unavailable");
+  }
+  if (!report.asset_read_ready) {
+    AppendUnique(report.errors, "asset_read_requires_stored_assets_or_stage_root");
+  }
+  if (!report.resources_table_present) {
+    AppendUnique(report.errors, "resources_table_missing_or_not_staged");
+  }
+
+  return report;
+}
+
+std::string RenderApkResourceReadinessJson(
+    const ApkResourceReadinessReport& report) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"apk_path\": \"" << EscapeJson(report.apk_path) << "\",\n"
+         << "  \"manifest_ready\": "
+         << (report.manifest.manifest_ready ? "true" : "false") << ",\n"
+         << "  \"manifest_present\": "
+         << (report.manifest.manifest_present ? "true" : "false") << ",\n"
+         << "  \"manifest_source\": \""
+         << EscapeJson(report.manifest.manifest_source) << "\",\n"
+         << "  \"package_name\": \""
+         << EscapeJson(report.manifest.package_name) << "\",\n"
+         << "  \"min_sdk\": " << report.manifest.min_sdk << ",\n"
+         << "  \"target_sdk\": " << report.manifest.target_sdk << ",\n"
+         << "  \"application_name\": \""
+         << EscapeJson(report.manifest.application_name) << "\",\n"
+         << "  \"activity_names\": "
+         << RenderJsonArray(report.manifest.activity_names) << ",\n"
+         << "  \"asset_listing_ready\": "
+         << (report.asset_listing_ready ? "true" : "false") << ",\n"
+         << "  \"asset_read_ready\": "
+         << (report.asset_read_ready ? "true" : "false") << ",\n"
+         << "  \"asset_source\": \"" << EscapeJson(report.asset_source)
+         << "\",\n"
+         << "  \"asset_root_path\": \""
+         << EscapeJson(report.asset_root_path) << "\",\n"
+         << "  \"resource_root_path\": \""
+         << EscapeJson(report.resource_root_path) << "\",\n"
+         << "  \"asset_paths\": " << RenderJsonArray(report.asset_paths)
+         << ",\n"
+         << "  \"resources_table_present\": "
+         << (report.resources_table_present ? "true" : "false") << ",\n"
+         << "  \"errors\": " << RenderJsonArray(report.errors) << "\n"
+         << "}\n";
+  return output.str();
 }
 
 std::string RenderLoadedApkReport(const LoadedApkReport& report) {

@@ -33,6 +33,7 @@ void PrintUsage() {
       << "  compatctl foundation\n"
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
+      << "  compatctl inspect-apk-resources <apk-path> [resource-root-or-dash]\n"
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl native-service-manager-fixture <bootstrap-manifest>\n"
@@ -204,6 +205,19 @@ int main(int argc, char** argv) {
       const auto report = wfa::LoadApkToCompatRoot(argv[2], compat_root);
       std::cout << wfa::RenderLoadedApkReport(report);
       return EXIT_SUCCESS;
+    }
+
+    if (command == "inspect-apk-resources") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string resource_root =
+          argc == 4 ? OptionalArgOrEmpty(argv[3]) : "";
+      const auto report = wfa::InspectApkResourceReadiness(argv[2], resource_root);
+      std::cout << wfa::RenderApkResourceReadinessJson(report);
+      return report.manifest.manifest_ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "plan-native-spike") {

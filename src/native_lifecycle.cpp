@@ -274,6 +274,9 @@ void WriteLifecycleArtifacts(const NativeLifecycleShim& lifecycle) {
                    << "  \"binder_transaction_log_path\": \""
                    << EscapeJson(lifecycle.binder_transaction_log_path)
                    << "\",\n"
+                   << "  \"binder_transport_log_path\": \""
+                   << EscapeJson(lifecycle.binder_transport_log_path)
+                   << "\",\n"
                    << "  \"activity_state\": \""
                    << EscapeJson(lifecycle.current_activity_state) << "\",\n"
                    << "  \"process_state\": \""
@@ -537,6 +540,9 @@ NativeLifecycleShim BuildNativeLifecycleShim(
   lifecycle.binder_transaction_log_path =
       (fs::path(lifecycle.session_root) / "binder" / "service-transactions.jsonl")
           .string();
+  lifecycle.binder_transport_log_path =
+      (fs::path(lifecycle.session_root) / "binder" / "transport-messages.jsonl")
+          .string();
   lifecycle.report_path =
       (fs::path(lifecycle.session_root) / "lifecycle-report.txt").string();
   lifecycle.runner_log_path =
@@ -563,6 +569,8 @@ NativeLifecycleShim BuildNativeLifecycleShim(
       lifecycle.binder_service_manager.lookup_log_path;
   lifecycle.binder_transaction_log_path =
       lifecycle.binder_service_manager.transaction_log_path;
+  lifecycle.binder_transport_log_path =
+      lifecycle.binder_service_manager.transport_log_path;
   lifecycle.services = lifecycle.binder_service_manager_ready
                            ? BuildServiceBindingsFromBinderFixture(
                                  lifecycle.binder_service_manager)
@@ -576,6 +584,7 @@ NativeLifecycleShim BuildNativeLifecycleShim(
       FileExists(lifecycle.binder_manager_metadata_path) &&
       FileExists(lifecycle.binder_lookup_log_path) &&
       FileExists(lifecycle.binder_transaction_log_path) &&
+      FileExists(lifecycle.binder_transport_log_path) &&
       FileExists(lifecycle.report_path) && !lifecycle.services.empty();
   return lifecycle;
 }
@@ -702,6 +711,7 @@ NativeLifecycleShim RunNativeProcessBootstrap(
       FileExists(lifecycle.binder_manager_metadata_path) &&
       FileExists(lifecycle.binder_lookup_log_path) &&
       FileExists(lifecycle.binder_transaction_log_path) &&
+      FileExists(lifecycle.binder_transport_log_path) &&
       FileExists(lifecycle.report_path) &&
       FileExists(lifecycle.runner_log_path) && !lifecycle.services.empty();
   return lifecycle;
@@ -733,6 +743,8 @@ std::string RenderNativeLifecycleShimReport(
          << "\n";
   output << "Binder Lookup Log: " << lifecycle.binder_lookup_log_path << "\n";
   output << "Binder Transaction Log: " << lifecycle.binder_transaction_log_path
+         << "\n";
+  output << "Binder Transport Log: " << lifecycle.binder_transport_log_path
          << "\n";
   output << "Runner Log: " << lifecycle.runner_log_path << "\n";
   output << "Runner Report: " << lifecycle.runner_report_path << "\n";
@@ -832,6 +844,8 @@ std::string RenderNativeProcessBootstrapJson(
          << EscapeJson(lifecycle.binder_lookup_log_path) << "\",\n"
          << "    \"binder_transaction_log_path\": \""
          << EscapeJson(lifecycle.binder_transaction_log_path) << "\",\n"
+         << "    \"binder_transport_log_path\": \""
+         << EscapeJson(lifecycle.binder_transport_log_path) << "\",\n"
          << "    \"runner_log_path\": \""
          << EscapeJson(lifecycle.runner_log_path) << "\",\n"
          << "    \"runner_report_path\": \""

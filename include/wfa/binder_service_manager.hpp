@@ -47,6 +47,7 @@ struct BinderServiceManagerFixtureReport {
   std::string launcher_component;
   std::string artifact_root;
   std::string transport_kind;
+  std::string transport_log_path;
   std::string metadata_path;
   std::string registry_path;
   std::string lookup_log_path;
@@ -54,6 +55,7 @@ struct BinderServiceManagerFixtureReport {
   std::vector<BinderServiceRegistration> services;
   std::vector<BinderServiceLookup> lookups;
   std::vector<BinderTransactionMetadata> transactions;
+  int transport_round_trips = 0;
   std::string exit_reason;
 };
 

@@ -1124,3 +1124,33 @@
   Action: Fixed the stale scaffold-progress expectation in `wfa_tests`, regenerated a fresh bootstrap manifest, re-ran the full build/test gate, and refreshed the README Mermaid graph, phased plan, changelog, and status output.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, `native-service-manager-fixture` now verifies cleanly on a current Calculator bootstrap manifest, and Linuxoid now reports `scaffold 96/100` and `execution 74/100` while still marking real Binder transport, DEX/ART, bound Wayland-EGL rendering, and full IME/text composition as pending.
   Timestamp: 2026-05-17T02:27:31+05:30
+
+- Step: P4.1 Binder-shaped transport-seam inspection
+  Action: Audited the current Binder-shaped manager fixture, lifecycle integration, and test surface to identify the smallest upgrade from a pure static in-process registry to a local Unix-domain transport seam.
+  Result: Confirmed that the current `src/binder_service_manager.cpp` already owns deterministic registration/lookup/transaction artifacts, so the right next slice is to add a kernel-backed local message round-trip path and stable transport logs without claiming real Android Binder transport yet.
+  Timestamp: 2026-05-17T11:24:18+05:30
+
+- Step: P4.1 Binder-shaped transport red test
+  Action: Extended the Binder-shaped manager tests to require a stable transport log path, recorded transport round trips, and request/response message artifacts over the local service-manager seam.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` now fails because the current fixture does not yet populate the new transport-log contract, with `wfa_tests` reporting `expected deterministic binder transport log path`.
+  Timestamp: 2026-05-17T11:28:31+05:30
+
+- Step: Resource bridge implementation slice
+  Action: Added a minimal ZIP-backed APK inspection layer, extended the asset manager stub to list and read normalized Android asset paths with traversal rejection, exposed `compatctl inspect-apk-resources`, and added deterministic ZIP-fixture tests for manifest, assets, and stable JSON output.
+  Result: The new resource/asset seam is implemented in code and ready for the full build/test gate, while full Android resource-table semantics, DEX/ART loading, and real app rendering remain intentionally out of scope for this slice.
+  Timestamp: 2026-05-17T12:09:00+05:30
+
+- Step: Resource bridge compile failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after landing the new APK resource-inspection layer and asset-bridge tests.
+  Result: The build failed in `src/apk_loader.cpp` because the new manifest helpers referenced `ExtractFirstMatch` before its definition, so the next change is a narrow declaration-order fix before rerunning the gate.
+  Timestamp: 2026-05-17T12:11:00+05:30
+
+- Step: Resource bridge test compile failure capture
+  Action: Re-ran the full build/test gate after fixing the manifest-helper declaration gap.
+  Result: The build advanced into `tests/test_main.cpp` and then failed because the new missing-manifest assertion used `std::find` without including `<algorithm>`, so the next change is a one-line test-header fix.
+  Timestamp: 2026-05-17T12:14:00+05:30
+
+- Step: Resource bridge gate verification and repo sync
+  Action: Fixed the helper-definition gap, added the missing test include, manually verified `compatctl inspect-apk-resources` against a plain stored ZIP fixture, and refreshed the README Mermaid graph, phased plan, changelog, solution notes, and status output.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, `inspect-apk-resources` now returns stable manifest plus asset/resource JSON on a local fixture, Linuxoid reports `scaffold 96/100` and `execution 78/100`, and the repo truthfully marks ART/DEX, full Android resource-table semantics, compositor-backed rendering, and full Binder behavior as the next gaps.
+  Timestamp: 2026-05-17T12:25:00+05:30

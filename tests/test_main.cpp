@@ -16,8 +16,10 @@
 #include "wfa/wayland_surface_fixture.hpp"
 #include "wfa/waydroid_integration.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -61,6 +63,113 @@ std::filesystem::path ResolveBuildDirFromTestBinary() {
     throw std::runtime_error("unable to resolve test binary path");
   }
   return self.parent_path();
+}
+
+std::uint32_t ComputeCrc32(const std::string& contents) {
+  std::uint32_t crc = 0xFFFFFFFFu;
+  for (const unsigned char byte : contents) {
+    crc ^= byte;
+    for (int bit = 0; bit < 8; ++bit) {
+      const bool carry = (crc & 1u) != 0;
+      crc >>= 1u;
+      if (carry) {
+        crc ^= 0xEDB88320u;
+      }
+    }
+  }
+  return crc ^ 0xFFFFFFFFu;
+}
+
+void WriteLe16(std::ofstream& output, std::uint16_t value) {
+  output.put(static_cast<char>(value & 0xFF));
+  output.put(static_cast<char>((value >> 8) & 0xFF));
+}
+
+void WriteLe32(std::ofstream& output, std::uint32_t value) {
+  output.put(static_cast<char>(value & 0xFF));
+  output.put(static_cast<char>((value >> 8) & 0xFF));
+  output.put(static_cast<char>((value >> 16) & 0xFF));
+  output.put(static_cast<char>((value >> 24) & 0xFF));
+}
+
+void WriteStoredZipFixture(
+    const std::filesystem::path& zip_path,
+    const std::vector<std::pair<std::string, std::string>>& entries) {
+  struct CentralDirectoryEntry {
+    std::string path;
+    std::uint32_t crc32 = 0;
+    std::uint32_t size = 0;
+    std::uint32_t local_header_offset = 0;
+  };
+
+  std::ofstream output(zip_path, std::ios::binary);
+  if (!output) {
+    throw std::runtime_error("unable to create zip fixture: " + zip_path.string());
+  }
+
+  std::vector<CentralDirectoryEntry> central_entries;
+  for (const auto& [path, contents] : entries) {
+    const std::uint32_t local_header_offset =
+        static_cast<std::uint32_t>(output.tellp());
+    const std::uint32_t crc32 = ComputeCrc32(contents);
+    const std::uint32_t size = static_cast<std::uint32_t>(contents.size());
+
+    WriteLe32(output, 0x04034B50u);
+    WriteLe16(output, 20);
+    WriteLe16(output, 0);
+    WriteLe16(output, 0);
+    WriteLe16(output, 0);
+    WriteLe16(output, 0);
+    WriteLe32(output, crc32);
+    WriteLe32(output, size);
+    WriteLe32(output, size);
+    WriteLe16(output, static_cast<std::uint16_t>(path.size()));
+    WriteLe16(output, 0);
+    output.write(path.data(), static_cast<std::streamsize>(path.size()));
+    output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+
+    central_entries.push_back(CentralDirectoryEntry{
+        .path = path,
+        .crc32 = crc32,
+        .size = size,
+        .local_header_offset = local_header_offset,
+    });
+  }
+
+  const std::uint32_t central_directory_offset =
+      static_cast<std::uint32_t>(output.tellp());
+  for (const auto& entry : central_entries) {
+    WriteLe32(output, 0x02014B50u);
+    WriteLe16(output, 20);
+    WriteLe16(output, 20);
+    WriteLe16(output, 0);
+    WriteLe16(output, 0);
+    WriteLe16(output, 0);
+    WriteLe16(output, 0);
+    WriteLe32(output, entry.crc32);
+    WriteLe32(output, entry.size);
+    WriteLe32(output, entry.size);
+    WriteLe16(output, static_cast<std::uint16_t>(entry.path.size()));
+    WriteLe16(output, 0);
+    WriteLe16(output, 0);
+    WriteLe16(output, 0);
+    WriteLe16(output, 0);
+    WriteLe32(output, 0);
+    WriteLe32(output, entry.local_header_offset);
+    output.write(entry.path.data(),
+                 static_cast<std::streamsize>(entry.path.size()));
+  }
+
+  const std::uint32_t central_directory_size =
+      static_cast<std::uint32_t>(output.tellp()) - central_directory_offset;
+  WriteLe32(output, 0x06054B50u);
+  WriteLe16(output, 0);
+  WriteLe16(output, 0);
+  WriteLe16(output, static_cast<std::uint16_t>(central_entries.size()));
+  WriteLe16(output, static_cast<std::uint16_t>(central_entries.size()));
+  WriteLe32(output, central_directory_size);
+  WriteLe32(output, central_directory_offset);
+  WriteLe16(output, 0);
 }
 
 void TestWeightedCheckpointProgress() {
@@ -960,6 +1069,164 @@ void TestAssetManagerReadsFixtureAsset() {
   fs::remove_all(root);
 }
 
+void TestAssetManagerListsZipAssetsAndBlocksTraversal() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-asset-zip-list-test";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path apk_path = root / "fixture.apk";
+  WriteStoredZipFixture(
+      apk_path,
+      {{"AndroidManifest.xml",
+        "<manifest package=\"com.example.fixture\"/>\n"},
+       {"assets/config/hello.txt", "hello zip asset\n"},
+       {"assets/images/logo.txt", "zip logo\n"}});
+
+  wfa::AAssetManager* manager =
+      wfa::MakeStubAssetManager(apk_path.string(), "");
+  const auto listed_assets = wfa::ListStubAssets(manager);
+  Expect(listed_assets.size() == 2, "expected two zip-backed assets");
+  Expect(listed_assets[0] == "config/hello.txt",
+         "expected normalized first asset path");
+  Expect(listed_assets[1] == "images/logo.txt",
+         "expected normalized second asset path");
+
+  const auto asset = wfa::ReadStubAsset(manager, "assets/config/hello.txt");
+  Expect(asset.found, "expected zip-backed asset read to succeed");
+  Expect(asset.contents == "hello zip asset\n",
+         "expected zip-backed asset contents");
+
+  const auto rejected = wfa::ReadStubAsset(manager, "../secret.txt");
+  Expect(!rejected.found, "expected traversal read to fail");
+  Expect(rejected.failure_reason == "asset_path_traversal_rejected",
+         "expected deterministic traversal rejection");
+
+  fs::remove_all(root);
+}
+
+void TestApkResourceReadinessReadsManifestAndAssetsFromZipFixture() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-apk-resource-readiness-test";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path apk_path = root / "fixture.apk";
+  WriteStoredZipFixture(
+      apk_path,
+      {{"AndroidManifest.xml",
+        R"(<manifest package="com.example.fixture">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
+  <application android:name="com.example.fixture.App">
+    <activity android:name="com.example.fixture.MainActivity"/>
+    <activity android:name="com.example.fixture.SettingsActivity"/>
+  </application>
+</manifest>
+)"},
+       {"assets/config/hello.txt", "hello zip asset\n"},
+       {"assets/images/logo.txt", "zip logo\n"},
+       {"resources.arsc", "arsc"}});
+
+  const auto report = wfa::InspectApkResourceReadiness(apk_path.string());
+  Expect(report.manifest.manifest_present, "expected manifest presence");
+  Expect(report.manifest.manifest_ready, "expected manifest readiness");
+  Expect(report.manifest.manifest_source == "archive_plain_xml",
+         "expected plain archive manifest source");
+  Expect(report.manifest.package_name == "com.example.fixture",
+         "expected package name from archive manifest");
+  Expect(report.manifest.min_sdk == 24, "expected min sdk from manifest");
+  Expect(report.manifest.target_sdk == 34,
+         "expected target sdk from manifest");
+  Expect(report.manifest.application_name == "com.example.fixture.App",
+         "expected application name");
+  Expect(report.manifest.activity_names.size() == 2,
+         "expected activity names from manifest");
+  Expect(report.asset_listing_ready, "expected asset listing readiness");
+  Expect(report.asset_read_ready, "expected asset read readiness");
+  Expect(report.asset_source == "archive_entries",
+         "expected archive asset source");
+  Expect(report.asset_paths.size() == 2, "expected two asset paths");
+  Expect(report.asset_paths[0] == "config/hello.txt",
+         "expected sorted asset path");
+  Expect(report.resources_table_present,
+         "expected resources table presence from archive entry");
+  Expect(report.errors.empty(), "expected no readiness errors");
+
+  const auto rendered = wfa::RenderApkResourceReadinessJson(report);
+  Expect(rendered.find("\"manifest_source\": \"archive_plain_xml\"") !=
+             std::string::npos,
+         "expected manifest source in JSON");
+  Expect(rendered.find("\"asset_root_path\": \"zip:" + apk_path.string() +
+                           "!/assets\"") != std::string::npos,
+         "expected asset root path in JSON");
+  Expect(rendered.find("\"activity_names\": [\"com.example.fixture.MainActivity\", "
+                       "\"com.example.fixture.SettingsActivity\"]") !=
+             std::string::npos,
+         "expected stable activity ordering in JSON");
+
+  fs::remove_all(root);
+}
+
+void TestApkResourceReadinessHandlesMissingManifest() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-apk-resource-missing-manifest";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path apk_path = root / "missing-manifest.apk";
+  WriteStoredZipFixture(apk_path,
+                        {{"assets/config/hello.txt", "hello zip asset\n"}});
+
+  const auto report = wfa::InspectApkResourceReadiness(apk_path.string());
+  Expect(!report.manifest.manifest_present,
+         "expected missing manifest to be reported");
+  Expect(!report.manifest.manifest_ready,
+         "expected missing manifest to remain unready");
+  Expect(std::find(report.errors.begin(), report.errors.end(),
+                   "manifest_missing") != report.errors.end(),
+         "expected manifest_missing error");
+
+  const auto rendered = wfa::RenderApkResourceReadinessJson(report);
+  Expect(rendered.find("\"manifest_ready\": false") != std::string::npos,
+         "expected manifest readiness false in JSON");
+
+  fs::remove_all(root);
+}
+
+void TestInspectApkResourcesCommandWritesStableJson() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-inspect-apk-resources-command";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path apk_path = root / "fixture.apk";
+  WriteStoredZipFixture(
+      apk_path,
+      {{"AndroidManifest.xml",
+        R"(<manifest package="com.example.command">
+  <application android:name="com.example.command.App">
+    <activity android:name="com.example.command.MainActivity"/>
+  </application>
+</manifest>
+)"},
+       {"assets/config/hello.txt", "hello zip asset\n"}});
+
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-resources " + apk_path.string(),
+      &exit_code);
+  Expect(exit_code == 0, "expected inspect-apk-resources command success");
+  Expect(output.find("\"package_name\": \"com.example.command\"") !=
+             std::string::npos,
+         "expected package name in command JSON");
+  Expect(output.find("\"asset_paths\": [\"config/hello.txt\"]") !=
+             std::string::npos,
+         "expected stable asset path array in command JSON");
+
+  fs::remove_all(root);
+}
+
 void TestHeadlessNativeWindowSurfaceTracksMetadataAndLifecycle() {
   namespace fs = std::filesystem;
   const fs::path root =
@@ -1417,8 +1684,11 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
          "expected deterministic binder package name");
   Expect(report.launcher_component == "com.example.simple/.MainActivity",
          "expected deterministic launcher component");
-  Expect(report.transport_kind == "in_process_binder_shape",
+  Expect(report.transport_kind == "unix_socketpair_binder_shape",
          "expected deterministic binder transport kind");
+  Expect(report.transport_log_path ==
+             (root / "binder" / "transport-messages.jsonl").string(),
+         "expected deterministic binder transport log path");
   Expect(report.metadata_path ==
              (root / "binder" / "service-manager.json").string(),
          "expected deterministic binder metadata path");
@@ -1437,6 +1707,8 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
          "expected binder lookup log artifact");
   Expect(fs::exists(report.transaction_log_path),
          "expected binder transaction log artifact");
+  Expect(fs::exists(report.transport_log_path),
+         "expected binder transport log artifact");
 
   Expect(report.services.size() == 3,
          "expected three deterministic binder services");
@@ -1444,6 +1716,8 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
          "expected two deterministic binder lookups");
   Expect(report.transactions.size() == 2,
          "expected two deterministic binder transactions");
+  Expect(report.transport_round_trips == 4,
+         "expected deterministic binder transport round trips");
 
   std::ifstream registry_input(report.registry_path);
   std::string registry((std::istreambuf_iterator<char>(registry_input)),
@@ -1467,12 +1741,26 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
              std::string::npos,
          "expected activity manager transaction");
 
+  std::ifstream transport_input(report.transport_log_path);
+  std::string transport((std::istreambuf_iterator<char>(transport_input)),
+                        std::istreambuf_iterator<char>());
+  Expect(transport.find("\"message_kind\": \"lookup_request\"") !=
+             std::string::npos,
+         "expected binder lookup request on transport");
+  Expect(transport.find("\"message_kind\": \"transaction_response\"") !=
+             std::string::npos,
+         "expected binder transaction response on transport");
+
   const auto rendered = wfa::RenderBinderServiceManagerFixtureJson(report);
   Expect(rendered.find("\"manager_ready\": true") != std::string::npos,
          "expected binder manager ready json flag");
   Expect(rendered.find("\"metadata_path\": \"" + report.metadata_path + "\"") !=
              std::string::npos,
          "expected binder metadata path in json");
+  Expect(rendered.find("\"transport_log_path\": \"" +
+                           report.transport_log_path + "\"") !=
+             std::string::npos,
+         "expected binder transport log path in json");
 
   fs::remove_all(root);
 }
@@ -3566,6 +3854,10 @@ int main() {
     TestNativeLaunchPlanStagesHostAbiLibrariesAndAssets();
     TestNativeLaunchPlanReportsUnsupportedAbiClearly();
     TestAssetManagerReadsFixtureAsset();
+    TestAssetManagerListsZipAssetsAndBlocksTraversal();
+    TestApkResourceReadinessReadsManifestAndAssetsFromZipFixture();
+    TestApkResourceReadinessHandlesMissingManifest();
+    TestInspectApkResourcesCommandWritesStableJson();
     TestHeadlessNativeWindowSurfaceTracksMetadataAndLifecycle();
     TestHeadlessFirstPixelFixtureWritesDeterministicMarker();
     TestHeadlessNativeWindowCallbackFixtureWritesJournal();

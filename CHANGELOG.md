@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.38 - 2026-05-17
+
+- Add a minimal APK/ZIP resource-readiness bridge so Linuxoid can inspect manifest metadata, list normalized assets, reject path traversal, and emit stable JSON through `compatctl inspect-apk-resources` without depending on Waydroid, ADB, or an emulator for the native direct-run path.
+- Add a socketpair-backed local transport seam to the Binder-shaped service-manager fixture so Linuxoid now records deterministic lookup/transaction request-response round trips in `binder/transport-messages.jsonl`.
+- Refresh the README Mermaid architecture, phased plan, changelog, and status output so Linuxoid now reports the pre-ART resource bridge and local Binder transport seam honestly while still marking ART/DEX execution, full Android resource-table semantics, real Android Binder behavior, and compositor-backed rendering as pending.
+
 ## v0.1.37 - 2026-05-17
 
 - Add a minimal `native-service-manager-fixture` command and Binder-shaped local service-manager contract so Linuxoid now writes deterministic service registration, lookup, and transaction artifacts for `package_manager` and `activity_manager` without depending on Waydroid, ADB, or an emulator for the native direct-run path.

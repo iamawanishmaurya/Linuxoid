@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.37
+  VERSION 0.1.38
   LANGUAGES CXX
 )
 
@@ -20,6 +20,7 @@ find_library(EGL_LIBRARY EGL)
 add_library(
   wfa_core
   src/apk_host_integration.cpp
+  src/apk_archive.cpp
   src/apk_loader.cpp
   src/binder_service_manager.cpp
   src/checkpoint.cpp
