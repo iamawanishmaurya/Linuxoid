@@ -1,5 +1,6 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
+#include "wfa/asset_manager_stub.hpp"
 #include "wfa/checkpoint.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/manifest_assessment.hpp"
@@ -719,6 +720,237 @@ void TestNativeActivityBootstrapWritesArtifacts() {
          "expected bootstrap readiness line");
   Expect(rendered.find("Execution Engine Ready: no") != std::string::npos,
          "expected execution readiness line");
+
+  fs::remove_all(root);
+}
+
+void TestNativeLaunchPlanStagesHostAbiLibrariesAndAssets() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-native-stage-assets-test";
+  fs::remove_all(root);
+  const fs::path compat_root = root / "compat";
+  const fs::path native_root = root / "native";
+
+  const auto layout = wfa::BuildPackageLayout(
+      {.package_name = "com.example.nativeapp",
+       .install_id = "vc9-1.2.3",
+       .version_code = 9},
+      compat_root.string());
+  fs::create_directories(layout.host_package_root);
+  fs::create_directories(fs::path(layout.host_package_root) / "lib" / "x86_64");
+  fs::create_directories(fs::path(layout.host_package_root) / "lib" /
+                         "arm64-v8a");
+  fs::create_directories(fs::path(layout.host_package_root) / "assets" /
+                         "config");
+  fs::create_directories(fs::path(layout.host_package_root) / "res" / "raw");
+
+  {
+    std::ofstream apk(fs::path(layout.host_package_root) / "base.apk");
+    apk << "apk payload\n";
+  }
+  {
+    std::ofstream manifest(fs::path(layout.host_package_root) /
+                           "AndroidManifest.xml");
+    manifest << "<manifest package=\"com.example.nativeapp\"/>\n";
+  }
+  {
+    std::ofstream assessment(fs::path(layout.host_package_root) /
+                             "assessment.txt");
+    assessment << "native candidate\n";
+  }
+  {
+    std::ofstream lib(fs::path(layout.host_package_root) / "lib" / "x86_64" /
+                      "libcalculator.so");
+    lib << "x86_64 payload\n";
+  }
+  {
+    std::ofstream lib(fs::path(layout.host_package_root) / "lib" / "arm64-v8a" /
+                      "libcalculator.so");
+    lib << "arm64 payload\n";
+  }
+  {
+    std::ofstream asset(fs::path(layout.host_package_root) / "assets" /
+                        "config" / "hello.txt");
+    asset << "hello from asset\n";
+  }
+  {
+    std::ofstream resource(fs::path(layout.host_package_root) / "res" / "raw" /
+                           "note.txt");
+    resource << "raw resource\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/nativeapp.apk",
+      .install_id = "vc9-1.2.3",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "nativeapp.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 9,
+          .version_name = "1.2.3",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.nativeapp",
+          .launcher_activity_name = "com.example.nativeapp.MainActivity",
+          .declared_components = {"com.example.nativeapp.MainActivity"},
+          .declared_activity_components = {"com.example.nativeapp.MainActivity"},
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.nativeapp",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+          .has_launcher_activity = true,
+      },
+      .layout = layout,
+      .install_root = layout.host_package_root,
+  };
+
+  const auto plan = wfa::BuildNativeLaunchPlan(report, native_root.string());
+
+  Expect(plan.selected_abi == "x86_64", "expected x86_64 ABI selection");
+  Expect(plan.host_abi_supported,
+         "expected plan to mark host ABI support as available");
+  Expect(plan.staged_native_libraries.size() == 1,
+         "expected one staged native library");
+  Expect(fs::exists(fs::path(plan.library_root) / "libcalculator.so"),
+         "expected staged x86_64 native library in bundle lib root");
+  Expect(plan.unsupported_native_libraries.size() == 1,
+         "expected one unsupported native library record");
+  Expect(plan.asset_root == (fs::path(plan.resource_root) / "assets").string(),
+         "expected deterministic asset root inside resource root");
+  Expect(fs::exists(fs::path(plan.asset_root) / "config" / "hello.txt"),
+         "expected staged asset file");
+  Expect(fs::exists(fs::path(plan.resource_root) / "res" / "raw" / "note.txt"),
+         "expected staged resource directory");
+
+  std::ifstream spec_input(plan.bootstrap_spec_path);
+  std::string spec((std::istreambuf_iterator<char>(spec_input)),
+                   std::istreambuf_iterator<char>());
+  Expect(spec.find("\"selected_abi\": \"x86_64\"") != std::string::npos,
+         "expected selected abi in native plan spec");
+  Expect(spec.find("\"staged_native_libraries\": [") != std::string::npos,
+         "expected staged native libraries array in spec");
+  Expect(spec.find("\"unsupported_native_libraries\": [") !=
+             std::string::npos,
+         "expected unsupported native libraries array in spec");
+
+  fs::remove_all(root);
+}
+
+void TestNativeLaunchPlanReportsUnsupportedAbiClearly() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-native-unsupported-abi-test";
+  fs::remove_all(root);
+  const fs::path compat_root = root / "compat";
+  const fs::path native_root = root / "native";
+
+  const auto layout = wfa::BuildPackageLayout(
+      {.package_name = "com.example.armonly",
+       .install_id = "vc5-2.0.0",
+       .version_code = 5},
+      compat_root.string());
+  fs::create_directories(layout.host_package_root);
+  fs::create_directories(fs::path(layout.host_package_root) / "lib" /
+                         "arm64-v8a");
+
+  {
+    std::ofstream apk(fs::path(layout.host_package_root) / "base.apk");
+    apk << "apk payload\n";
+  }
+  {
+    std::ofstream manifest(fs::path(layout.host_package_root) /
+                           "AndroidManifest.xml");
+    manifest << "<manifest package=\"com.example.armonly\"/>\n";
+  }
+  {
+    std::ofstream assessment(fs::path(layout.host_package_root) /
+                             "assessment.txt");
+    assessment << "native candidate\n";
+  }
+  {
+    std::ofstream lib(fs::path(layout.host_package_root) / "lib" / "arm64-v8a" /
+                      "libarmonly.so");
+    lib << "arm64 payload\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/armonly.apk",
+      .install_id = "vc5-2.0.0",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "armonly.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 5,
+          .version_name = "2.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.armonly",
+          .launcher_activity_name = "com.example.armonly.MainActivity",
+          .declared_components = {"com.example.armonly.MainActivity"},
+          .declared_activity_components = {"com.example.armonly.MainActivity"},
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.armonly",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+          .has_launcher_activity = true,
+      },
+      .layout = layout,
+      .install_root = layout.host_package_root,
+  };
+
+  const auto plan = wfa::BuildNativeLaunchPlan(report, native_root.string());
+
+  Expect(plan.selected_abi.empty(),
+         "expected no selected ABI for unsupported-native-only bundle");
+  Expect(!plan.host_abi_supported,
+         "expected unsupported ABI to remain unavailable");
+  Expect(plan.staged_native_libraries.empty(),
+         "expected no staged native libraries for unsupported ABI");
+  Expect(plan.unsupported_native_libraries.size() == 1,
+         "expected unsupported library to be reported");
+
+  const auto rendered = wfa::RenderNativeLaunchPlanReport(plan);
+  Expect(rendered.find("Selected ABI: unsupported") != std::string::npos,
+         "expected unsupported abi report line");
+  Expect(rendered.find("Unsupported Native Libraries: 1") !=
+             std::string::npos,
+         "expected unsupported native library count in report");
+
+  fs::remove_all(root);
+}
+
+void TestAssetManagerReadsFixtureAsset() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-asset-read-test";
+  fs::remove_all(root);
+  const fs::path resource_root = root / "resources";
+  const fs::path asset_root = resource_root / "assets";
+  fs::create_directories(asset_root / "config");
+
+  {
+    std::ofstream asset(asset_root / "config" / "hello.txt");
+    asset << "hello asset bridge\n";
+  }
+
+  wfa::AAssetManager* manager =
+      wfa::MakeStubAssetManager("/tmp/base.apk", resource_root.string());
+  const auto asset = wfa::ReadStubAsset(manager, "config/hello.txt");
+
+  Expect(asset.found, "expected asset read to succeed");
+  Expect(asset.contents == "hello asset bridge\n",
+         "expected asset contents to round-trip");
+  Expect(asset.resolved_path ==
+             (asset_root / "config" / "hello.txt").string(),
+         "expected resolved asset path");
 
   fs::remove_all(root);
 }
@@ -2783,6 +3015,9 @@ int main() {
     TestNativeSpikeAssessmentRejectsAdvancedRuntimeApp();
     TestNativeLaunchPlanBuildsBundleLayout();
     TestNativeActivityBootstrapWritesArtifacts();
+    TestNativeLaunchPlanStagesHostAbiLibrariesAndAssets();
+    TestNativeLaunchPlanReportsUnsupportedAbiClearly();
+    TestAssetManagerReadsFixtureAsset();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

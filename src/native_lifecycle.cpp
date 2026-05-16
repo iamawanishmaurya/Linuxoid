@@ -104,6 +104,18 @@ std::string ExtractJsonArrayLiteral(const std::string& json,
   throw std::runtime_error("unterminated array in json: " + key);
 }
 
+std::vector<std::string> ExtractJsonStringArray(const std::string& json,
+                                                const std::string& key) {
+  const std::string literal = ExtractJsonArrayLiteral(json, key);
+  const std::regex pattern("\"([^\"]*)\"");
+  std::vector<std::string> values;
+  for (auto it = std::sregex_iterator(literal.begin(), literal.end(), pattern);
+       it != std::sregex_iterator(); ++it) {
+    values.push_back((*it)[1].str());
+  }
+  return values;
+}
+
 bool ExtractJsonBool(const std::string& json, const std::string& key) {
   const std::regex pattern("\"" + key + R"(\"\s*:\s*(true|false))");
   std::smatch match;
@@ -124,6 +136,19 @@ int ExtractJsonInt(const std::string& json, const std::string& key) {
   return std::stoi(match[1].str());
 }
 
+std::string RenderJsonArray(const std::vector<std::string>& values) {
+  std::ostringstream output;
+  output << "[";
+  for (std::size_t index = 0; index < values.size(); ++index) {
+    if (index != 0) {
+      output << ", ";
+    }
+    output << "\"" << EscapeJson(values[index]) << "\"";
+  }
+  output << "]";
+  return output.str();
+}
+
 NativeActivityBootstrap ReadNativeActivityBootstrapManifest(
     const std::string& bootstrap_manifest_path) {
   if (bootstrap_manifest_path.empty()) {
@@ -139,13 +164,22 @@ NativeActivityBootstrap ReadNativeActivityBootstrapManifest(
   bootstrap.plan.assessment.package_name =
       ExtractJsonString(json, "package_name");
   bootstrap.plan.assessment.install_id = ExtractJsonString(json, "install_id");
+  bootstrap.plan.apk_path = ExtractJsonString(json, "apk_path");
   bootstrap.plan.assessment.launcher_component =
       ExtractJsonString(json, "launcher_component");
   bootstrap.plan.bundle_apk_path = ExtractJsonString(json, "bundle_apk_path");
   bootstrap.plan.sandbox_root = ExtractJsonString(json, "sandbox_root");
   bootstrap.plan.dex_cache_root = ExtractJsonString(json, "dex_cache_root");
   bootstrap.plan.resource_root = ExtractJsonString(json, "resource_root");
+  bootstrap.plan.asset_root = ExtractJsonString(json, "asset_root");
   bootstrap.plan.library_root = ExtractJsonString(json, "library_root");
+  bootstrap.plan.selected_abi = ExtractJsonString(json, "selected_abi");
+  bootstrap.plan.host_abi_supported =
+      ExtractJsonBool(json, "host_abi_supported");
+  bootstrap.plan.staged_native_libraries =
+      ExtractJsonStringArray(json, "staged_native_libraries");
+  bootstrap.plan.unsupported_native_libraries =
+      ExtractJsonStringArray(json, "unsupported_native_libraries");
   bootstrap.plan.bootstrap_spec_path =
       ExtractJsonString(json, "bootstrap_spec_path");
   bootstrap.plan.package_root = package_root.string();
@@ -199,6 +233,24 @@ void WriteLifecycleArtifacts(const NativeLifecycleShim& lifecycle) {
                    << "  \"bootstrap_manifest_path\": \""
                    << EscapeJson(lifecycle.bootstrap.bootstrap_manifest_path)
                    << "\",\n"
+                   << "  \"apk_path\": \""
+                   << EscapeJson(lifecycle.bootstrap.plan.apk_path)
+                   << "\",\n"
+                   << "  \"selected_abi\": \""
+                   << EscapeJson(lifecycle.bootstrap.plan.selected_abi)
+                   << "\",\n"
+                   << "  \"host_abi_supported\": "
+                   << (lifecycle.bootstrap.plan.host_abi_supported ? "true"
+                                                                   : "false")
+                   << ",\n"
+                   << "  \"staged_native_libraries\": "
+                   << RenderJsonArray(
+                          lifecycle.bootstrap.plan.staged_native_libraries)
+                   << ",\n"
+                   << "  \"unsupported_native_libraries\": "
+                   << RenderJsonArray(
+                          lifecycle.bootstrap.plan.unsupported_native_libraries)
+                   << ",\n"
                    << "  \"activity_state\": \""
                    << EscapeJson(lifecycle.current_activity_state) << "\",\n"
                    << "  \"process_state\": \""
@@ -219,6 +271,12 @@ void WriteLifecycleArtifacts(const NativeLifecycleShim& lifecycle) {
                    << "  \"activity_called\": "
                    << (lifecycle.activity_called ? "true" : "false")
                    << ",\n"
+                   << "  \"asset_root\": \""
+                   << EscapeJson(lifecycle.bootstrap.plan.asset_root)
+                   << "\",\n"
+                   << "  \"resource_root\": \""
+                   << EscapeJson(lifecycle.bootstrap.plan.resource_root)
+                   << "\",\n"
                    << "  \"selected_library_path\": \""
                    << EscapeJson(lifecycle.selected_library_path) << "\",\n"
                    << "  \"exit_reason\": \""
@@ -384,7 +442,9 @@ std::vector<std::string> BuildChildEnvironment(
       "LINUXOID_SANDBOX_ROOT=" + bootstrap.plan.sandbox_root,
       "LINUXOID_DEX_CACHE_ROOT=" + bootstrap.plan.dex_cache_root,
       "LINUXOID_RESOURCE_ROOT=" + bootstrap.plan.resource_root,
+      "LINUXOID_ASSET_ROOT=" + bootstrap.plan.asset_root,
       "LINUXOID_LIBRARY_ROOT=" + bootstrap.plan.library_root,
+      "LINUXOID_SELECTED_ABI=" + bootstrap.plan.selected_abi,
       "LINUXOID_BOOTSTRAP_MANIFEST=" + bootstrap.bootstrap_manifest_path,
       "LINUXOID_RUNNER_REPORT_PATH=" + lifecycle.runner_report_path,
   };
@@ -605,6 +665,7 @@ std::string RenderNativeLifecycleShimReport(
          << "\n";
   output << "Launcher Component: "
          << lifecycle.bootstrap.plan.assessment.launcher_component << "\n";
+  output << "APK Path: " << lifecycle.bootstrap.plan.apk_path << "\n";
   output << "Bootstrap Manifest: " << lifecycle.bootstrap.bootstrap_manifest_path
          << "\n";
   output << "Session Root: " << lifecycle.session_root << "\n";
@@ -623,6 +684,19 @@ std::string RenderNativeLifecycleShimReport(
   output << "PID: " << lifecycle.process_id << "\n";
   output << "Exit Code: " << lifecycle.exit_code << "\n";
   output << "Exit Reason: " << BuildExitReason(lifecycle) << "\n";
+  output << "Selected ABI: "
+         << (lifecycle.bootstrap.plan.selected_abi.empty()
+                 ? "unsupported"
+                 : lifecycle.bootstrap.plan.selected_abi)
+         << "\n";
+  output << "Asset Root: " << lifecycle.bootstrap.plan.asset_root << "\n";
+  output << "Resource Root: " << lifecycle.bootstrap.plan.resource_root
+         << "\n";
+  output << "Staged Native Libraries: "
+         << lifecycle.bootstrap.plan.staged_native_libraries.size() << "\n";
+  output << "Unsupported Native Libraries: "
+         << lifecycle.bootstrap.plan.unsupported_native_libraries.size()
+         << "\n";
   output << "Native Library Found: "
          << (lifecycle.native_library_found ? "yes" : "no") << "\n";
   output << "dlopen OK: " << (lifecycle.dlopen_ok ? "yes" : "no") << "\n";

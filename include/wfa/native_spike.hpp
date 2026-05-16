@@ -24,18 +24,23 @@ struct NativeLaunchPlan {
   NativeSpikeAssessment assessment;
   std::string apk_path;
   std::string staged_apk_path;
+  std::string selected_abi;
   std::string native_root;
   std::string package_root;
   std::string bundle_root;
   std::string sandbox_root;
   std::string dex_cache_root;
   std::string resource_root;
+  std::string asset_root;
   std::string library_root;
   std::string bootstrap_root;
   std::string bundle_apk_path;
   std::string manifest_copy_path;
   std::string assessment_copy_path;
   std::string bootstrap_spec_path;
+  bool host_abi_supported = false;
+  std::vector<std::string> staged_native_libraries;
+  std::vector<std::string> unsupported_native_libraries;
   bool plan_written = false;
 };
 

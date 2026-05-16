@@ -2,6 +2,7 @@
 
 #include "wfa/manifest_assessment.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -120,6 +121,118 @@ std::string RenderJsonArray(const std::vector<std::string>& values) {
   return output.str();
 }
 
+void CopyDirectoryContents(const fs::path& source, const fs::path& destination) {
+  if (!fs::exists(source)) {
+    return;
+  }
+  fs::create_directories(destination);
+  for (const auto& entry : fs::recursive_directory_iterator(source)) {
+    const fs::path relative = fs::relative(entry.path(), source);
+    const fs::path target = destination / relative;
+    if (entry.is_directory()) {
+      fs::create_directories(target);
+      continue;
+    }
+    if (entry.is_regular_file()) {
+      fs::create_directories(target.parent_path());
+      fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+    }
+  }
+}
+
+std::string ResolveHostAbi() {
+#if defined(__x86_64__)
+  return "x86_64";
+#elif defined(__i386__)
+  return "x86";
+#elif defined(__aarch64__)
+  return "arm64-v8a";
+#elif defined(__arm__)
+  return "armeabi-v7a";
+#else
+  return "unknown";
+#endif
+}
+
+std::vector<std::string> AbiDiscoveryOrder() {
+  return {"x86_64", "x86", "arm64-v8a", "armeabi-v7a", "armeabi"};
+}
+
+std::vector<fs::path> CollectSortedSharedLibraries(const fs::path& abi_root) {
+  std::vector<fs::path> libraries;
+  if (!fs::exists(abi_root)) {
+    return libraries;
+  }
+  for (const auto& entry : fs::directory_iterator(abi_root)) {
+    if (entry.is_regular_file() && entry.path().extension() == ".so") {
+      libraries.push_back(entry.path());
+    }
+  }
+  std::sort(libraries.begin(), libraries.end(),
+            [](const fs::path& left, const fs::path& right) {
+              return left.filename().string() < right.filename().string();
+            });
+  return libraries;
+}
+
+void StageNativeLibraries(const fs::path& install_root, NativeLaunchPlan& plan) {
+  const fs::path lib_root = install_root / "lib";
+  const std::string host_abi = ResolveHostAbi();
+  plan.selected_abi.clear();
+  plan.host_abi_supported = false;
+  plan.staged_native_libraries.clear();
+  plan.unsupported_native_libraries.clear();
+  std::error_code ignored;
+  fs::remove_all(plan.library_root, ignored);
+  fs::create_directories(plan.library_root);
+
+  if (!fs::exists(lib_root)) {
+    return;
+  }
+
+  const fs::path host_root = lib_root / host_abi;
+  const auto host_libraries = CollectSortedSharedLibraries(host_root);
+  if (!host_libraries.empty()) {
+    plan.selected_abi = host_abi;
+    plan.host_abi_supported = true;
+    for (const auto& library : host_libraries) {
+      const fs::path staged_path = fs::path(plan.library_root) / library.filename();
+      fs::copy_file(library, staged_path, fs::copy_options::overwrite_existing);
+      plan.staged_native_libraries.push_back(staged_path.string());
+    }
+  }
+
+  for (const auto& abi : AbiDiscoveryOrder()) {
+    const auto libraries = CollectSortedSharedLibraries(lib_root / abi);
+    if (libraries.empty()) {
+      continue;
+    }
+    if (abi == plan.selected_abi) {
+      continue;
+    }
+    for (const auto& library : libraries) {
+      plan.unsupported_native_libraries.push_back(library.string());
+    }
+  }
+
+  for (const auto& entry : fs::directory_iterator(lib_root)) {
+    if (!entry.is_regular_file() || entry.path().extension() != ".so") {
+      continue;
+    }
+    plan.unsupported_native_libraries.push_back(entry.path().string());
+  }
+}
+
+void StageResourcePayload(const fs::path& install_root, NativeLaunchPlan& plan) {
+  plan.asset_root = (fs::path(plan.resource_root) / "assets").string();
+  std::error_code ignored;
+  fs::remove_all(plan.resource_root, ignored);
+  fs::create_directories(plan.resource_root);
+  fs::create_directories(plan.asset_root);
+  CopyDirectoryContents(install_root / "assets", plan.asset_root);
+  CopyDirectoryContents(install_root / "res", fs::path(plan.resource_root) / "res");
+}
+
 }  // namespace
 
 NativeSpikeAssessment AssessNativeSpikeCandidate(
@@ -227,6 +340,7 @@ NativeLaunchPlan BuildNativeLaunchPlan(const LoadedApkReport& report,
   plan.sandbox_root = sandbox_root.string();
   plan.dex_cache_root = dex_cache_root.string();
   plan.resource_root = resource_root.string();
+  plan.asset_root = (resource_root / "assets").string();
   plan.library_root = library_root.string();
   plan.bootstrap_root = bootstrap_root.string();
   plan.bundle_apk_path = (bundle_root / "base.apk").string();
@@ -263,6 +377,9 @@ NativeLaunchPlan BuildNativeLaunchPlan(const LoadedApkReport& report,
                   RenderManifestAssessmentReport(report.assessment));
   }
 
+  StageResourcePayload(report.install_root, plan);
+  StageNativeLibraries(report.install_root, plan);
+
   std::ostringstream spec;
   spec << "{\n"
        << "  \"package_name\": \""
@@ -290,8 +407,18 @@ NativeLaunchPlan BuildNativeLaunchPlan(const LoadedApkReport& report,
        << "\",\n"
        << "  \"resource_root\": \"" << EscapeJson(plan.resource_root)
        << "\",\n"
+       << "  \"asset_root\": \"" << EscapeJson(plan.asset_root)
+       << "\",\n"
        << "  \"library_root\": \"" << EscapeJson(plan.library_root)
        << "\",\n"
+       << "  \"selected_abi\": \"" << EscapeJson(plan.selected_abi)
+       << "\",\n"
+       << "  \"host_abi_supported\": "
+       << (plan.host_abi_supported ? "true" : "false") << ",\n"
+       << "  \"staged_native_libraries\": "
+       << RenderJsonArray(plan.staged_native_libraries) << ",\n"
+       << "  \"unsupported_native_libraries\": "
+       << RenderJsonArray(plan.unsupported_native_libraries) << ",\n"
        << "  \"blockers\": "
        << RenderJsonArray(plan.assessment.blockers) << ",\n"
        << "  \"next_steps\": "
@@ -351,6 +478,7 @@ NativeActivityBootstrap BuildNativeActivityBootstrap(
            << EscapeJson(plan.assessment.package_name) << "\",\n"
            << "  \"install_id\": \"" << EscapeJson(plan.assessment.install_id)
            << "\",\n"
+           << "  \"apk_path\": \"" << EscapeJson(plan.apk_path) << "\",\n"
            << "  \"launcher_component\": \""
            << EscapeJson(plan.assessment.launcher_component) << "\",\n"
            << "  \"bundle_apk_path\": \"" << EscapeJson(plan.bundle_apk_path)
@@ -361,8 +489,18 @@ NativeActivityBootstrap BuildNativeActivityBootstrap(
            << "\",\n"
            << "  \"resource_root\": \"" << EscapeJson(plan.resource_root)
            << "\",\n"
+           << "  \"asset_root\": \"" << EscapeJson(plan.asset_root)
+           << "\",\n"
            << "  \"library_root\": \"" << EscapeJson(plan.library_root)
            << "\",\n"
+           << "  \"selected_abi\": \"" << EscapeJson(plan.selected_abi)
+           << "\",\n"
+           << "  \"host_abi_supported\": "
+           << (plan.host_abi_supported ? "true" : "false") << ",\n"
+           << "  \"staged_native_libraries\": "
+           << RenderJsonArray(plan.staged_native_libraries) << ",\n"
+           << "  \"unsupported_native_libraries\": "
+           << RenderJsonArray(plan.unsupported_native_libraries) << ",\n"
            << "  \"bootstrap_spec_path\": \""
            << EscapeJson(plan.bootstrap_spec_path) << "\",\n"
            << "  \"command_line\": \""
@@ -387,8 +525,12 @@ NativeActivityBootstrap BuildNativeActivityBootstrap(
              << QuoteForShell(plan.dex_cache_root) << "\n";
   env_script << "export LINUXOID_RESOURCE_ROOT="
              << QuoteForShell(plan.resource_root) << "\n";
+  env_script << "export LINUXOID_ASSET_ROOT="
+             << QuoteForShell(plan.asset_root) << "\n";
   env_script << "export LINUXOID_LIBRARY_ROOT="
              << QuoteForShell(plan.library_root) << "\n";
+  env_script << "export LINUXOID_SELECTED_ABI="
+             << QuoteForShell(plan.selected_abi) << "\n";
   env_script << "export LINUXOID_BOOTSTRAP_MANIFEST="
              << QuoteForShell(bootstrap.bootstrap_manifest_path) << "\n";
   WriteExecutableFile(bootstrap.env_script_path, env_script.str());
@@ -436,7 +578,17 @@ std::string RenderNativeLaunchPlanReport(const NativeLaunchPlan& plan) {
   output << "Sandbox Root: " << plan.sandbox_root << '\n';
   output << "DEX Cache Root: " << plan.dex_cache_root << '\n';
   output << "Resource Root: " << plan.resource_root << '\n';
+  output << "Asset Root: " << plan.asset_root << '\n';
   output << "Library Root: " << plan.library_root << '\n';
+  output << "Selected ABI: "
+         << (plan.selected_abi.empty() ? "unsupported" : plan.selected_abi)
+         << '\n';
+  output << "Host ABI Supported: "
+         << (plan.host_abi_supported ? "yes" : "no") << '\n';
+  output << "Staged Native Libraries: " << plan.staged_native_libraries.size()
+         << '\n';
+  output << "Unsupported Native Libraries: "
+         << plan.unsupported_native_libraries.size() << '\n';
   output << "Bootstrap Spec: " << plan.bootstrap_spec_path << '\n';
   output << "Plan Written: " << (plan.plan_written ? "yes" : "no") << '\n';
 
@@ -473,6 +625,15 @@ std::string RenderNativeActivityBootstrapReport(
          << (bootstrap.bootstrap_ready ? "yes" : "no") << '\n';
   output << "Execution Engine Ready: "
          << (bootstrap.execution_engine_ready ? "yes" : "no") << '\n';
+  output << "Selected ABI: "
+         << (bootstrap.plan.selected_abi.empty() ? "unsupported"
+                                                 : bootstrap.plan.selected_abi)
+         << '\n';
+  output << "Asset Root: " << bootstrap.plan.asset_root << '\n';
+  output << "Staged Native Libraries: "
+         << bootstrap.plan.staged_native_libraries.size() << '\n';
+  output << "Unsupported Native Libraries: "
+         << bootstrap.plan.unsupported_native_libraries.size() << '\n';
   output << "Bootstrap Report: " << bootstrap.report_path << '\n';
   output << "Next Steps:\n";
   output << "  - Execute the bootstrap manifest through Linuxoid's native process bootstrap.\n";

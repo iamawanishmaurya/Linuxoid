@@ -969,3 +969,28 @@
   Action: Updated the README Mermaid architecture, current-state bullets, phased build plan, changelog, and project-status output so GitHub now reflects the hardened `native-execute-stub` contract, the compatibility alias role of `native-process-bootstrap`, the honest `execution 28/100` status, and the still-pending DEX/ART, Binder, graphics, input, and full resource work.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` still passes after the status and documentation refresh, and `./build/compatctl status` now reports `Native Execution Readiness: 28/100`.
   Timestamp: 2026-05-16T23:10:21+05:30
+
+- Step: P1.5 native-lib and asset staging inspection
+  Action: Re-read `apk_loader`, `native_spike`, the asset-manager stub, and the native tests to map where Linuxoid can stage decoded APK `lib/` and `assets/` content into deterministic bundle paths without pulling in a new runtime dependency.
+  Result: Confirmed that the planner already owns stable `bundle`, `lib`, and `resources` roots, but Linuxoid still needs host-ABI library staging metadata, copied extracted assets/resources, and a minimal APK-backed asset reader to turn the current placeholder seam into something executable.
+  Timestamp: 2026-05-16T23:19:04+05:30
+
+- Step: P1.5 staging and asset tests red
+  Action: Added failing tests for host-ABI native-library staging, unsupported-ABI reporting, and a minimal asset read through the stub manager before changing the planner or loader implementation.
+  Result: `cmake --build build` now fails exactly where expected because `NativeLaunchPlan` does not yet expose selected ABI and staged-library metadata, and the asset manager still lacks a resource-root-aware read API.
+  Timestamp: 2026-05-16T23:24:34+05:30
+
+- Step: P1.5 first integration failure logged
+  Action: Logged the first non-test failure from the APK staging implementation in `docs/problems/2026-05-16-apk-loader-materialize-helper-order.md` before applying a fix.
+  Result: The build break is now recorded with exact compiler output and a concrete hypothesis instead of being fixed silently.
+  Timestamp: 2026-05-16T23:26:13+05:30
+
+- Step: P1.5 JSON array parser failure logged
+  Action: Logged the malformed raw-string regex failure from `src/native_lifecycle.cpp` in `docs/problems/2026-05-16-native-lifecycle-json-array-regex-literal.md` before fixing the parser.
+  Result: The second implementation error is recorded with exact compiler output and a clear hypothesis about the raw-string delimiter issue.
+  Timestamp: 2026-05-16T23:27:41+05:30
+
+- Step: P1.5 native-lib and asset staging green
+  Action: Extended the compat-root loader to preserve decoded `lib/`, `assets/`, and `res/` content, taught the native spike planner to stage host-ABI libraries plus extracted assets/resources into deterministic bundle roots, added selected-ABI and unsupported-library metadata to plan/bootstrap/session artifacts, and upgraded the stub asset manager so it can resolve and read a staged asset by path.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure && ./build/compatctl status` now passes with the new staging and asset-read tests, and Linuxoid reports `Native Execution Readiness: 35/100`.
+  Timestamp: 2026-05-16T23:35:58+05:30

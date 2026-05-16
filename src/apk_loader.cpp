@@ -24,6 +24,62 @@ struct DecodedApkInspection {
   std::string manifest_xml;
 };
 
+std::string QuoteForShell(const std::string& value);
+std::string RunCommandCapture(const std::string& command);
+
+void CopyDirectoryContents(const fs::path& source, const fs::path& destination) {
+  if (!fs::exists(source)) {
+    return;
+  }
+  fs::create_directories(destination);
+  for (const auto& entry : fs::recursive_directory_iterator(source)) {
+    const fs::path relative = fs::relative(entry.path(), source);
+    const fs::path target = destination / relative;
+    if (entry.is_directory()) {
+      fs::create_directories(target);
+      continue;
+    }
+    if (entry.is_regular_file()) {
+      fs::create_directories(target.parent_path());
+      fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+    }
+  }
+}
+
+void MaterializeDecodedPayload(const fs::path& apk, const fs::path& install_root) {
+  std::string decode_template =
+      (fs::temp_directory_path() / "wfa-stage-XXXXXX").string();
+  std::unique_ptr<char[]> decode_buffer(new char[decode_template.size() + 1]);
+  std::snprintf(decode_buffer.get(), decode_template.size() + 1, "%s",
+                decode_template.c_str());
+  char* decode_dir = mkdtemp(decode_buffer.get());
+  if (decode_dir == nullptr) {
+    throw std::runtime_error("failed to create staging decode directory");
+  }
+
+  const fs::path decode_root = decode_dir;
+  struct DecodeCleanup {
+    fs::path path;
+    ~DecodeCleanup() {
+      std::error_code ignored;
+      fs::remove_all(path, ignored);
+    }
+  } cleanup{decode_root};
+
+  const std::string command = "apktool d -f -s -o " +
+                              QuoteForShell(decode_root.string()) + " " +
+                              QuoteForShell(apk.string()) + " >/dev/null";
+  RunCommandCapture(command);
+
+  std::error_code ignored;
+  fs::remove_all(install_root / "lib", ignored);
+  fs::remove_all(install_root / "assets", ignored);
+  fs::remove_all(install_root / "res", ignored);
+  CopyDirectoryContents(decode_root / "lib", install_root / "lib");
+  CopyDirectoryContents(decode_root / "assets", install_root / "assets");
+  CopyDirectoryContents(decode_root / "res", install_root / "res");
+}
+
 std::string QuoteForShell(const std::string& value) {
   std::string quoted = "'";
   for (const char character : value) {
@@ -256,6 +312,7 @@ LoadedApkReport LoadApkToCompatRoot(const std::string& apk_path,
   WriteTextFile(
       fs::path(layout.host_package_root) / "assessment.txt",
       RenderManifestAssessmentReport(inspection.assessment));
+  MaterializeDecodedPayload(apk, layout.host_package_root);
 
   std::ostringstream metadata_json;
   metadata_json << "{\n"

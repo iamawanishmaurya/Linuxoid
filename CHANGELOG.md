@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.30 - 2026-05-16
+
+- Extend the native spike planner so Linuxoid now stages host-ABI native libraries into the deterministic bundle `lib` root, copies extracted `assets/` and `res/` content into the bundle resource tree, and reports unsupported ABI payloads honestly instead of pretending they can run.
+- Add the first minimal APK-backed asset bridge so the stub asset manager can resolve and read staged assets by path from the native resource tree.
+- Refresh the bootstrap/session metadata, tests, Mermaid architecture, phased plan, and status output so GitHub now reflects the staged-library and asset-read seam while still marking DEX/ART, Binder, graphics, input, and full Android resource handling as pending.
+
 ## v0.1.29 - 2026-05-16
 
 - Keep `native-execute-stub` as the public P1 bootstrap entrypoint and harden it so the manifest path now forks and `execve`s a controlled Linuxoid child runner with deterministic cwd, Linuxoid-only environment variables, and inherited-fd cleanup.

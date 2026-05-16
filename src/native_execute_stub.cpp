@@ -304,7 +304,8 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
   activity.internalDataPath = request.sandbox_root.c_str();
   activity.externalDataPath = request.sandbox_root.c_str();
   activity.sdkVersion = 33;
-  activity.assetManager = MakeStubAssetManager(request.bundle_apk_path);
+  activity.assetManager =
+      MakeStubAssetManager(request.bundle_apk_path, request.resource_root);
 
   std::atomic<bool> entry_completed{false};
   std::thread watchdog([&entry_completed, seconds = request.watchdog_seconds]() {
