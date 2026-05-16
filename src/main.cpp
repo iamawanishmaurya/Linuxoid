@@ -5,6 +5,7 @@
 #include "wfa/native_execute_stub.hpp"
 #include "wfa/native_lifecycle.hpp"
 #include "wfa/native_spike.hpp"
+#include "wfa/native_window_surface.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
@@ -34,6 +35,7 @@ void PrintUsage() {
       << "  compatctl native-process-bootstrap <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <package> <launcher-component> <bundle-apk> <sandbox-root> <dex-cache-root> <resource-root> <library-root> <bootstrap-manifest>\n"
+      << "  compatctl native-first-pixel-fixture <session-root> [width] [height] [format]\n"
       << "  compatctl discover-runtime <backend>\n"
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
       << "  compatctl inspect-package <backend> <serial-or-dash> <package>\n"
@@ -281,6 +283,25 @@ int main(int argc, char** argv) {
         std::cout << json;
       }
       return report.exit_code;
+    }
+
+    if (command == "native-first-pixel-fixture") {
+      if (argc < 3 || argc > 6) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      wfa::NativeWindowMetadata metadata{
+          .width = argc >= 4 ? std::stoi(argv[3]) : 64,
+          .height = argc >= 5 ? std::stoi(argv[4]) : 48,
+          .format = argc == 6 ? std::stoi(argv[5])
+                              : wfa::kNativeWindowFormatRgba8888,
+          .stride = argc >= 4 ? std::stoi(argv[3]) : 64,
+      };
+      const auto report = wfa::RunHeadlessFirstPixelFixture(
+          argv[2], metadata, 0xff336699u);
+      std::cout << wfa::RenderFirstPixelFixtureJson(report);
+      return report.render_ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "discover-runtime") {

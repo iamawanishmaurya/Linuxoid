@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.31 - 2026-05-16
+
+- Add the first `P2.1` host-side `ANativeWindow`-shaped surface seam with explicit width, height, format, and stride metadata plus lifecycle checks for a future direct native runner.
+- Add `native-first-pixel-fixture`, a headless Wayland/EGL-style test double that writes a deterministic `first-pixel-marker.txt` artifact and structured JSON without pretending a real compositor window exists yet.
+- Refresh the tests, Mermaid architecture, phased plan, and status output so Linuxoid now reports the verified first-pixel marker slice honestly while still marking real Wayland/EGL, callbacks, DEX/ART, Binder, input, and full resources as pending.
+
 ## v0.1.30 - 2026-05-16
 
 - Extend the native spike planner so Linuxoid now stages host-ABI native libraries into the deterministic bundle `lib` root, copies extracted `assets/` and `res/` content into the bundle resource tree, and reports unsupported ABI payloads honestly instead of pretending they can run.

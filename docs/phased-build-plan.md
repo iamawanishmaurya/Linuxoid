@@ -1,6 +1,6 @@
 # Linuxoid — Phased Build Plan
 
-> Current state: scaffold `95/100` · execution `35/100`  
+> Current state: scaffold `95/100` · execution `42/100`  
 > Goal: Android apps on Linux. No Waydroid. No ADB. No emulator.
 
 ---
@@ -119,6 +119,8 @@ auto entry = (ANativeActivityCreateFunc*)
 Duration: 3-4 weeks  
 Goal: Calculator renders a real pixel in a Wayland window.  
 Outcome: first visible frame from an Android NDK app on the Linux desktop.
+
+Current repo note as of `2026-05-16`: Linuxoid now has a verified headless `ANativeWindow`-shaped surface fixture that writes a deterministic first-pixel marker without a real compositor. Real Wayland/EGL surface wiring and callbacks are still pending.
 
 ### Tasks
 

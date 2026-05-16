@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.30
+  VERSION 0.1.31
   LANGUAGES CXX
 )
 
@@ -35,6 +35,7 @@ add_library(
   src/jni_stub.cpp
   src/looper_stub.cpp
   src/native_execute_stub.cpp
+  src/native_window_surface.cpp
   src/signal_handler.cpp
 )
 target_include_directories(linuxoid_p1 PUBLIC include)

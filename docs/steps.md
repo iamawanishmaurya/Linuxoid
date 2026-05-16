@@ -994,3 +994,28 @@
   Action: Extended the compat-root loader to preserve decoded `lib/`, `assets/`, and `res/` content, taught the native spike planner to stage host-ABI libraries plus extracted assets/resources into deterministic bundle roots, added selected-ABI and unsupported-library metadata to plan/bootstrap/session artifacts, and upgraded the stub asset manager so it can resolve and read a staged asset by path.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure && ./build/compatctl status` now passes with the new staging and asset-read tests, and Linuxoid reports `Native Execution Readiness: 35/100`.
   Timestamp: 2026-05-16T23:35:58+05:30
+
+- Step: P2.1 first-pixel fixture inspection
+  Action: Re-read the current native runner, native types, phased-plan P2 notes, and test surface to find the narrowest honest seam for a first rendering checkpoint without pulling in a real Wayland compositor or Android container.
+  Result: Confirmed that Linuxoid needs a host-side `ANativeWindow`-shaped abstraction plus a headless Wayland/EGL-style fixture report path, and that this can be verified locally as a deterministic first-pixel marker before any real callbacks or compositor integration land.
+  Timestamp: 2026-05-16T23:46:11+05:30
+
+- Step: P2.1 first-pixel tests red
+  Action: Added failing tests for native-window metadata/lifecycle checks and a deterministic headless first-pixel marker before implementing the new P2.1 surface seam.
+  Result: `cmake --build build` now fails at link time because the declared headless native-window fixture API is not implemented or linked yet, giving a clean first red bar for the rendering gate.
+  Timestamp: 2026-05-16T23:49:34+05:30
+
+- Step: P2.1 native-window stub ambiguity logged
+  Action: Logged the compile failure from `src/native_window_surface.cpp` in `docs/problems/2026-05-16-native-window-stub-type-ambiguity.md` before fixing the duplicate stub-type definition.
+  Result: The first implementation failure for the P2.1 fixture is now recorded with exact compiler output and a concrete type-ambiguity hypothesis.
+  Timestamp: 2026-05-16T23:53:16+05:30
+
+- Step: P2.1 headless first-pixel fixture green
+  Action: Implemented a host-side `ANativeWindow`-shaped surface with explicit width, height, format, and stride metadata, added a headless Wayland/EGL-style first-pixel fixture command plus tests, and re-ran the local build and test gate.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` now passes with deterministic first-pixel marker coverage, while Linuxoid still reports real compositor callbacks, DEX/ART, Binder, input, and full resources as pending.
+  Timestamp: 2026-05-16T23:56:48+05:30
+
+- Step: P2.1 status and architecture sync
+  Action: Updated the README Mermaid graph, phased plan, changelog, and status output to reflect the verified headless first-pixel fixture and the new native execution readiness value.
+  Result: Linuxoid now reports `execution 42/100`, documents the `native-first-pixel-fixture` proof honestly, and keeps real Wayland/EGL integration clearly marked as the next rendering gate.
+  Timestamp: 2026-05-17T00:02:31+05:30

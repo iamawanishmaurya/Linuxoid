@@ -6,6 +6,7 @@
 #include "wfa/manifest_assessment.hpp"
 #include "wfa/native_lifecycle.hpp"
 #include "wfa/native_spike.hpp"
+#include "wfa/native_window_surface.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
@@ -951,6 +952,75 @@ void TestAssetManagerReadsFixtureAsset() {
   Expect(asset.resolved_path ==
              (asset_root / "config" / "hello.txt").string(),
          "expected resolved asset path");
+
+  fs::remove_all(root);
+}
+
+void TestHeadlessNativeWindowSurfaceTracksMetadataAndLifecycle() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-native-window-metadata-test";
+  fs::remove_all(root);
+
+  const wfa::NativeWindowMetadata metadata{
+      .width = 64,
+      .height = 48,
+      .format = wfa::kNativeWindowFormatRgba8888,
+      .stride = 64,
+  };
+  wfa::ANativeWindow* window =
+      wfa::CreateHeadlessNativeWindowSurface(metadata, root.string());
+
+  const auto observed = wfa::InspectNativeWindow(window);
+  Expect(observed.width == 64, "expected native window width");
+  Expect(observed.height == 48, "expected native window height");
+  Expect(observed.format == wfa::kNativeWindowFormatRgba8888,
+         "expected native window format");
+  Expect(observed.stride == 64, "expected native window stride");
+  Expect(wfa::NativeWindowLifecycleReady(window),
+         "expected headless native window lifecycle to be ready");
+
+  wfa::DestroyHeadlessNativeWindowSurface(window);
+  fs::remove_all(root);
+}
+
+void TestHeadlessFirstPixelFixtureWritesDeterministicMarker() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-first-pixel-fixture-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunHeadlessFirstPixelFixture(
+      root.string(),
+      {.width = 8,
+       .height = 6,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 8},
+      0xff336699u);
+
+  Expect(report.surface_ready, "expected first-pixel surface readiness");
+  Expect(report.render_ready, "expected first-pixel render readiness");
+  Expect(report.surface.activity_window_attached,
+         "expected activity window attachment");
+  Expect(report.surface.first_pixel_observed,
+         "expected first-pixel observation");
+  Expect(report.surface.first_pixel_value == 0xff336699u,
+         "expected stable first-pixel value");
+  Expect(fs::exists(report.surface.marker_path),
+         "expected first-pixel marker path");
+
+  std::ifstream marker_input(report.surface.marker_path);
+  std::string marker((std::istreambuf_iterator<char>(marker_input)),
+                     std::istreambuf_iterator<char>());
+  Expect(marker.find("0xff336699") != std::string::npos,
+         "expected first-pixel marker contents");
+
+  const auto rendered = wfa::RenderFirstPixelFixtureJson(report);
+  Expect(rendered.find("\"render_ready\": true") != std::string::npos,
+         "expected render-ready json flag");
+  Expect(rendered.find("\"backend_name\": \"wayland-egl-headless-fixture\"") !=
+             std::string::npos,
+         "expected backend name in fixture json");
 
   fs::remove_all(root);
 }
@@ -3018,6 +3088,8 @@ int main() {
     TestNativeLaunchPlanStagesHostAbiLibrariesAndAssets();
     TestNativeLaunchPlanReportsUnsupportedAbiClearly();
     TestAssetManagerReadsFixtureAsset();
+    TestHeadlessNativeWindowSurfaceTracksMetadataAndLifecycle();
+    TestHeadlessFirstPixelFixtureWritesDeterministicMarker();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

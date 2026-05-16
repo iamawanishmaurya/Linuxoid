@@ -9,11 +9,13 @@ struct JNIEnvStub;
 struct JavaVMStub;
 struct AAssetManagerStub;
 struct ALooperStub;
+struct ANativeWindowStub;
 
 using JNIEnv = JNIEnvStub;
 using JavaVM = JavaVMStub;
 using AAssetManager = AAssetManagerStub;
 using ALooper = ALooperStub;
+using ANativeWindow = ANativeWindowStub;
 
 struct ANativeActivity {
   JavaVM* vm = nullptr;
@@ -25,7 +27,7 @@ struct ANativeActivity {
   AAssetManager* assetManager = nullptr;
   void* instance = nullptr;
   void* callbacks = nullptr;
-  void* window = nullptr;
+  ANativeWindow* window = nullptr;
 };
 
 using ANativeActivityCreateFn = void (*)(ANativeActivity*, void*, std::size_t);
