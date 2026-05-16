@@ -83,6 +83,29 @@ struct InstalledAppLaunchReport {
   std::string output;
 };
 
+struct InstalledPackageMetadataSpec {
+  RuntimeBackendKind backend = RuntimeBackendKind::kAttachedAdb;
+  std::string serial;
+  std::string package_name;
+};
+
+struct InstalledPackageMetadataReport {
+  std::string backend_name;
+  std::string serial;
+  std::string package_name;
+  bool package_visible = false;
+  bool launcher_resolved = false;
+  std::string resolved_component;
+  std::string install_path;
+  std::string version_code;
+  std::string version_name;
+  std::string package_check_output;
+  std::string launcher_query_output;
+  std::string path_query_output;
+  std::string dump_output;
+  std::string notes;
+};
+
 struct RuntimeTarget {
   std::string backend_name;
   std::string serial;
@@ -145,6 +168,8 @@ std::string RenderAdbActivityLaunchReport(
     const AdbActivityLaunchReport& report);
 std::string RenderInstalledAppLaunchReport(
     const InstalledAppLaunchReport& report);
+std::string RenderInstalledPackageMetadataReport(
+    const InstalledPackageMetadataReport& report);
 std::string RenderRuntimeDiscoveryReport(
     const RuntimeDiscoveryReport& report);
 std::string RenderRuntimePreflightReport(
@@ -164,6 +189,10 @@ AdbActivityLaunchReport LaunchAdbActivityWithRunner(
     const CommandRunner& runner);
 AdbActivityLaunchReport LaunchAdbActivity(const std::string& serial,
                                           const std::string& component);
+InstalledPackageMetadataReport QueryInstalledPackageMetadataWithRunner(
+    const InstalledPackageMetadataSpec& spec, const CommandRunner& runner);
+InstalledPackageMetadataReport QueryInstalledPackageMetadata(
+    const InstalledPackageMetadataSpec& spec);
 InstalledAppLaunchReport LaunchInstalledAppWithRunner(
     const InstalledAppLaunchSpec& spec, const CommandRunner& runner);
 InstalledAppLaunchReport LaunchInstalledApp(const InstalledAppLaunchSpec& spec);

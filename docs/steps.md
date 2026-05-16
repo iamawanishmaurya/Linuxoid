@@ -579,3 +579,38 @@
   Action: Rebuilt Linuxoid after the status and documentation refresh, reran `ctest --test-dir build --output-on-failure`, reran the live generic `verify-package` and `verify-package-matrix` Waydroid checks, and rechecked `./build/compatctl status`.
   Result: Linuxoid now verifies the generic installed-package flow cleanly end to end, the repo-backed status is `93/100`, and the documentation matches the behavior proven by the tests and live commands.
   Timestamp: 2026-05-16T15:36:45+05:30
+
+- Step: Attached-target launcher-resolution confidence check
+  Action: Re-read the runtime bridge, CLI surface, and README roadmap for the next suggestion, then narrowed the behavior contract to stable attached-ADB metadata lookup plus fallback launcher resolution when callers omit a component.
+  Result: Raised confidence from an initial 78/100 to 100/100 for this slice by explicitly guarding against output-shape drift, preserving strict component confirmation, and keeping the new metadata path additive rather than weakening existing launch proofs.
+  Timestamp: 2026-05-16T15:44:32+05:30
+
+- Step: Attached-target launcher-resolution test setup
+  Action: Added failing unit expectations for attached-ADB launcher auto-resolution during `launch-package` and `preflight-runtime` when callers provide only a package name.
+  Result: Linuxoid now has red-bar coverage for the next user-facing improvement before the runtime bridge implementation changes.
+  Timestamp: 2026-05-16T15:47:55+05:30
+
+- Step: Attached-target launcher-resolution red verification
+  Action: Rebuilt `wfa_tests` and reran `ctest --test-dir build --output-on-failure` after adding the new attached-ADB auto-resolution expectations.
+  Result: The suite now fails with `attached-adb backend requires an explicit launcher component`, confirming that the current runtime bridge still blocks the desired auto-resolution flow.
+  Timestamp: 2026-05-16T15:49:33+05:30
+
+- Step: Attached-target launcher-resolution first implementation check
+  Action: Implemented the first pass of attached-ADB metadata lookup and launcher fallback, rebuilt Linuxoid, and reran `ctest --test-dir build --output-on-failure`.
+  Result: The new test failed with `unexpected command in attached-adb auto-resolve launch test`, which showed that the launch fallback was overusing the full metadata query path; the issue was logged in `docs/problems/2026-05-16-attached-adb-auto-launch-overuses-metadata-lookup.md`.
+  Timestamp: 2026-05-16T15:56:41+05:30
+
+- Step: Attached-target launcher-resolution refinement
+  Action: Split attached-ADB launcher resolution from the heavier package metadata path, kept `inspect-package` on the full metadata query, and reran the unit suite plus live attached-target `inspect-package`, `preflight-runtime`, `launch-package`, `verify-package`, and `verify-package-matrix` checks.
+  Result: Linuxoid now auto-resolves launcher components for attached-ADB launch and verification, exposes package metadata through `inspect-package`, and verifies an attached-target matrix at `3/3`; the design fix and validation trail are recorded in `docs/solutions/attached-adb-auto-launch-overuses-metadata-lookup.md`.
+  Timestamp: 2026-05-16T16:03:58+05:30
+
+- Step: Attached-target documentation and status refresh
+  Action: Updated the runtime bridge report output, project status model, README architecture, verification examples, next-step roadmap, changelog, and version metadata for the attached-target metadata and launcher-resolution slice.
+  Result: Linuxoid now reports `94/100` phase loading, documents `inspect-package` and attached-target auto-resolution on GitHub, and points the next work at the first native package-launch spike.
+  Timestamp: 2026-05-16T16:10:21+05:30
+
+- Step: Attached-target final verification
+  Action: Rebuilt Linuxoid after the README and status refresh, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, `inspect-package attached-adb 192.168.240.112:5555 com.android.settings`, `preflight-runtime attached-adb 192.168.240.112:5555 com.android.settings`, `launch-package attached-adb com.android.settings 192.168.240.112:5555`, and `verify-package-matrix attached-adb /tmp/linuxoid-attached-matrix 192.168.240.112:5555 com.android.settings com.android.calculator2 org.fdroid.fdroid`.
+  Result: The refreshed build and test suite are green, the status now reports `94/100`, attached-target package inspection resolves launcher and version metadata correctly, and the attached-target matrix still passes `3/3` without explicit component input.
+  Timestamp: 2026-05-16T16:12:48+05:30

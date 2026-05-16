@@ -38,8 +38,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 93,
-         "expected average phase progress to equal 93");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 94,
+         "expected average phase progress to equal 94");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -86,7 +86,7 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("93/100") != std::string::npos,
+  Expect(report.find("94/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
@@ -943,6 +943,88 @@ void TestAttachedAdbInstalledAppLaunchUsesExplicitComponent() {
          "expected attached-adb backend name");
 }
 
+void TestAttachedAdbInstalledAppLaunchAutoResolvesComponent() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell cmd package resolve-activity --brief 'com.example.demo'") {
+      return {0,
+              "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true\n"
+              "com.example.demo/.MainActivity\n"};
+    }
+    if (command == "adb -s 'device-01' shell am start -W -n "
+                   "'com.example.demo/.MainActivity'") {
+      return {0,
+              "Status: ok\n"
+              "Activity: com.example.demo/.MainActivity\n"
+              "cmp=com.example.demo/.MainActivity\n"
+              "Complete\n"};
+    }
+    throw std::runtime_error(
+        "unexpected command in attached-adb auto-resolve launch test");
+  };
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+       .serial = "device-01",
+       .package_name = "com.example.demo"},
+      runner);
+
+  Expect(report.launch_ok, "expected attached-adb auto-resolved launch success");
+  Expect(report.component == "com.example.demo/.MainActivity",
+         "expected attached-adb launch to expose resolved component");
+}
+
+void TestAttachedAdbPackageMetadataLookupExtractsLauncherAndVersion() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell pm list packages 'com.example.demo'") {
+      return {0, "package:com.example.demo\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell cmd package resolve-activity --brief 'com.example.demo'") {
+      return {0,
+              "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true\n"
+              "com.example.demo/.MainActivity\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell pm path 'com.example.demo'") {
+      return {0, "package:/data/app/~~demo/base.apk\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell dumpsys package 'com.example.demo'") {
+      return {0,
+              "Packages:\n"
+              "  Package [com.example.demo] (123abc):\n"
+              "    versionCode=42 minSdk=24 targetSdk=35\n"
+              "    versionName=1.0.0\n"};
+    }
+    throw std::runtime_error(
+        "unexpected command in attached-adb metadata lookup test");
+  };
+
+  const auto report = wfa::QueryInstalledPackageMetadataWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+       .serial = "device-01",
+       .package_name = "com.example.demo"},
+      runner);
+
+  Expect(report.package_visible, "expected package visibility");
+  Expect(report.launcher_resolved, "expected launcher resolution");
+  Expect(report.resolved_component == "com.example.demo/.MainActivity",
+         "expected resolved launcher component");
+  Expect(report.install_path == "/data/app/~~demo/base.apk",
+         "expected install path extraction");
+  Expect(report.version_code == "42", "expected version code extraction");
+  Expect(report.version_name == "1.0.0", "expected version name extraction");
+
+  const auto rendered = wfa::RenderInstalledPackageMetadataReport(report);
+  Expect(rendered.find("Resolved Component: com.example.demo/.MainActivity") !=
+             std::string::npos,
+         "expected resolved component in metadata report");
+  Expect(rendered.find("Version Name: 1.0.0") != std::string::npos,
+         "expected version name in metadata report");
+}
+
 void TestAttachedAdbRuntimeDiscoveryParsesTargets() {
   const auto runner = [](const std::string& command) -> wfa::CommandResult {
     if (command == "timeout 5s adb devices") {
@@ -1023,6 +1105,53 @@ void TestAttachedAdbPreflightAutoSelectsSingleTarget() {
   Expect(report.ready_for_launch, "expected ready-for-launch success");
   Expect(report.serial == "device-01",
          "expected auto-selected serial in preflight report");
+}
+
+void TestAttachedAdbPreflightResolvesComponentWhenOmitted() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "timeout 5s adb devices") {
+      return {0,
+              "List of devices attached\n"
+              "device-01\tdevice\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell getprop 'ro.product.model'") {
+      return {0, "Pixel 7\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell getprop 'ro.build.version.release'") {
+      return {0, "14\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell getprop 'ro.product.cpu.abi'") {
+      return {0, "x86_64\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell pm list packages 'com.example.demo'") {
+      return {0, "package:com.example.demo\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell cmd package resolve-activity --brief 'com.example.demo'") {
+      return {0,
+              "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true\n"
+              "com.example.demo/.MainActivity\n"};
+    }
+    throw std::runtime_error(
+        "unexpected command in adb preflight auto-resolve test");
+  };
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+       .package_name = "com.example.demo"},
+      runner);
+
+  Expect(report.target_selected, "expected preflight to select the only target");
+  Expect(report.package_visible, "expected package to be visible");
+  Expect(report.component_ready, "expected component readiness after resolution");
+  Expect(report.component == "com.example.demo/.MainActivity",
+         "expected resolved component in preflight report");
+  Expect(report.ready_for_launch,
+         "expected ready-for-launch success after resolution");
 }
 
 void TestAttachedAdbPreflightRequiresSerialWhenMultipleTargetsExist() {
@@ -1923,8 +2052,11 @@ int main() {
     TestWaydroidAppLaunchReportRendering();
     TestInstalledAppLaunchReportRendering();
     TestAttachedAdbInstalledAppLaunchUsesExplicitComponent();
+    TestAttachedAdbInstalledAppLaunchAutoResolvesComponent();
+    TestAttachedAdbPackageMetadataLookupExtractsLauncherAndVersion();
     TestAttachedAdbRuntimeDiscoveryParsesTargets();
     TestAttachedAdbPreflightAutoSelectsSingleTarget();
+    TestAttachedAdbPreflightResolvesComponentWhenOmitted();
     TestAttachedAdbPreflightRequiresSerialWhenMultipleTargetsExist();
     TestAttachedAdbDiscoveryTimeoutReturnsUnavailable();
     TestNativeRuntimePreflightReportsNotImplemented();

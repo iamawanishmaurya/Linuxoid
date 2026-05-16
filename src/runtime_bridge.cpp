@@ -49,6 +49,13 @@ struct StatusQueryAttempt {
   AdbImeStatus status;
 };
 
+struct LauncherResolutionAttempt {
+  bool launcher_resolved = false;
+  bool timed_out = false;
+  std::string resolved_component;
+  std::string output;
+};
+
 std::string QuoteForShell(const std::string& value) {
   std::string quoted = "'";
   for (const char character : value) {
@@ -178,6 +185,77 @@ bool AndroidComponentsEquivalent(const std::string& left,
                                  const std::string& right) {
   return CanonicalizeAndroidComponent(left) ==
          CanonicalizeAndroidComponent(right);
+}
+
+std::string ParseResolvedActivityComponent(const std::string& output,
+                                           const std::string& package_name) {
+  std::string resolved_component;
+  for (const auto& line : SplitLines(output)) {
+    const std::string trimmed = TrimWhitespace(line);
+    if (trimmed.find('/') == std::string::npos) {
+      continue;
+    }
+    if (trimmed.rfind(package_name, 0) != 0) {
+      continue;
+    }
+    resolved_component = trimmed;
+  }
+
+  if (resolved_component.empty()) {
+    return "";
+  }
+
+  return ShortenAndroidComponent(resolved_component);
+}
+
+std::string ParseInstalledPackagePath(const std::string& output) {
+  for (const auto& line : SplitLines(output)) {
+    const std::string trimmed = TrimWhitespace(line);
+    if (trimmed.rfind("package:", 0) == 0) {
+      return trimmed.substr(std::string("package:").size());
+    }
+  }
+  return "";
+}
+
+std::string ParsePackageDumpField(const std::string& output,
+                                  const std::string& field_name) {
+  const std::string prefix = field_name + "=";
+  for (const auto& line : SplitLines(output)) {
+    const std::string trimmed = TrimWhitespace(line);
+    if (trimmed.rfind(prefix, 0) != 0) {
+      continue;
+    }
+
+    std::string value = trimmed.substr(prefix.size());
+    const auto separator = value.find_first_of(" \t");
+    if (separator != std::string::npos) {
+      value = value.substr(0, separator);
+    }
+    return value;
+  }
+  return "";
+}
+
+LauncherResolutionAttempt ResolveAttachedAdbLauncherWithRunner(
+    const std::string& serial, const std::string& package_name,
+    const CommandRunner& runner) {
+  LauncherResolutionAttempt attempt;
+  const auto result = runner(
+      WrapWithTimeout(BuildAdbPrefix(serial) +
+                          " shell cmd package resolve-activity --brief " +
+                          QuoteForShell(package_name),
+                      kAdbDiscoveryTimeoutSeconds));
+  attempt.output = result.output;
+  attempt.timed_out = result.exit_code == 124;
+  if (result.exit_code != 0) {
+    return attempt;
+  }
+
+  attempt.resolved_component =
+      ParseResolvedActivityComponent(result.output, package_name);
+  attempt.launcher_resolved = !attempt.resolved_component.empty();
+  return attempt;
 }
 
 int CalculateProvisioningProgress(const AdbProvisioningReport& report) {
@@ -411,6 +489,30 @@ std::string RenderInstalledAppLaunchReport(
   return output.str();
 }
 
+std::string RenderInstalledPackageMetadataReport(
+    const InstalledPackageMetadataReport& report) {
+  std::ostringstream output;
+  output << "Runtime Backend: " << report.backend_name << '\n';
+  output << "ADB Serial: " << report.serial << '\n';
+  output << "Package: " << report.package_name << '\n';
+  output << "Package Visible: " << (report.package_visible ? "yes" : "no")
+         << '\n';
+  output << "Launcher Resolved: " << (report.launcher_resolved ? "yes" : "no")
+         << '\n';
+  output << "Resolved Component: " << report.resolved_component << '\n';
+  output << "Install Path: " << report.install_path << '\n';
+  output << "Version Code: " << report.version_code << '\n';
+  output << "Version Name: " << report.version_name << '\n';
+  output << "Notes: " << report.notes << '\n';
+  output << "Package Check Output:\n" << report.package_check_output;
+  output << "Launcher Query Output:\n" << report.launcher_query_output;
+  output << "Path Query Output:\n" << report.path_query_output;
+  output << "Dump Output Summary: "
+         << (report.dump_output.empty() ? "not available" : "parsed into summary fields above")
+         << '\n';
+  return output.str();
+}
+
 std::string RenderRuntimeDiscoveryReport(
     const RuntimeDiscoveryReport& report) {
   std::ostringstream output;
@@ -606,12 +708,6 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
     return report;
   }
 
-  report.component_ready = spec.backend != RuntimeBackendKind::kAttachedAdb ||
-                           spec.package_name.empty() || !spec.component.empty();
-  if (!report.component_ready) {
-    report.notes = "attached-adb launch requires an explicit component";
-  }
-
   if (!spec.package_name.empty() &&
       spec.backend == RuntimeBackendKind::kAttachedAdb) {
     const auto package_result = runner(
@@ -627,7 +723,28 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
     } else if (!report.package_visible && report.notes.empty()) {
       report.notes = "package is not visible on the selected target";
     }
+
+    if (report.package_visible) {
+      if (!spec.component.empty()) {
+        report.component_ready = true;
+      } else {
+        const auto launcher_attempt = ResolveAttachedAdbLauncherWithRunner(
+            report.serial, spec.package_name, runner);
+        report.component = launcher_attempt.resolved_component;
+        report.component_ready = launcher_attempt.launcher_resolved;
+        if (!report.component_ready && report.notes.empty()) {
+          report.notes = launcher_attempt.timed_out
+                             ? "launcher resolution timed out"
+                             : "package is visible but no launcher activity was resolved";
+        }
+      }
+    } else {
+      report.component_ready = false;
+    }
   } else {
+    report.component_ready =
+        spec.backend != RuntimeBackendKind::kAttachedAdb ||
+        spec.package_name.empty() || !spec.component.empty();
     report.package_visible = spec.package_name.empty() || report.target_online;
   }
 
@@ -677,6 +794,99 @@ AdbActivityLaunchReport LaunchAdbActivity(const std::string& serial,
   return LaunchAdbActivityWithRunner(serial, component, MakeShellRunner());
 }
 
+InstalledPackageMetadataReport QueryInstalledPackageMetadataWithRunner(
+    const InstalledPackageMetadataSpec& spec, const CommandRunner& runner) {
+  if (!IsValidPackageName(spec.package_name)) {
+    throw std::invalid_argument("package_name must look like a Java package");
+  }
+
+  InstalledPackageMetadataReport report;
+  report.backend_name = RenderRuntimeBackendName(spec.backend);
+  report.serial = spec.serial;
+  report.package_name = spec.package_name;
+
+  switch (spec.backend) {
+    case RuntimeBackendKind::kAttachedAdb: {
+      if (spec.serial.empty()) {
+        throw std::invalid_argument(
+            "attached-adb metadata lookup requires a target serial");
+      }
+
+      const std::string prefix = BuildAdbPrefix(spec.serial);
+      const auto package_result = runner(
+          WrapWithTimeout(prefix + " shell pm list packages " +
+                              QuoteForShell(spec.package_name),
+                          kAdbDiscoveryTimeoutSeconds));
+      report.package_check_output = package_result.output;
+      report.package_visible =
+          package_result.exit_code == 0 &&
+          OutputContainsInstalledPackage(package_result.output, spec.package_name);
+      if (!report.package_visible) {
+        if (package_result.exit_code == 124) {
+          report.notes = "package visibility check timed out";
+        } else {
+          report.notes = "package is not visible on the selected target";
+        }
+        return report;
+      }
+
+      const auto launcher_attempt = ResolveAttachedAdbLauncherWithRunner(
+          spec.serial, spec.package_name, runner);
+      report.launcher_query_output = launcher_attempt.output;
+      report.resolved_component = launcher_attempt.resolved_component;
+      report.launcher_resolved = launcher_attempt.launcher_resolved;
+      if (launcher_attempt.timed_out) {
+        report.notes = "launcher resolution timed out";
+      }
+
+      const auto path_result = runner(
+          WrapWithTimeout(prefix + " shell pm path " +
+                              QuoteForShell(spec.package_name),
+                          kAdbDiscoveryTimeoutSeconds));
+      report.path_query_output = path_result.output;
+      if (path_result.exit_code == 0) {
+        report.install_path = ParseInstalledPackagePath(path_result.output);
+      }
+
+      const auto dump_result = runner(
+          WrapWithTimeout(prefix + " shell dumpsys package " +
+                              QuoteForShell(spec.package_name),
+                          kAdbDiscoveryTimeoutSeconds));
+      report.dump_output = dump_result.output;
+      if (dump_result.exit_code == 0) {
+        report.version_code =
+            ParsePackageDumpField(dump_result.output, "versionCode");
+        report.version_name =
+            ParsePackageDumpField(dump_result.output, "versionName");
+      }
+
+      if (report.notes.empty()) {
+        report.notes = report.launcher_resolved
+                           ? "package metadata resolved from attached target"
+                           : "package is visible but no launcher activity was resolved";
+      }
+      return report;
+    }
+
+    case RuntimeBackendKind::kWaydroid:
+      report.notes =
+          "installed package metadata lookup is not implemented for waydroid";
+      return report;
+
+    case RuntimeBackendKind::kNative:
+      report.notes =
+          "installed package metadata lookup is not implemented for native";
+      return report;
+  }
+
+  throw std::invalid_argument("unsupported runtime backend enum");
+}
+
+InstalledPackageMetadataReport QueryInstalledPackageMetadata(
+    const InstalledPackageMetadataSpec& spec) {
+  return QueryInstalledPackageMetadataWithRunner(spec, MakeShellRunner());
+}
+
 InstalledAppLaunchReport LaunchInstalledAppWithRunner(
     const InstalledAppLaunchSpec& spec, const CommandRunner& runner) {
   if (!IsValidPackageName(spec.package_name)) {
@@ -702,13 +912,26 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
         throw std::invalid_argument(
             "attached-adb backend requires a target serial");
       }
+
       if (spec.component.empty()) {
-        throw std::invalid_argument(
-            "attached-adb backend requires an explicit launcher component");
+        const auto launcher_attempt = ResolveAttachedAdbLauncherWithRunner(
+            spec.serial, spec.package_name, runner);
+        report.component = launcher_attempt.resolved_component;
+        if (!launcher_attempt.launcher_resolved) {
+          report.output = launcher_attempt.timed_out
+                              ? "launcher resolution timed out\n"
+                              : "package is visible but no launcher activity was resolved\n";
+          report.launch_ok = false;
+          return report;
+        }
       }
 
       const auto activity_report =
-          LaunchAdbActivityWithRunner(spec.serial, spec.component, runner);
+          LaunchAdbActivityWithRunner(
+              spec.serial,
+              report.component.empty() ? spec.component : report.component,
+              runner);
+      report.component = activity_report.component;
       report.launch_ok = activity_report.launch_ok;
       report.output = activity_report.output;
       return report;

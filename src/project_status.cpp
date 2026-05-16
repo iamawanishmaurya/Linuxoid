@@ -13,12 +13,12 @@ std::vector<PhaseStatus> BuildDefaultPhases() {
        "CMake, CLI entrypoint, and local test target exist."},
       {"P3", "Package and storage contract", 100,
        "APK layout and host storage mapping are encoded in code."},
-      {"P4", "Runtime and service contract", 88,
-       "The project can load an APK into a compat root, install it on a live target, provision its IME service, route installed-package launch through a backend-neutral contract, and preflight attached Android targets before launch."},
-      {"P5", "Graphics and host integration", 80,
-       "Linux launcher artifacts now target a backend-neutral installed-package launch seam, and the generic host verification surface is no longer named around Waydroid even while the current live proofs still use that adapter."},
-      {"P6", "APK execution and validation", 88,
-       "A live Linux host launcher now proves the local keyboard and F-Droid APK flows plus Calculator, Settings, and installed-package F-Droid launch flows on Waydroid, and the new generic `verify-package` plus `verify-package-matrix` commands now validate the installed-package path without Waydroid-shaped product names."},
+      {"P4", "Runtime and service contract", 90,
+       "The project can load an APK into a compat root, install it on a live target, provision its IME service, inspect attached-target package metadata, auto-resolve simple launcher components, route installed-package launch through a backend-neutral contract, and preflight attached Android targets before launch."},
+      {"P5", "Graphics and host integration", 83,
+       "Linux launcher artifacts now target a backend-neutral installed-package launch seam, and both Waydroid-backed and attached-ADB host launch verification can reuse the same generated launcher flow."},
+      {"P6", "APK execution and validation", 90,
+       "A live Linux host launcher now proves the local keyboard and F-Droid APK flows plus Calculator, Settings, and installed-package F-Droid launch flows on Waydroid, while attached-ADB now supports metadata-backed auto-resolution and a live `3/3` installed-package verification matrix without Waydroid-shaped product names."},
   };
 }
 
@@ -103,8 +103,8 @@ std::string DescribeMvpFoundation() {
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: backend-neutral attached Android targets on the path to a native Linux compatibility layer\n";
-  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, backend-neutral installed-package launch plus target discovery/preflight, and Linux desktop launch artifacts with repeatable generic per-app, matrix, and APK-backed verification\n";
-  output << "Golden App Proof: the FUTO keyboard APK now returns Ready for typing: yes through both a Linuxoid-generated launcher and the local-APK verifier on live Waydroid, while F-Droid now verifies through both the local-APK and installed-package Linux launch paths alongside Calculator and Settings.\n";
+  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, backend-neutral installed-package launch plus target discovery/preflight, attached-target package inspection and launcher resolution, and Linux desktop launch artifacts with repeatable generic per-app, matrix, and APK-backed verification\n";
+  output << "Golden App Proof: the FUTO keyboard APK now returns Ready for typing: yes through both a Linuxoid-generated launcher and the local-APK verifier on live Waydroid, while attached-ADB now auto-resolves installed-app launchers and verifies a live Settings, Calculator, and F-Droid matrix without explicit component input.\n";
   output << "Why: this keeps the first executable slice aligned with the future core.\n";
   return output.str();
 }

@@ -104,6 +104,9 @@ InstalledPackageVerificationReport VerifyInstalledPackageWithRunners(
        .package_name = spec.package_name,
        .component = spec.component},
       runtime_runner);
+  const std::string effective_component =
+      direct_report.component.empty() ? spec.component : direct_report.component;
+  report.component = effective_component;
   report.direct_launch_ok = direct_report.launch_ok;
   report.direct_launch_output = direct_report.output;
 
@@ -112,7 +115,7 @@ InstalledPackageVerificationReport VerifyInstalledPackageWithRunners(
        .app_name = report.app_name,
        .serial = spec.serial,
        .package_name = spec.package_name,
-       .component = spec.component,
+       .component = effective_component,
        .compatctl_path = spec.compatctl_path,
        .desktop_root = spec.desktop_root,
        .launcher_root = spec.launcher_root});

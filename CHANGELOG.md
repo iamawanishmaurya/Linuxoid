@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.18 - 2026-05-16
+
+- Add attached-target `inspect-package` metadata lookup so Linuxoid can read package visibility, resolved launcher, install path, and version information from a live `attached-adb` runtime.
+- Add attached-ADB launcher auto-resolution to `preflight-runtime`, `launch-package`, `verify-package`, and `verify-package-matrix`, removing the need to hard-code simple launcher components for installed-app flows.
+- Verify the new attached-target path live with `com.android.settings`, plus a `3/3` attached-target matrix for `com.android.settings`, `com.android.calculator2`, and `org.fdroid.fdroid`, then refresh the README roadmap toward the first native package-launch spike.
+
 ## v0.1.17 - 2026-05-16
 
 - Add backend-neutral `verify-package` and `verify-package-matrix` commands so installed-package verification no longer depends on Waydroid-shaped product names.

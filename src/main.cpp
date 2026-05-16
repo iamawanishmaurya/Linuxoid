@@ -27,6 +27,7 @@ void PrintUsage() {
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl discover-runtime <backend>\n"
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
+      << "  compatctl inspect-package <backend> <serial-or-dash> <package>\n"
       << "  compatctl launch-activity <serial> <component>\n"
       << "  compatctl launch-package <backend> <package> [serial] [component]\n"
       << "  compatctl verify-package <backend> <package> [serial-or-dash] [component-or-dash] [desktop-entry-root] [launcher-root]\n"
@@ -186,9 +187,9 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
       }
 
-      const std::string serial = argc >= 4 ? argv[3] : "";
-      const std::string package_name = argc >= 5 ? argv[4] : "";
-      const std::string component = argc == 6 ? argv[5] : "";
+      const std::string serial = argc >= 4 ? OptionalArgOrEmpty(argv[3]) : "";
+      const std::string package_name = argc >= 5 ? OptionalArgOrEmpty(argv[4]) : "";
+      const std::string component = argc == 6 ? OptionalArgOrEmpty(argv[5]) : "";
       const auto report = wfa::PreflightRuntime(
           {.backend = wfa::ParseRuntimeBackendKind(argv[2]),
            .serial = serial,
@@ -196,6 +197,20 @@ int main(int argc, char** argv) {
            .component = component});
       std::cout << wfa::RenderRuntimePreflightReport(report);
       return report.ready_for_launch ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "inspect-package") {
+      if (argc != 5) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report = wfa::QueryInstalledPackageMetadata(
+          {.backend = wfa::ParseRuntimeBackendKind(argv[2]),
+           .serial = OptionalArgOrEmpty(argv[3]),
+           .package_name = argv[4]});
+      std::cout << wfa::RenderInstalledPackageMetadataReport(report);
+      return report.package_visible ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "adb-ime-status") {
@@ -228,8 +243,8 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
       }
 
-      const std::string serial = argc >= 5 ? argv[4] : "";
-      const std::string component = argc == 6 ? argv[5] : "";
+      const std::string serial = argc >= 5 ? OptionalArgOrEmpty(argv[4]) : "";
+      const std::string component = argc == 6 ? OptionalArgOrEmpty(argv[5]) : "";
       const auto report = wfa::LaunchInstalledApp(
           {.backend = wfa::ParseRuntimeBackendKind(argv[2]),
            .serial = serial,
