@@ -394,3 +394,8 @@
   Action: Evaluated multiple recovery approaches, restored the structured matrix verifier path, improved the per-package report, identified the sandboxed Waydroid D-Bus access failure, and reran the live matrix verification outside the sandbox.
   Result: The real blocker was the top-level execution environment rather than the Linuxoid app-launch path, and the live matrix now passes at `3/3` with each package proving `direct=yes`, `launcher=yes`, and `generated=yes`.
   Timestamp: 2026-05-16T11:53:07+05:30
+
+- Step: Linuxoid v0.1.10 release and publish
+  Action: Staged the compatibility-matrix slice, committed it as `feat: add Waydroid compatibility matrix verifier`, tagged `v0.1.10`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
+  Result: Linuxoid now publishes a one-command Waydroid compatibility matrix verifier on GitHub as `v0.1.10`.
+  Timestamp: 2026-05-16T12:02:44+05:30
