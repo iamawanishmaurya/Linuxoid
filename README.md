@@ -355,6 +355,7 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
 - A local test-backed proof that `native-runtime-health-fixture` and `native-runtime-health-replay` classify runtime readiness, select deterministic recovery actions, and emit stable replayable health artifacts without claiming false success
 - A local test-backed proof that `native-runtime-recovery-plan` materializes stable recovery-plan artifacts and deterministic action metadata for missing artifact, failed native load, unavailable display, and failed service lookup scenarios
 - A local test-backed proof that `native-runtime-diagnostic-replay` merges the existing JSONL traces into a stable replay bundle, reports missing trace sources honestly, and diagnoses recovery-needed states without rerunning the UI path
+- A local test-backed proof that missing native dependencies keep `overall_ready: false`, preserve `recovery_needed` state, and surface `retry_native_load_after_bundle_refresh` consistently across fixture, command, and replay outputs
 - A generated native bootstrap entrypoint that now calls `native-execute-stub <bootstrap-manifest>` instead of routing through a text-only parent shim
 - A local test suite that verifies the first scaffold behavior
 

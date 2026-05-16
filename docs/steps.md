@@ -1252,3 +1252,18 @@
   Action: Rebuilt Linuxoid, reran the full test suite, verified `native-runtime-health-fixture`, verified `native-runtime-diagnostic-replay` first against a missing-trace race and then sequentially against a complete Calculator trace set, and refreshed the docs/changelog/version metadata.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the replay command now writes `runtime-diagnostic-events.jsonl` plus `runtime-diagnostic-replay.json`, reports missing trace sources honestly when a source is absent, and reports `replay_ready: true` with `trace_sources_found: 5` after the trace set is complete.
   Timestamp: 2026-05-17T22:28:00+05:30
+
+- Step: Runtime health explicit no-false-success red test
+  Action: Audited the current runtime-health and replay tests to identify where honest failure for missing dependencies was only implicit, then prepared to add explicit assertions for that behavior.
+  Result: The next test slice is focused on missing native dependencies and command-level JSON honesty, not on already-covered artifact creation or recovery-scenario selection.
+  Timestamp: 2026-05-17T22:45:00+05:30
+
+- Step: Runtime health missing-native regression tests
+  Action: Added explicit tests for missing native dependency behavior across the fixture, command JSON, and merged diagnostic replay so honest failure is asserted directly instead of implied.
+  Result: The new coverage targets no-false-success behavior for native loading, while reusing the existing self-healing runtime surfaces.
+  Timestamp: 2026-05-17T22:50:00+05:30
+
+- Step: Runtime health missing-native test gate verification
+  Action: Rebuilt Linuxoid, reran the full test suite, and extended the changelog plus README proof list to reflect the new explicit regression coverage for no-false-success behavior when native dependencies are missing.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, and the repo now has direct test coverage for missing-native health classification, recovery-action selection, JSON stability, and replay honesty.
+  Timestamp: 2026-05-17T22:55:00+05:30

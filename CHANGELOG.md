@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.44 - 2026-05-17
+
+- Add explicit regression coverage for self-healing runtime honesty when a native dependency is missing, including fixture-level health classification, command-level JSON stability, and merged diagnostic replay output.
+- Prove through tests that Linuxoid does not claim false success when `native_loading` is blocked, and that the deterministic recovery action `retry_native_load_after_bundle_refresh` is surfaced consistently across health and replay outputs.
+
 ## v0.1.43 - 2026-05-17
 
 - Add a Linuxoid-owned `runtime-smoke-trace.jsonl` artifact so the ART runtime smoke seam now emits structured JSONL events instead of only a plan, log, and result file.

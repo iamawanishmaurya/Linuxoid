@@ -2394,6 +2394,39 @@ void TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery() {
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-missing-native", true, false);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+
+  Expect(report.self_healing_ready,
+         "expected runtime health fixture itself to stay available");
+  Expect(!report.overall_ready,
+         "expected missing native dependency to prevent false success");
+  Expect(report.overall_state == "recovery_needed",
+         "expected recovery-needed state for missing native dependency");
+
+  const auto native_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "native_loading";
+      });
+  Expect(native_record != report.records.end(),
+         "expected native loading health record");
+  Expect(native_record->state == "blocked",
+         "expected blocked native loading state");
+  Expect(!native_record->ready,
+         "expected missing native dependency to stay unready");
+  Expect(native_record->selected_recovery_action ==
+             "retry_native_load_after_bundle_refresh",
+         "expected native load recovery action");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeHealthReplaySummarizesTrace() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -2421,6 +2454,32 @@ void TestRuntimeHealthReplaySummarizesTrace() {
   Expect(rendered.find("\"overall_state\": \"recovery_needed\"") !=
              std::string::npos,
          "expected replay overall state in json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeDiagnosticReplayReportsMissingNativeDependencyHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-diagnostic-missing-native", true, false);
+
+  static_cast<void>(wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline"));
+  const auto replay = wfa::ReplayRuntimeDiagnosticBundle(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(replay.replay_ready, "expected diagnostic replay artifacts");
+  Expect(replay.overall_state == "recovery_needed",
+         "expected missing native dependency to keep replay in recovery state");
+  Expect(std::find(replay.failing_subsystems.begin(),
+                   replay.failing_subsystems.end(),
+                   "native_loading") != replay.failing_subsystems.end(),
+         "expected native loading in failing subsystem list");
+  Expect(std::find(replay.selected_actions.begin(),
+                   replay.selected_actions.end(),
+                   "retry_native_load_after_bundle_refresh") !=
+             replay.selected_actions.end(),
+         "expected native recovery action in diagnostic replay");
 
   fs::remove_all(fixture.root);
 }
@@ -2541,6 +2600,35 @@ void TestRuntimeHealthCommandWritesStableJson() {
          "expected scenario name in runtime health json");
   Expect(output.find("\"self_healing_ready\": true") != std::string::npos,
          "expected self-healing ready flag in runtime health json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeHealthCommandReportsMissingNativeDependencyHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-command-missing-native", true, false);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &exit_code);
+  Expect(exit_code == 0, "expected native-runtime-health-fixture success");
+  Expect(output.find("\"overall_ready\": false") != std::string::npos,
+         "expected overall readiness to stay false");
+  Expect(output.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected recovery-needed state in command json");
+  Expect(output.find("\"subsystem_name\": \"native_loading\"") !=
+             std::string::npos,
+         "expected native loading record in command json");
+  Expect(output.find(
+             "\"selected_recovery_action\": "
+             "\"retry_native_load_after_bundle_refresh\"") !=
+             std::string::npos,
+         "expected native recovery action in command json");
 
   fs::remove_all(fixture.root);
 }
@@ -4751,12 +4839,15 @@ int main() {
     TestRuntimeHealthFixtureSelectsMissingArtifactRecovery();
     TestRuntimeHealthFixtureSelectsUnavailableDisplayRecovery();
     TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
+    TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess();
     TestRuntimeHealthReplaySummarizesTrace();
     TestNativeArtRuntimeSmokeWritesTraceJsonl();
     TestRuntimeDiagnosticReplayWritesStableArtifacts();
     TestRuntimeDiagnosticReplayHandlesMissingTraceHonestly();
+    TestRuntimeDiagnosticReplayReportsMissingNativeDependencyHonestly();
     TestRuntimeDiagnosticReplayCommandWritesStableJson();
     TestRuntimeHealthCommandWritesStableJson();
+    TestRuntimeHealthCommandReportsMissingNativeDependencyHonestly();
     TestRuntimeRecoveryPlanWritesStableArtifacts();
     TestRuntimeRecoveryPlanScenariosSelectDeterministicActions();
     TestRuntimeRecoveryPlanCommandWritesStableJson();
