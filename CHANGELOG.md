@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.8 - 2026-05-16
+
+- Add `launch-waydroid-package` so Linuxoid can launch installed non-IME apps on Waydroid without requiring APK reinstall or hardcoded component selection.
+- Add `desktopify-waydroid-package` so Linuxoid can generate Linux launchers and `.desktop` entries for installed Waydroid apps.
+- Verify the new installed-package path on live Waydroid with `com.android.calculator2`, including a Linuxoid-generated host launcher execution from Linux.
+- Raise verified project loading to `87/100` and checkpoint gates to `70/100`.
+
 ## v0.1.7 - 2026-05-16
 
 - Normalize fully qualified IME identifiers to the short `package/.Class` form before Linuxoid sends `ime enable` and `ime set`, fixing the Waydroid mutation failure for the keyboard app.

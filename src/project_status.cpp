@@ -15,10 +15,10 @@ std::vector<PhaseStatus> BuildDefaultPhases() {
        "APK layout and host storage mapping are encoded in code."},
       {"P4", "Runtime and service contract", 80,
        "The project can load an APK into a compat root, install it on a live target, and provision its IME service."},
-      {"P5", "Graphics and host integration", 55,
-       "Linux launcher artifacts now support automatic launcher inference, split host install roots, and verified host-side execution against a live Waydroid runtime."},
-      {"P6", "APK execution and validation", 70,
-       "A live Linux host launcher now proves install, IME enablement, default selection, keyboard settings launch, and ready-for-typing verification on Waydroid for the golden app."},
+      {"P5", "Graphics and host integration", 65,
+       "Linux launcher artifacts now support automatic launcher inference, split host install roots, and verified host-side execution for both APK-backed and installed-package Waydroid launches."},
+      {"P6", "APK execution and validation", 75,
+       "A live Linux host launcher now proves IME and non-IME app launch flows on Waydroid, including Ready-for-typing verification for the keyboard app and direct launch for Calculator."},
   };
 }
 
@@ -30,10 +30,10 @@ std::vector<Checkpoint> BuildDefaultCheckpoints() {
       {"C2", "Golden App Launch", 20, CompletionState::kComplete,
        "The keyboard APK now installs, enables, sets default IME, and launches settings successfully on the live target."},
       {"C3", "Representative Compatibility Set", 25,
-       CompletionState::kNotStarted,
-       "No compatibility matrix exists yet."},
+       CompletionState::kInValidation,
+       "The keyboard and Calculator launch paths are now verified on live Waydroid, but the wider app matrix is still incomplete."},
       {"C4", "Host Integration", 20, CompletionState::kInValidation,
-       "A Linux wrapper and `.desktop` entry can launch the golden app from the host, but compositor, clipboard, and input handoff still need proof."},
+       "Linux wrappers and `.desktop` entries now launch both APK-backed and installed Waydroid apps from the host, but compositor, clipboard, and richer input handoff still need proof."},
       {"C5", "Repeatability and Regression Guard", 20,
        CompletionState::kComplete,
        "The build, tests, and live keyboard provisioning flow all passed again without code changes."},
@@ -103,8 +103,8 @@ std::string DescribeMvpFoundation() {
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: container-first Android userspace integration\n";
-  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, APK loader, runtime bridge, and Linux desktop launch artifacts with automatic launcher inference and live Waydroid execution proof\n";
-  output << "Golden App Proof: the FUTO keyboard APK now provisions successfully through a Linuxoid-generated launcher on a live Waydroid runtime and returns Ready for typing: yes.\n";
+  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, and Linux desktop launch artifacts with APK-backed and installed-package Waydroid execution proof\n";
+  output << "Golden App Proof: the FUTO keyboard APK returns Ready for typing: yes through a Linuxoid-generated launcher on live Waydroid, and Calculator now launches through the new Waydroid-native package path.\n";
   output << "Why: this keeps the first executable slice aligned with the future core.\n";
   return output.str();
 }

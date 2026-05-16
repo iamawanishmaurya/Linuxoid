@@ -339,3 +339,18 @@
   Action: Rebuilt Linuxoid after the final progress-model refresh, reran the tests, confirmed the `84/100` status output, staged the changes, committed them as `feat: verify Linuxoid launcher on Waydroid`, tagged `v0.1.7`, pushed `main`, and pushed the tags to the Linuxoid GitHub remote.
   Result: The repository is now published at the user-provided remote with the live Waydroid launcher milestone recorded in both Git history and release tags.
   Timestamp: 2026-05-16T10:20:40+05:30
+
+- Step: Next-phase slice selection
+  Action: Reviewed the current Linuxoid host-launch surface, the live Waydroid proof, and the tracker-agent recommendation for the next phase.
+  Result: Chose a Waydroid-native package launch and desktopify path for non-IME apps as the next implementation slice because it is directly verifiable on the current host and advances the representative-app checkpoint.
+  Timestamp: 2026-05-16T10:27:44+05:30
+
+- Step: Waydroid-native launch red phase
+  Action: Added failing tests for a Waydroid-native package launch report and installed-package desktop launcher generation, then rebuilt the project.
+  Result: The build failed as expected because Linuxoid does not yet expose the Waydroid-native launch and desktopify APIs that the new tests target.
+  Timestamp: 2026-05-16T10:29:01+05:30
+
+- Step: Waydroid-native package launch implementation and verification
+  Action: Added Linuxoid commands for `launch-waydroid-package` and `desktopify-waydroid-package`, rebuilt the project, reran the tests, verified live Waydroid launch for `com.android.calculator2`, inspected the generated Linux launcher artifacts, and executed the generated launcher from Linux.
+  Result: Linuxoid now has a verified non-IME installed-package launch path on live Waydroid, and the project status advanced to `87/100` overall with checkpoint gates at `70/100`.
+  Timestamp: 2026-05-16T10:36:56+05:30

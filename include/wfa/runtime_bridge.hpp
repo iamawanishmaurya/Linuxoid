@@ -54,6 +54,12 @@ struct AdbActivityLaunchReport {
   std::string output;
 };
 
+struct WaydroidAppLaunchReport {
+  std::string package_name;
+  bool launch_ok = false;
+  std::string output;
+};
+
 bool OutputContainsInstalledPackage(const std::string& output,
                                     const std::string& package_name);
 bool OutputContainsImeId(const std::string& output, const std::string& ime_id);
@@ -67,6 +73,8 @@ bool LaunchOutputConfirmsComponent(const std::string& output,
                                    const std::string& component);
 std::string RenderAdbActivityLaunchReport(
     const AdbActivityLaunchReport& report);
+std::string RenderWaydroidAppLaunchReport(
+    const WaydroidAppLaunchReport& report);
 std::string RenderAdbImeStatusReport(const AdbImeStatus& status);
 std::string RenderAdbProvisioningReport(const AdbProvisioningReport& report);
 AdbActivityLaunchReport LaunchAdbActivityWithRunner(
@@ -74,6 +82,9 @@ AdbActivityLaunchReport LaunchAdbActivityWithRunner(
     const CommandRunner& runner);
 AdbActivityLaunchReport LaunchAdbActivity(const std::string& serial,
                                           const std::string& component);
+WaydroidAppLaunchReport LaunchWaydroidAppWithRunner(
+    const std::string& package_name, const CommandRunner& runner);
+WaydroidAppLaunchReport LaunchWaydroidApp(const std::string& package_name);
 AdbImeStatus QueryAdbImeStatusWithRunner(const std::string& serial,
                                          const std::string& package_name,
                                          const std::string& ime_id,

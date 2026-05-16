@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -69,6 +70,12 @@ CommandRunner MakeShellRunner() {
 
 std::string BuildAdbPrefix(const std::string& serial) {
   return "adb -s " + QuoteForShell(serial);
+}
+
+bool IsValidPackageName(const std::string& package_name) {
+  static const std::regex pattern(
+      R"(^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$)");
+  return std::regex_match(package_name, pattern);
 }
 
 std::vector<std::string> SplitLines(const std::string& output) {
@@ -326,6 +333,16 @@ std::string RenderAdbActivityLaunchReport(
   return output.str();
 }
 
+std::string RenderWaydroidAppLaunchReport(
+    const WaydroidAppLaunchReport& report) {
+  std::ostringstream output;
+  output << "Runtime Backend: waydroid\n";
+  output << "Package: " << report.package_name << '\n';
+  output << "Launch OK: " << (report.launch_ok ? "yes" : "no") << '\n';
+  output << "Launch Output:\n" << report.output;
+  return output.str();
+}
+
 AdbActivityLaunchReport LaunchAdbActivityWithRunner(
     const std::string& serial, const std::string& component,
     const CommandRunner& runner) {
@@ -346,6 +363,26 @@ AdbActivityLaunchReport LaunchAdbActivityWithRunner(
 AdbActivityLaunchReport LaunchAdbActivity(const std::string& serial,
                                           const std::string& component) {
   return LaunchAdbActivityWithRunner(serial, component, MakeShellRunner());
+}
+
+WaydroidAppLaunchReport LaunchWaydroidAppWithRunner(
+    const std::string& package_name, const CommandRunner& runner) {
+  if (!IsValidPackageName(package_name)) {
+    throw std::invalid_argument("package_name must look like a Java package");
+  }
+
+  const auto result =
+      runner("waydroid app launch " + package_name);
+
+  WaydroidAppLaunchReport report;
+  report.package_name = package_name;
+  report.launch_ok = result.exit_code == 0;
+  report.output = result.output;
+  return report;
+}
+
+WaydroidAppLaunchReport LaunchWaydroidApp(const std::string& package_name) {
+  return LaunchWaydroidAppWithRunner(package_name, MakeShellRunner());
 }
 
 std::string RenderAdbImeStatusReport(const AdbImeStatus& status) {

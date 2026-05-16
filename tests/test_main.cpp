@@ -26,8 +26,8 @@ void TestWeightedCheckpointProgress() {
   const auto checkpoints = wfa::BuildDefaultCheckpoints();
 
   Expect(checkpoints.size() == 5, "expected five runtime checkpoints");
-  Expect(wfa::CalculateWeightedCheckpointProgress(checkpoints) == 58,
-         "expected weighted checkpoint progress to round to 58");
+  Expect(wfa::CalculateWeightedCheckpointProgress(checkpoints) == 70,
+         "expected weighted checkpoint progress to round to 70");
   Expect(wfa::CountCompletedCheckpoints(checkpoints) == 2,
          "expected two completed runtime checkpoints");
 }
@@ -36,8 +36,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 84,
-         "expected average phase progress to equal 84");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 87,
+         "expected average phase progress to equal 87");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -84,9 +84,9 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("84/100") != std::string::npos,
+  Expect(report.find("87/100") != std::string::npos,
          "expected average phase progress in report");
-  Expect(report.find("58/100") != std::string::npos,
+  Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
 }
 
@@ -840,6 +840,91 @@ void TestAutoDesktopLaunchArtifactsRejectHeadlessApp() {
   fs::remove_all(root);
 }
 
+void TestWaydroidAppLaunchReportRendering() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "waydroid app launch com.android.calculator2") {
+      return {0, ""};
+    }
+    throw std::runtime_error("unexpected command in waydroid launch test");
+  };
+
+  const auto report =
+      wfa::LaunchWaydroidAppWithRunner("com.android.calculator2", runner);
+  Expect(report.launch_ok, "expected waydroid app launch success");
+
+  const auto rendered = wfa::RenderWaydroidAppLaunchReport(report);
+  Expect(rendered.find("Package: com.android.calculator2") !=
+             std::string::npos,
+         "expected package in waydroid launch report");
+  Expect(rendered.find("Launch OK: yes") != std::string::npos,
+         "expected launch success in waydroid launch report");
+}
+
+void TestWaydroidDesktopLaunchArtifacts() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-waydroid-launch";
+  const fs::path desktop_root = root / "applications";
+  const fs::path launcher_root = root / "launchers";
+  fs::remove_all(root);
+  fs::create_directories(root);
+
+  const fs::path compatctl_path = root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  const auto artifacts = wfa::CreateWaydroidDesktopLaunchArtifacts(
+      {.app_name = "Calculator",
+       .package_name = "com.android.calculator2",
+       .compatctl_path = compatctl_path.string(),
+       .desktop_root = desktop_root.string(),
+       .launcher_root = launcher_root.string()});
+
+  Expect(artifacts.host_launch_ready,
+         "expected waydroid desktop artifacts to be ready");
+  Expect(fs::exists(artifacts.script_path),
+         "expected waydroid launcher script to exist");
+  Expect(fs::exists(artifacts.desktop_file_path),
+         "expected waydroid desktop entry to exist");
+
+  std::ifstream script_input(artifacts.script_path);
+  std::string script((std::istreambuf_iterator<char>(script_input)),
+                     std::istreambuf_iterator<char>());
+  Expect(script.find("launch-waydroid-package") != std::string::npos,
+         "expected script to use waydroid launch command");
+  Expect(script.find("com.android.calculator2") != std::string::npos,
+         "expected script to include package name");
+
+  std::ifstream desktop_input(artifacts.desktop_file_path);
+  std::string desktop_entry((std::istreambuf_iterator<char>(desktop_input)),
+                            std::istreambuf_iterator<char>());
+  Expect(desktop_entry.find("Name=Calculator (Android)") !=
+             std::string::npos,
+         "expected waydroid desktop entry name");
+  Expect(desktop_entry.find("Exec=\"" + artifacts.script_path + "\"") !=
+             std::string::npos,
+         "expected waydroid desktop entry exec path");
+
+  fs::remove_all(root);
+}
+
+void TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage() {
+  bool threw = false;
+  try {
+    (void)wfa::CreateWaydroidDesktopLaunchArtifacts(
+        {.app_name = "Bad",
+         .package_name = "invalid-package",
+         .compatctl_path = "/tmp/compatctl",
+         .desktop_root = "/tmp/linuxoid-invalid-desktop",
+         .launcher_root = "/tmp/linuxoid-invalid-launcher"});
+  } catch (const std::invalid_argument&) {
+    threw = true;
+  }
+
+  Expect(threw, "expected invalid waydroid package names to be rejected");
+}
+
 void TestImeProvisioningSuccessPath() {
   std::vector<std::string> commands;
 
@@ -1123,6 +1208,9 @@ int main() {
     TestDesktopLaunchArtifactsRejectServiceLaunchTarget();
     TestAutoDesktopLaunchArtifactsInferLauncherAndSplitRoots();
     TestAutoDesktopLaunchArtifactsRejectHeadlessApp();
+    TestWaydroidAppLaunchReportRendering();
+    TestWaydroidDesktopLaunchArtifacts();
+    TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage();
     TestImeProvisioningSuccessPath();
     TestImeProvisioningNormalizesFullyQualifiedImeIdForWaydroidStyleMutation();
     TestImeProvisioningDetectsIncompleteActivation();

@@ -23,10 +23,12 @@ void PrintUsage() {
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl launch-activity <serial> <component>\n"
+      << "  compatctl launch-waydroid-package <package>\n"
       << "  compatctl adb-ime-status <serial> <package> <ime-id> [settings-component]\n"
       << "  compatctl provision-ime <serial> <apk-path> <package> <ime-id> [settings-component]\n"
       << "  compatctl desktopify-apk <serial> <apk-path> <component> [compat-root] [desktop-entry-root] [launcher-root]\n"
       << "  compatctl desktopify-apk-auto <serial> <apk-path> [compat-root] [desktop-entry-root] [launcher-root]\n"
+      << "  compatctl desktopify-waydroid-package <package> [desktop-entry-root] [launcher-root]\n"
       << "  compatctl layout <package> <install-id> <version-code> [compat-root]\n";
 }
 
@@ -143,6 +145,17 @@ int main(int argc, char** argv) {
       return report.launch_ok ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
+    if (command == "launch-waydroid-package") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report = wfa::LaunchWaydroidApp(argv[2]);
+      std::cout << wfa::RenderWaydroidAppLaunchReport(report);
+      return report.launch_ok ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
     if (command == "provision-ime") {
       if (argc != 6 && argc != 7) {
         PrintUsage();
@@ -191,6 +204,23 @@ int main(int argc, char** argv) {
           argv[2], argv[3], compat_root, desktop_root, launcher_root,
           compatctl_path);
       std::cout << wfa::RenderDesktopLaunchArtifactsReport(artifacts);
+      return artifacts.host_launch_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "desktopify-waydroid-package") {
+      if (argc < 3 || argc > 5) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string desktop_root =
+          argc >= 4 ? argv[3] : DefaultDesktopEntryRoot();
+      const std::string launcher_root =
+          argc == 5 ? argv[4]
+                    : (argc >= 4 ? argv[3] : DefaultLauncherRoot());
+      const auto artifacts = wfa::DesktopifyWaydroidPackage(
+          argv[2], desktop_root, launcher_root, compatctl_path);
+      std::cout << wfa::RenderWaydroidDesktopLaunchArtifactsReport(artifacts);
       return artifacts.host_launch_ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 

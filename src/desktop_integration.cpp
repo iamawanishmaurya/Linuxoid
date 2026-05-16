@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -97,6 +98,16 @@ bool DeclaresActivityComponent(const ManifestProfile& profile,
 
 std::string ResolveLauncherRoot(const DesktopLaunchSpec& spec) {
   return spec.launcher_root.empty() ? spec.desktop_root : spec.launcher_root;
+}
+
+std::string ResolveWaydroidLauncherRoot(const WaydroidDesktopLaunchSpec& spec) {
+  return spec.launcher_root.empty() ? spec.desktop_root : spec.launcher_root;
+}
+
+bool IsValidPackageName(const std::string& package_name) {
+  static const std::regex pattern(
+      R"(^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$)");
+  return std::regex_match(package_name, pattern);
 }
 
 void WriteTextFile(const fs::path& path, const std::string& contents) {
@@ -286,6 +297,81 @@ DesktopLaunchArtifacts DesktopifyApkAuto(const std::string& serial,
       report, serial, compatctl_path, desktop_root, launcher_root);
 }
 
+WaydroidDesktopLaunchArtifacts CreateWaydroidDesktopLaunchArtifacts(
+    const WaydroidDesktopLaunchSpec& spec) {
+  if (spec.package_name.empty() || spec.compatctl_path.empty() ||
+      spec.desktop_root.empty()) {
+    throw std::invalid_argument(
+        "waydroid desktop launch spec is missing required fields");
+  }
+  if (!IsValidPackageName(spec.package_name)) {
+    throw std::invalid_argument("package_name must look like a Java package");
+  }
+
+  WaydroidDesktopLaunchArtifacts artifacts;
+  artifacts.app_name = spec.app_name.empty() ? spec.package_name : spec.app_name;
+  artifacts.package_name = spec.package_name;
+  artifacts.compatctl_path = spec.compatctl_path;
+  artifacts.desktop_root = spec.desktop_root;
+  artifacts.launcher_root = ResolveWaydroidLauncherRoot(spec);
+
+  fs::create_directories(artifacts.desktop_root);
+  fs::create_directories(artifacts.launcher_root);
+
+  const std::string safe_name = SanitizeFilenameSegment(spec.package_name);
+  const fs::path script_path =
+      fs::path(artifacts.launcher_root) / (safe_name + ".sh");
+  const fs::path desktop_file_path =
+      fs::path(artifacts.desktop_root) / (safe_name + ".desktop");
+  artifacts.script_path = script_path.string();
+  artifacts.desktop_file_path = desktop_file_path.string();
+
+  std::ostringstream command;
+  command << QuoteForShell(spec.compatctl_path) << ' '
+          << "launch-waydroid-package " << QuoteForShell(spec.package_name);
+  artifacts.command_line = command.str();
+
+  std::ostringstream script;
+  script << "#!/bin/sh\n";
+  script << "exec " << artifacts.command_line << "\n";
+  WriteTextFile(script_path, script.str());
+
+  fs::permissions(script_path,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  std::ostringstream desktop_entry;
+  desktop_entry << "[Desktop Entry]\n";
+  desktop_entry << "Type=Application\n";
+  desktop_entry << "Version=1.0\n";
+  desktop_entry << "Name=" << artifacts.app_name << " (Android)\n";
+  desktop_entry << "Exec=" << QuoteForDesktopExec(artifacts.script_path)
+                << "\n";
+  desktop_entry << "Terminal=false\n";
+  desktop_entry << "StartupNotify=true\n";
+  desktop_entry << "Categories=Utility;\n";
+  WriteTextFile(desktop_file_path, desktop_entry.str());
+
+  artifacts.host_launch_ready = fs::exists(script_path) &&
+                                fs::exists(desktop_file_path) &&
+                                fs::exists(spec.compatctl_path);
+  return artifacts;
+}
+
+WaydroidDesktopLaunchArtifacts DesktopifyWaydroidPackage(
+    const std::string& package_name, const std::string& desktop_root,
+    const std::string& launcher_root, const std::string& compatctl_path) {
+  return CreateWaydroidDesktopLaunchArtifacts(
+      {.app_name = package_name,
+       .package_name = package_name,
+       .compatctl_path = compatctl_path,
+       .desktop_root = desktop_root,
+       .launcher_root = launcher_root});
+}
+
 std::string RenderDesktopLaunchArtifactsReport(
     const DesktopLaunchArtifacts& artifacts) {
   std::ostringstream output;
@@ -306,6 +392,24 @@ std::string RenderDesktopLaunchArtifactsReport(
     output << "Launch Side Effects: may reinstall the APK, enable the IME, and "
               "set it as default before opening the target component.\n";
   }
+  output << "Launcher Script: " << artifacts.script_path << '\n';
+  output << "Launcher Root: " << artifacts.launcher_root << '\n';
+  output << "Desktop Entry: " << artifacts.desktop_file_path << '\n';
+  output << "Desktop Entry Root: " << artifacts.desktop_root << '\n';
+  output << "Host launch ready: "
+         << (artifacts.host_launch_ready ? "yes" : "no") << '\n';
+  return output.str();
+}
+
+std::string RenderWaydroidDesktopLaunchArtifactsReport(
+    const WaydroidDesktopLaunchArtifacts& artifacts) {
+  std::ostringstream output;
+  output << "Desktop Loading: "
+         << (artifacts.host_launch_ready ? "45/100" : "0/100") << '\n';
+  output << "Runtime Backend: waydroid\n";
+  output << "App Name: " << artifacts.app_name << '\n';
+  output << "Package: " << artifacts.package_name << '\n';
+  output << "Launch Mode: launch-waydroid-package\n";
   output << "Launcher Script: " << artifacts.script_path << '\n';
   output << "Launcher Root: " << artifacts.launcher_root << '\n';
   output << "Desktop Entry: " << artifacts.desktop_file_path << '\n';
