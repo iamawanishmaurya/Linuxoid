@@ -104,6 +104,11 @@ std::string ResolveWaydroidLauncherRoot(const WaydroidDesktopLaunchSpec& spec) {
   return spec.launcher_root.empty() ? spec.desktop_root : spec.launcher_root;
 }
 
+std::string ResolveInstalledPackageLauncherRoot(
+    const InstalledPackageDesktopLaunchSpec& spec) {
+  return spec.launcher_root.empty() ? spec.desktop_root : spec.launcher_root;
+}
+
 bool IsValidPackageName(const std::string& package_name) {
   static const std::regex pattern(
       R"(^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$)");
@@ -297,23 +302,36 @@ DesktopLaunchArtifacts DesktopifyApkAuto(const std::string& serial,
       report, serial, compatctl_path, desktop_root, launcher_root);
 }
 
-WaydroidDesktopLaunchArtifacts CreateWaydroidDesktopLaunchArtifacts(
-    const WaydroidDesktopLaunchSpec& spec) {
+InstalledPackageDesktopLaunchArtifacts CreateInstalledPackageDesktopLaunchArtifacts(
+    const InstalledPackageDesktopLaunchSpec& spec) {
   if (spec.package_name.empty() || spec.compatctl_path.empty() ||
       spec.desktop_root.empty()) {
     throw std::invalid_argument(
-        "waydroid desktop launch spec is missing required fields");
+        "installed package desktop launch spec is missing required fields");
   }
   if (!IsValidPackageName(spec.package_name)) {
     throw std::invalid_argument("package_name must look like a Java package");
   }
+  if (spec.backend == RuntimeBackendKind::kAttachedAdb) {
+    if (spec.serial.empty()) {
+      throw std::invalid_argument(
+          "attached-adb backend requires a target serial for desktop launch");
+    }
+    if (spec.component.empty()) {
+      throw std::invalid_argument(
+          "attached-adb backend requires a launcher component for desktop launch");
+    }
+  }
 
-  WaydroidDesktopLaunchArtifacts artifacts;
+  InstalledPackageDesktopLaunchArtifacts artifacts;
+  artifacts.backend_name = RenderRuntimeBackendName(spec.backend);
   artifacts.app_name = spec.app_name.empty() ? spec.package_name : spec.app_name;
+  artifacts.serial = spec.serial;
   artifacts.package_name = spec.package_name;
+  artifacts.component = spec.component;
   artifacts.compatctl_path = spec.compatctl_path;
   artifacts.desktop_root = spec.desktop_root;
-  artifacts.launcher_root = ResolveWaydroidLauncherRoot(spec);
+  artifacts.launcher_root = ResolveInstalledPackageLauncherRoot(spec);
 
   fs::create_directories(artifacts.desktop_root);
   fs::create_directories(artifacts.launcher_root);
@@ -328,7 +346,15 @@ WaydroidDesktopLaunchArtifacts CreateWaydroidDesktopLaunchArtifacts(
 
   std::ostringstream command;
   command << QuoteForShell(spec.compatctl_path) << ' '
-          << "launch-waydroid-package " << QuoteForShell(spec.package_name);
+          << "launch-package "
+          << QuoteForShell(artifacts.backend_name) << ' '
+          << QuoteForShell(spec.package_name);
+  if (!spec.serial.empty()) {
+    command << ' ' << QuoteForShell(spec.serial);
+  }
+  if (!spec.component.empty()) {
+    command << ' ' << QuoteForShell(spec.component);
+  }
   artifacts.command_line = command.str();
 
   std::ostringstream script;
@@ -358,6 +384,45 @@ WaydroidDesktopLaunchArtifacts CreateWaydroidDesktopLaunchArtifacts(
   artifacts.host_launch_ready = fs::exists(script_path) &&
                                 fs::exists(desktop_file_path) &&
                                 fs::exists(spec.compatctl_path);
+  return artifacts;
+}
+
+InstalledPackageDesktopLaunchArtifacts DesktopifyInstalledPackage(
+    RuntimeBackendKind backend, const std::string& package_name,
+    const std::string& desktop_root, const std::string& launcher_root,
+    const std::string& compatctl_path, const std::string& serial,
+    const std::string& component) {
+  return CreateInstalledPackageDesktopLaunchArtifacts(
+      {.backend = backend,
+       .app_name = package_name,
+       .serial = serial,
+       .package_name = package_name,
+       .component = component,
+       .compatctl_path = compatctl_path,
+       .desktop_root = desktop_root,
+       .launcher_root = launcher_root});
+}
+
+WaydroidDesktopLaunchArtifacts CreateWaydroidDesktopLaunchArtifacts(
+    const WaydroidDesktopLaunchSpec& spec) {
+  const auto generic = CreateInstalledPackageDesktopLaunchArtifacts(
+      {.backend = RuntimeBackendKind::kWaydroid,
+       .app_name = spec.app_name,
+       .package_name = spec.package_name,
+       .compatctl_path = spec.compatctl_path,
+       .desktop_root = spec.desktop_root,
+       .launcher_root = ResolveWaydroidLauncherRoot(spec)});
+
+  WaydroidDesktopLaunchArtifacts artifacts;
+  artifacts.app_name = generic.app_name;
+  artifacts.package_name = generic.package_name;
+  artifacts.compatctl_path = generic.compatctl_path;
+  artifacts.desktop_root = generic.desktop_root;
+  artifacts.launcher_root = generic.launcher_root;
+  artifacts.script_path = generic.script_path;
+  artifacts.desktop_file_path = generic.desktop_file_path;
+  artifacts.command_line = generic.command_line;
+  artifacts.host_launch_ready = generic.host_launch_ready;
   return artifacts;
 }
 
@@ -401,6 +466,26 @@ std::string RenderDesktopLaunchArtifactsReport(
   return output.str();
 }
 
+std::string RenderInstalledPackageDesktopLaunchArtifactsReport(
+    const InstalledPackageDesktopLaunchArtifacts& artifacts) {
+  std::ostringstream output;
+  output << "Desktop Loading: "
+         << (artifacts.host_launch_ready ? "45/100" : "0/100") << '\n';
+  output << "Runtime Backend: " << artifacts.backend_name << '\n';
+  output << "App Name: " << artifacts.app_name << '\n';
+  output << "Package: " << artifacts.package_name << '\n';
+  output << "ADB Serial: " << artifacts.serial << '\n';
+  output << "Component: " << artifacts.component << '\n';
+  output << "Launch Mode: launch-package\n";
+  output << "Launcher Script: " << artifacts.script_path << '\n';
+  output << "Launcher Root: " << artifacts.launcher_root << '\n';
+  output << "Desktop Entry: " << artifacts.desktop_file_path << '\n';
+  output << "Desktop Entry Root: " << artifacts.desktop_root << '\n';
+  output << "Host launch ready: "
+         << (artifacts.host_launch_ready ? "yes" : "no") << '\n';
+  return output.str();
+}
+
 std::string RenderWaydroidDesktopLaunchArtifactsReport(
     const WaydroidDesktopLaunchArtifacts& artifacts) {
   std::ostringstream output;
@@ -409,7 +494,7 @@ std::string RenderWaydroidDesktopLaunchArtifactsReport(
   output << "Runtime Backend: waydroid\n";
   output << "App Name: " << artifacts.app_name << '\n';
   output << "Package: " << artifacts.package_name << '\n';
-  output << "Launch Mode: launch-waydroid-package\n";
+  output << "Launch Mode: launch-package\n";
   output << "Launcher Script: " << artifacts.script_path << '\n';
   output << "Launcher Root: " << artifacts.launcher_root << '\n';
   output << "Desktop Entry: " << artifacts.desktop_file_path << '\n';

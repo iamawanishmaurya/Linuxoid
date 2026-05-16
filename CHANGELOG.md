@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.14 - 2026-05-16
+
+- Add a backend-neutral `launch-package` runtime seam for installed-package launches, with `waydroid`, `attached-adb`, and `native` backend routing.
+- Shift installed-package host launch artifacts to the generic `launch-package` contract while keeping the current Waydroid-facing commands as compatibility aliases.
+- Add generic installed-package contract tests and raise verified phase loading to `91/100` while checkpoint gates remain `70/100`.
+
 ## v0.1.13 - 2026-05-16
 
 - Fix automatic launcher inference so Linuxoid skips disabled manifest launcher candidates when generating Linux launchers from local APKs.

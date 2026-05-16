@@ -26,6 +26,7 @@ void PrintUsage() {
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl launch-activity <serial> <component>\n"
+      << "  compatctl launch-package <backend> <package> [serial] [component]\n"
       << "  compatctl verify-apk-host-launch-auto <serial> <apk-path> [compat-root] [desktop-entry-root] [launcher-root]\n"
       << "  compatctl launch-waydroid-package <package>\n"
       << "  compatctl verify-waydroid-package <package> [desktop-entry-root] [launcher-root]\n"
@@ -155,14 +156,33 @@ int main(int argc, char** argv) {
       return report.launch_ok ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
+    if (command == "launch-package") {
+      if (argc < 4 || argc > 6) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string serial = argc >= 5 ? argv[4] : "";
+      const std::string component = argc == 6 ? argv[5] : "";
+      const auto report = wfa::LaunchInstalledApp(
+          {.backend = wfa::ParseRuntimeBackendKind(argv[2]),
+           .serial = serial,
+           .package_name = argv[3],
+           .component = component});
+      std::cout << wfa::RenderInstalledAppLaunchReport(report);
+      return report.launch_ok ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
     if (command == "launch-waydroid-package") {
       if (argc != 3) {
         PrintUsage();
         return EXIT_FAILURE;
       }
 
-      const auto report = wfa::LaunchWaydroidApp(argv[2]);
-      std::cout << wfa::RenderWaydroidAppLaunchReport(report);
+      const auto report = wfa::LaunchInstalledApp(
+          {.backend = wfa::RuntimeBackendKind::kWaydroid,
+           .package_name = argv[2]});
+      std::cout << wfa::RenderInstalledAppLaunchReport(report);
       return report.launch_ok ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 

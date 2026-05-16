@@ -2,6 +2,7 @@
 #define WFA_DESKTOP_INTEGRATION_HPP
 
 #include "wfa/apk_loader.hpp"
+#include "wfa/runtime_bridge.hpp"
 
 #include <string>
 
@@ -57,6 +58,32 @@ struct WaydroidDesktopLaunchArtifacts {
   bool host_launch_ready = false;
 };
 
+struct InstalledPackageDesktopLaunchSpec {
+  RuntimeBackendKind backend = RuntimeBackendKind::kWaydroid;
+  std::string app_name;
+  std::string serial;
+  std::string package_name;
+  std::string component;
+  std::string compatctl_path;
+  std::string desktop_root;
+  std::string launcher_root;
+};
+
+struct InstalledPackageDesktopLaunchArtifacts {
+  std::string backend_name;
+  std::string app_name;
+  std::string serial;
+  std::string package_name;
+  std::string component;
+  std::string compatctl_path;
+  std::string desktop_root;
+  std::string launcher_root;
+  std::string script_path;
+  std::string desktop_file_path;
+  std::string command_line;
+  bool host_launch_ready = false;
+};
+
 std::string NormalizeAndroidComponent(const std::string& package_name,
                                       const std::string& component);
 std::string SelectLauncherActivityComponent(const ManifestProfile& profile);
@@ -83,6 +110,14 @@ DesktopLaunchArtifacts DesktopifyApkAuto(const std::string& serial,
                                          const std::string& desktop_root,
                                          const std::string& launcher_root,
                                          const std::string& compatctl_path);
+InstalledPackageDesktopLaunchArtifacts
+CreateInstalledPackageDesktopLaunchArtifacts(
+    const InstalledPackageDesktopLaunchSpec& spec);
+InstalledPackageDesktopLaunchArtifacts DesktopifyInstalledPackage(
+    RuntimeBackendKind backend, const std::string& package_name,
+    const std::string& desktop_root, const std::string& launcher_root,
+    const std::string& compatctl_path, const std::string& serial = "",
+    const std::string& component = "");
 WaydroidDesktopLaunchArtifacts CreateWaydroidDesktopLaunchArtifacts(
     const WaydroidDesktopLaunchSpec& spec);
 WaydroidDesktopLaunchArtifacts DesktopifyWaydroidPackage(
@@ -90,6 +125,8 @@ WaydroidDesktopLaunchArtifacts DesktopifyWaydroidPackage(
     const std::string& launcher_root, const std::string& compatctl_path);
 std::string RenderDesktopLaunchArtifactsReport(
     const DesktopLaunchArtifacts& artifacts);
+std::string RenderInstalledPackageDesktopLaunchArtifactsReport(
+    const InstalledPackageDesktopLaunchArtifacts& artifacts);
 std::string RenderWaydroidDesktopLaunchArtifactsReport(
     const WaydroidDesktopLaunchArtifacts& artifacts);
 

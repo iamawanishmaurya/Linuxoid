@@ -14,6 +14,31 @@
 
 namespace wfa {
 
+RuntimeBackendKind ParseRuntimeBackendKind(const std::string& backend_name) {
+  if (backend_name == "waydroid") {
+    return RuntimeBackendKind::kWaydroid;
+  }
+  if (backend_name == "attached-adb") {
+    return RuntimeBackendKind::kAttachedAdb;
+  }
+  if (backend_name == "native") {
+    return RuntimeBackendKind::kNative;
+  }
+  throw std::invalid_argument("unsupported runtime backend: " + backend_name);
+}
+
+std::string RenderRuntimeBackendName(RuntimeBackendKind backend) {
+  switch (backend) {
+    case RuntimeBackendKind::kWaydroid:
+      return "waydroid";
+    case RuntimeBackendKind::kAttachedAdb:
+      return "attached-adb";
+    case RuntimeBackendKind::kNative:
+      return "native";
+  }
+  throw std::invalid_argument("unsupported runtime backend enum");
+}
+
 namespace {
 
 struct StatusQueryAttempt {
@@ -333,6 +358,18 @@ std::string RenderAdbActivityLaunchReport(
   return output.str();
 }
 
+std::string RenderInstalledAppLaunchReport(
+    const InstalledAppLaunchReport& report) {
+  std::ostringstream output;
+  output << "Runtime Backend: " << report.backend_name << '\n';
+  output << "Package: " << report.package_name << '\n';
+  output << "ADB Serial: " << report.serial << '\n';
+  output << "Component: " << report.component << '\n';
+  output << "Launch OK: " << (report.launch_ok ? "yes" : "no") << '\n';
+  output << "Launch Output:\n" << report.output;
+  return output.str();
+}
+
 std::string RenderWaydroidAppLaunchReport(
     const WaydroidAppLaunchReport& report) {
   std::ostringstream output;
@@ -365,19 +402,65 @@ AdbActivityLaunchReport LaunchAdbActivity(const std::string& serial,
   return LaunchAdbActivityWithRunner(serial, component, MakeShellRunner());
 }
 
-WaydroidAppLaunchReport LaunchWaydroidAppWithRunner(
-    const std::string& package_name, const CommandRunner& runner) {
-  if (!IsValidPackageName(package_name)) {
+InstalledAppLaunchReport LaunchInstalledAppWithRunner(
+    const InstalledAppLaunchSpec& spec, const CommandRunner& runner) {
+  if (!IsValidPackageName(spec.package_name)) {
     throw std::invalid_argument("package_name must look like a Java package");
   }
 
-  const auto result =
-      runner("waydroid app launch " + package_name);
+  InstalledAppLaunchReport report;
+  report.backend_name = RenderRuntimeBackendName(spec.backend);
+  report.serial = spec.serial;
+  report.package_name = spec.package_name;
+  report.component = spec.component;
 
+  switch (spec.backend) {
+    case RuntimeBackendKind::kWaydroid: {
+      const auto result = runner("waydroid app launch " + spec.package_name);
+      report.launch_ok = result.exit_code == 0;
+      report.output = result.output;
+      return report;
+    }
+
+    case RuntimeBackendKind::kAttachedAdb: {
+      if (spec.serial.empty()) {
+        throw std::invalid_argument(
+            "attached-adb backend requires a target serial");
+      }
+      if (spec.component.empty()) {
+        throw std::invalid_argument(
+            "attached-adb backend requires an explicit launcher component");
+      }
+
+      const auto activity_report =
+          LaunchAdbActivityWithRunner(spec.serial, spec.component, runner);
+      report.launch_ok = activity_report.launch_ok;
+      report.output = activity_report.output;
+      return report;
+    }
+
+    case RuntimeBackendKind::kNative:
+      report.output = "native backend is not implemented yet\n";
+      report.launch_ok = false;
+      return report;
+  }
+
+  throw std::invalid_argument("unsupported runtime backend enum");
+}
+
+InstalledAppLaunchReport LaunchInstalledApp(const InstalledAppLaunchSpec& spec) {
+  return LaunchInstalledAppWithRunner(spec, MakeShellRunner());
+}
+
+WaydroidAppLaunchReport LaunchWaydroidAppWithRunner(
+    const std::string& package_name, const CommandRunner& runner) {
+  const auto generic = LaunchInstalledAppWithRunner(
+      {.backend = RuntimeBackendKind::kWaydroid, .package_name = package_name},
+      runner);
   WaydroidAppLaunchReport report;
-  report.package_name = package_name;
-  report.launch_ok = result.exit_code == 0;
-  report.output = result.output;
+  report.package_name = generic.package_name;
+  report.launch_ok = generic.launch_ok;
+  report.output = generic.output;
   return report;
 }
 

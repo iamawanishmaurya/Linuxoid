@@ -13,12 +13,12 @@ std::vector<PhaseStatus> BuildDefaultPhases() {
        "CMake, CLI entrypoint, and local test target exist."},
       {"P3", "Package and storage contract", 100,
        "APK layout and host storage mapping are encoded in code."},
-      {"P4", "Runtime and service contract", 80,
-       "The project can load an APK into a compat root, install it on a live target, and provision its IME service."},
-      {"P5", "Graphics and host integration", 74,
-       "Linux launcher artifacts now support automatic launcher inference, split host install roots, and verified host-side execution for both local-APK and installed-package Linuxoid launches on Waydroid."},
+      {"P4", "Runtime and service contract", 84,
+       "The project can load an APK into a compat root, install it on a live target, provision its IME service, and route installed-package launch through a backend-neutral contract."},
+      {"P5", "Graphics and host integration", 78,
+       "Linux launcher artifacts now target a backend-neutral installed-package launch seam while preserving the verified APK-backed path and the current Waydroid adapter."},
       {"P6", "APK execution and validation", 86,
-       "A live Linux host launcher now proves the local keyboard and F-Droid APK flows plus Calculator, Settings, and installed-package F-Droid launch flows on Waydroid, including Ready-for-typing verification for the IME case."},
+       "A live Linux host launcher now proves the local keyboard and F-Droid APK flows plus Calculator, Settings, and installed-package F-Droid launch flows on Waydroid, including Ready-for-typing verification for the IME case, while the core installed-package launch path is no longer Waydroid-only."},
   };
 }
 
@@ -65,7 +65,7 @@ std::string RenderProjectStatusReport() {
   std::ostringstream output;
   output << "Project: Linuxoid\n";
   output << "Language: C++\n";
-  output << "Runtime Strategy: container-first Android userspace integration\n";
+  output << "Runtime Strategy: backend-neutral attached Android targets on the path to a native Linux compatibility layer\n";
   output << "Phase Loading: " << RenderLoadingBar(phase_progress) << "\n";
 
   for (const auto& phase : phases) {
@@ -102,8 +102,8 @@ std::string DescribeMvpFoundation() {
   output << "Project: Linuxoid\n";
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
-  output << "Runtime Direction: container-first Android userspace integration\n";
-  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, and Linux desktop launch artifacts with repeatable per-app, matrix, and APK-backed Waydroid verification\n";
+  output << "Runtime Direction: backend-neutral attached Android targets on the path to a native Linux compatibility layer\n";
+  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, a backend-neutral installed-package launch seam, and Linux desktop launch artifacts with repeatable per-app, matrix, and APK-backed Waydroid verification\n";
   output << "Golden App Proof: the FUTO keyboard APK now returns Ready for typing: yes through both a Linuxoid-generated launcher and the local-APK verifier on live Waydroid, while F-Droid now verifies through both the local-APK and installed-package Linux launch paths alongside Calculator and Settings.\n";
   output << "Why: this keeps the first executable slice aligned with the future core.\n";
   return output.str();

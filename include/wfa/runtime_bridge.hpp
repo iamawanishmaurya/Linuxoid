@@ -6,6 +6,12 @@
 
 namespace wfa {
 
+enum class RuntimeBackendKind {
+  kWaydroid,
+  kAttachedAdb,
+  kNative,
+};
+
 struct CommandResult {
   int exit_code = 0;
   std::string output;
@@ -60,6 +66,24 @@ struct WaydroidAppLaunchReport {
   std::string output;
 };
 
+struct InstalledAppLaunchSpec {
+  RuntimeBackendKind backend = RuntimeBackendKind::kWaydroid;
+  std::string serial;
+  std::string package_name;
+  std::string component;
+};
+
+struct InstalledAppLaunchReport {
+  std::string backend_name;
+  std::string serial;
+  std::string package_name;
+  std::string component;
+  bool launch_ok = false;
+  std::string output;
+};
+
+RuntimeBackendKind ParseRuntimeBackendKind(const std::string& backend_name);
+std::string RenderRuntimeBackendName(RuntimeBackendKind backend);
 bool OutputContainsInstalledPackage(const std::string& output,
                                     const std::string& package_name);
 bool OutputContainsImeId(const std::string& output, const std::string& ime_id);
@@ -73,6 +97,8 @@ bool LaunchOutputConfirmsComponent(const std::string& output,
                                    const std::string& component);
 std::string RenderAdbActivityLaunchReport(
     const AdbActivityLaunchReport& report);
+std::string RenderInstalledAppLaunchReport(
+    const InstalledAppLaunchReport& report);
 std::string RenderWaydroidAppLaunchReport(
     const WaydroidAppLaunchReport& report);
 std::string RenderAdbImeStatusReport(const AdbImeStatus& status);
@@ -82,6 +108,9 @@ AdbActivityLaunchReport LaunchAdbActivityWithRunner(
     const CommandRunner& runner);
 AdbActivityLaunchReport LaunchAdbActivity(const std::string& serial,
                                           const std::string& component);
+InstalledAppLaunchReport LaunchInstalledAppWithRunner(
+    const InstalledAppLaunchSpec& spec, const CommandRunner& runner);
+InstalledAppLaunchReport LaunchInstalledApp(const InstalledAppLaunchSpec& spec);
 WaydroidAppLaunchReport LaunchWaydroidAppWithRunner(
     const std::string& package_name, const CommandRunner& runner);
 WaydroidAppLaunchReport LaunchWaydroidApp(const std::string& package_name);

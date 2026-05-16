@@ -38,8 +38,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 90,
-         "expected average phase progress to equal 90");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 91,
+         "expected average phase progress to equal 91");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -86,7 +86,7 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("90/100") != std::string::npos,
+  Expect(report.find("91/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
@@ -895,6 +895,54 @@ void TestWaydroidAppLaunchReportRendering() {
          "expected launch success in waydroid launch report");
 }
 
+void TestInstalledAppLaunchReportRendering() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "waydroid app launch com.android.calculator2") {
+      return {0, ""};
+    }
+    throw std::runtime_error("unexpected command in installed app launch test");
+  };
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kWaydroid,
+       .package_name = "com.android.calculator2"},
+      runner);
+  Expect(report.launch_ok, "expected generic installed app launch success");
+
+  const auto rendered = wfa::RenderInstalledAppLaunchReport(report);
+  Expect(rendered.find("Runtime Backend: waydroid") != std::string::npos,
+         "expected backend name in installed app launch report");
+  Expect(rendered.find("Package: com.android.calculator2") !=
+             std::string::npos,
+         "expected package in installed app launch report");
+}
+
+void TestAttachedAdbInstalledAppLaunchUsesExplicitComponent() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "adb -s 'device-01' shell am start -W -n "
+                   "'com.example.demo/.MainActivity'") {
+      return {0,
+              "Status: ok\n"
+              "Activity: com.example.demo/.MainActivity\n"
+              "cmp=com.example.demo/.MainActivity\n"
+              "Complete\n"};
+    }
+    throw std::runtime_error(
+        "unexpected command in attached-adb installed app launch test");
+  };
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+       .serial = "device-01",
+       .package_name = "com.example.demo",
+       .component = "com.example.demo/.MainActivity"},
+      runner);
+
+  Expect(report.launch_ok, "expected attached-adb launch success");
+  Expect(report.backend_name == "attached-adb",
+         "expected attached-adb backend name");
+}
+
 void TestWaydroidDesktopLaunchArtifacts() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "linuxoid-waydroid-launch";
@@ -926,8 +974,10 @@ void TestWaydroidDesktopLaunchArtifacts() {
   std::ifstream script_input(artifacts.script_path);
   std::string script((std::istreambuf_iterator<char>(script_input)),
                      std::istreambuf_iterator<char>());
-  Expect(script.find("launch-waydroid-package") != std::string::npos,
-         "expected script to use waydroid launch command");
+  Expect(script.find("launch-package") != std::string::npos,
+         "expected script to use generic launch command");
+  Expect(script.find("waydroid") != std::string::npos,
+         "expected script to keep waydroid backend identity");
   Expect(script.find("com.android.calculator2") != std::string::npos,
          "expected script to include package name");
 
@@ -942,6 +992,38 @@ void TestWaydroidDesktopLaunchArtifacts() {
          "expected waydroid desktop entry exec path");
 
   fs::remove_all(root);
+}
+
+void TestInstalledPackageDesktopLaunchArtifactsRequireAttachedAdbFields() {
+  bool missing_serial = false;
+  try {
+    (void)wfa::CreateInstalledPackageDesktopLaunchArtifacts(
+        {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+         .app_name = "Demo",
+         .package_name = "com.example.demo",
+         .component = "com.example.demo/.MainActivity",
+         .compatctl_path = "/tmp/compatctl",
+         .desktop_root = "/tmp/linuxoid-installed-desktop"});
+  } catch (const std::invalid_argument&) {
+    missing_serial = true;
+  }
+  Expect(missing_serial,
+         "expected attached-adb desktop launch without serial to throw");
+
+  bool missing_component = false;
+  try {
+    (void)wfa::CreateInstalledPackageDesktopLaunchArtifacts(
+        {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+         .app_name = "Demo",
+         .serial = "device-01",
+         .package_name = "com.example.demo",
+         .compatctl_path = "/tmp/compatctl",
+         .desktop_root = "/tmp/linuxoid-installed-desktop"});
+  } catch (const std::invalid_argument&) {
+    missing_component = true;
+  }
+  Expect(missing_component,
+         "expected attached-adb desktop launch without component to throw");
 }
 
 void TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage() {
@@ -1564,7 +1646,10 @@ int main() {
     TestAutoDesktopLaunchArtifactsInferLauncherAndSplitRoots();
     TestAutoDesktopLaunchArtifactsRejectHeadlessApp();
     TestWaydroidAppLaunchReportRendering();
+    TestInstalledAppLaunchReportRendering();
+    TestAttachedAdbInstalledAppLaunchUsesExplicitComponent();
     TestWaydroidDesktopLaunchArtifacts();
+    TestInstalledPackageDesktopLaunchArtifactsRequireAttachedAdbFields();
     TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage();
     TestWaydroidPackageVerificationSuccessPath();
     TestWaydroidPackageMatrixSuccessPath();

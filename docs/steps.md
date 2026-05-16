@@ -459,3 +459,53 @@
   Action: Staged the APK-backed host verifier slice, committed it as `feat: add apk-backed host launch verifier`, tagged `v0.1.12`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
   Result: Linuxoid now publishes a verified local-APK Linux launch verifier on GitHub as `v0.1.12`.
   Timestamp: 2026-05-16T12:52:46+05:30
+
+- Step: Native-runtime goal baseline
+  Action: Re-checked Git status, current version metadata, README architecture, and the live `compatctl status` output before starting the Waydroid-removal effort.
+  Result: Confirmed a clean `main` branch at `v0.1.13`, with the current Linuxoid architecture still explicitly Waydroid-backed at `90/100` phase loading and `70/100` checkpoint progress.
+  Timestamp: 2026-05-16T14:07:42+05:30
+
+- Step: Waydroid-coupling audit
+  Action: Searched the README, CLI, runtime bridge, desktop integration, and tests for every current Waydroid-specific command path and architecture claim.
+  Result: Confirmed that APK loading and ADB-driven launch logic are already partly generic, while installed-package launch, matrix verification, and the published architecture remain directly coupled to the Waydroid backend.
+  Timestamp: 2026-05-16T14:07:42+05:30
+
+- Step: First native-runtime agent dispatch attempt
+  Action: Tried to spawn the planning, research, verification, and testing agents as full-history forks while also pinning their agent roles.
+  Result: The platform rejected the requests because forked agents cannot override `agent_type`, `model`, or `reasoning_effort`; the exact error was logged in `docs/problems/2026-05-16-forked-agent-type-conflict.md`.
+  Timestamp: 2026-05-16T14:09:23+05:30
+
+- Step: Second native-runtime agent dispatch attempt
+  Action: Re-dispatched the agent wave with self-contained prompts and no full-history forks.
+  Result: Three agents started successfully, but the remaining two spawn requests hit the active thread limit; the repeat failure was logged in `docs/problems/2026-05-16-agent-thread-limit-reached-native-runtime-wave.md`.
+  Timestamp: 2026-05-16T14:10:45+05:30
+
+- Step: Testing-role spawn failure
+  Action: Closed completed agent slots and then attempted to backfill the missing testing role with a `test-automator` subagent.
+  Result: The testing agent failed to initialize because its pinned model is unsupported on this account; the exact platform error was logged in `docs/problems/2026-05-16-unsupported-testing-subagent-model-native-runtime-wave.md`.
+  Timestamp: 2026-05-16T14:17:31+05:30
+
+- Step: First backend-abstraction verification run
+  Action: Built the new installed-package backend seam and ran the full `ctest --test-dir build --output-on-failure` suite against the added attached-ADB contract test.
+  Result: The build succeeded, but the test suite failed because the new attached-ADB fixture did not satisfy the shared launch-output success contract; the full failure was logged in `docs/problems/2026-05-16-attached-adb-launch-contract-test-fixture-failure.md`.
+  Timestamp: 2026-05-16T14:32:01+05:30
+
+- Step: Status refresh verification run
+  Action: Rebuilt Linuxoid after updating the status model, README, and version metadata for the backend-neutral installed-package seam, then reran the full test suite.
+  Result: The test suite failed because one phase-progress expectation still assumed the old `90/100` average instead of the new rounded `91/100`; the full failure was logged in `docs/problems/2026-05-16-outdated-phase-progress-expectation-after-backend-status-refresh.md`.
+  Timestamp: 2026-05-16T14:39:29+05:30
+
+- Step: Native-runtime agent wave recovery
+  Action: Recovered the planning/research/verification/testing wave by removing the invalid full-history role overrides, reusing `Noether`, closing completed agent slots, switching the blocked testing role to a supported QA role, and documenting each recovery.
+  Result: Linuxoid completed the requested multi-agent planning wave with one planner, one researcher, two verifiers, and one testing-quality memo, while the recovery patterns were captured in `docs/solutions/`.
+  Timestamp: 2026-05-16T14:42:24+05:30
+
+- Step: Backend-neutral installed-package seam
+  Action: Added the generic `launch-package` runtime seam, switched installed-package launcher artifacts to the generic contract, preserved the current Waydroid-facing behavior as compatibility aliases, and expanded the contract tests for the new installed-package backend boundary.
+  Result: Linuxoid now routes installed-package launches through a backend-neutral core contract that supports `waydroid`, `attached-adb`, and a clear `native` stub path while keeping the APK/IME flow untouched.
+  Timestamp: 2026-05-16T14:42:24+05:30
+
+- Step: Backend-neutral verification rerun
+  Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, and smoke-checked `compatctl status`, `compatctl foundation`, and `compatctl launch-package native com.example.demo`.
+  Result: The build and tests passed, the binary now reports `91/100` phase loading with `70/100` checkpoint gates, and the new generic launch path returns an honest `native backend is not implemented yet` report instead of pretending native execution works.
+  Timestamp: 2026-05-16T14:42:24+05:30
