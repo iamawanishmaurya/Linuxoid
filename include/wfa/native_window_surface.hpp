@@ -23,6 +23,7 @@ struct NativeWindowSurfaceState {
   std::string session_root;
   std::string marker_path;
   NativeWindowMetadata metadata;
+  std::size_t geometry_updates = 0;
   bool host_surface_created = false;
   bool egl_display_ready = false;
   bool egl_surface_ready = false;
@@ -55,10 +56,29 @@ struct NativeWindowCallbackFixtureReport {
   std::string exit_reason;
 };
 
+struct NativeWindowBridgeFixtureReport {
+  bool native_window_bridge_ready = false;
+  int width = 0;
+  int height = 0;
+  int format = kNativeWindowFormatRgba8888;
+  int stride = 0;
+  std::size_t geometry_updates = 0;
+  std::string artifact_root;
+  std::string metadata_path;
+  std::string event_log_path;
+  std::string backing_mode;
+  bool wayland_surface_created = false;
+  bool egl_pbuffer_created = false;
+  std::string exit_reason;
+};
+
 ANativeWindow* CreateHeadlessNativeWindowSurface(
     const NativeWindowMetadata& metadata, const std::string& session_root);
 NativeWindowMetadata InspectNativeWindow(const ANativeWindow* window);
 bool NativeWindowLifecycleReady(const ANativeWindow* window);
+bool UpdateNativeWindowBufferGeometry(ANativeWindow* window,
+                                      const NativeWindowMetadata& metadata);
+std::size_t GetNativeWindowGeometryUpdateCount(const ANativeWindow* window);
 void DestroyHeadlessNativeWindowSurface(ANativeWindow* window);
 void DispatchNativeWindowCreated(ANativeActivity* activity,
                                  ANativeWindow* window);
@@ -75,6 +95,10 @@ NativeWindowCallbackFixtureReport RunHeadlessNativeWindowCallbackFixture(
     const std::string& session_root, const NativeWindowMetadata& metadata);
 std::string RenderNativeWindowCallbackFixtureJson(
     const NativeWindowCallbackFixtureReport& report);
+NativeWindowBridgeFixtureReport RunNativeWindowBridgeFixture(
+    const std::string& session_root, const NativeWindowMetadata& metadata);
+std::string RenderNativeWindowBridgeFixtureJson(
+    const NativeWindowBridgeFixtureReport& report);
 
 }  // namespace wfa
 

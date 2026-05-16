@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.35 - 2026-05-17
+
+- Add a minimal `ANativeWindow` bridge contract over the existing headless, Wayland, and EGL fixture seams so Linuxoid now exposes width, height, format, stride, deterministic buffer-geometry updates, and stable bridge artifacts without pretending full Android rendering is complete.
+- Add the new `native-window-bridge-fixture` command plus tests that verify deterministic geometry updates, stable metadata/event paths, and honest headless-fallback versus probe-only reporting depending on Wayland/EGL backing availability.
+- Refresh the Mermaid architecture, phased plan, verify examples, and status output so Linuxoid now reports the `ANativeWindow` bridge contract honestly while still marking Wayland-EGL binding, real Android drawing, DEX/ART, Binder, input, and full resources as pending.
+
 ## v0.1.34 - 2026-05-17
 
 - Add an optional real EGL smoke fixture so Linuxoid can initialize an EGL display, choose a config, create an OpenGL ES context plus pbuffer surface, and write a deterministic `egl-metadata.json` artifact under the requested root.

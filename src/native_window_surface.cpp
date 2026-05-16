@@ -1,5 +1,8 @@
 #include "wfa/native_window_surface.hpp"
 
+#include "wfa/egl_smoke_fixture.hpp"
+#include "wfa/wayland_surface_fixture.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -19,6 +22,11 @@ struct ANativeWindowStub {
 struct CallbackJournalState {
   std::string journal_path;
   std::vector<NativeWindowCallbackEvent>* events = nullptr;
+};
+
+struct NativeWindowBridgeEvent {
+  std::string event_name;
+  NativeWindowMetadata metadata;
 };
 
 namespace {
@@ -90,6 +98,27 @@ void WriteCallbackJournal(
     output << RenderCallbackEventJson(event) << "\n";
   }
   WriteTextFile(journal_path, output.str());
+}
+
+std::string RenderBridgeEventJson(const NativeWindowBridgeEvent& event) {
+  std::ostringstream output;
+  output << "{"
+         << "\"event_name\": \"" << EscapeJson(event.event_name) << "\", "
+         << "\"width\": " << event.metadata.width << ", "
+         << "\"height\": " << event.metadata.height << ", "
+         << "\"format\": " << event.metadata.format << ", "
+         << "\"stride\": " << event.metadata.stride
+         << "}";
+  return output.str();
+}
+
+void WriteBridgeEventLog(const std::string& event_log_path,
+                         const std::vector<NativeWindowBridgeEvent>& events) {
+  std::ostringstream output;
+  for (const auto& event : events) {
+    output << RenderBridgeEventJson(event) << "\n";
+  }
+  WriteTextFile(event_log_path, output.str());
 }
 
 ANativeWindowStub* AsStub(ANativeWindow* window) {
@@ -178,6 +207,34 @@ bool NativeWindowLifecycleReady(const ANativeWindow* window) {
          AsStub(window)->state.host_surface_created &&
          AsStub(window)->state.egl_display_ready &&
          AsStub(window)->state.egl_surface_ready;
+}
+
+bool UpdateNativeWindowBufferGeometry(ANativeWindow* window,
+                                      const NativeWindowMetadata& metadata) {
+  if (window == nullptr) {
+    return false;
+  }
+
+  auto* stub = AsStub(window);
+  if (!MetadataIsValid(metadata)) {
+    stub->state.failure_reason = "invalid_surface_metadata";
+    return false;
+  }
+
+  stub->state.metadata = metadata;
+  stub->state.geometry_updates += 1;
+  stub->state.failure_reason.clear();
+  stub->pixels.assign(static_cast<std::size_t>(metadata.width) *
+                          static_cast<std::size_t>(metadata.height),
+                      0u);
+  return true;
+}
+
+std::size_t GetNativeWindowGeometryUpdateCount(const ANativeWindow* window) {
+  if (window == nullptr) {
+    return 0;
+  }
+  return AsStub(window)->state.geometry_updates;
 }
 
 void DestroyHeadlessNativeWindowSurface(ANativeWindow* window) {
@@ -376,6 +433,105 @@ std::string RenderNativeWindowCallbackFixtureJson(
     output << RenderCallbackEventJson(report.events[index]);
   }
   output << "]\n"
+         << "}\n";
+  return output.str();
+}
+
+NativeWindowBridgeFixtureReport RunNativeWindowBridgeFixture(
+    const std::string& session_root, const NativeWindowMetadata& metadata) {
+  NativeWindowBridgeFixtureReport report;
+  report.artifact_root = session_root;
+  report.metadata_path =
+      (fs::path(session_root) / "native-window-bridge-metadata.json").string();
+  report.event_log_path =
+      (fs::path(session_root) / "native-window-bridge-events.jsonl").string();
+
+  const auto wayland_probe =
+      RunWaylandSurfaceFixture((fs::path(session_root) / "wayland-probe").string(),
+                               metadata);
+  const auto egl_probe =
+      RunEglSmokeFixture((fs::path(session_root) / "egl-probe").string(),
+                         metadata);
+  report.wayland_surface_created = wayland_probe.surface_created;
+  report.egl_pbuffer_created = egl_probe.pbuffer_created;
+  report.backing_mode =
+      (report.wayland_surface_created && report.egl_pbuffer_created)
+          ? "probe_only_wayland_egl_available"
+          : "headless_fallback";
+
+  ANativeWindow* window =
+      CreateHeadlessNativeWindowSurface(metadata, session_root);
+  if (!NativeWindowLifecycleReady(window)) {
+    const auto failed = InspectNativeWindow(window);
+    report.width = failed.width;
+    report.height = failed.height;
+    report.format = failed.format;
+    report.stride = failed.stride;
+    report.exit_reason = "native_window_bridge_not_ready";
+    WriteTextFile(report.metadata_path,
+                  RenderNativeWindowBridgeFixtureJson(report));
+    WriteTextFile(report.event_log_path, "");
+    DestroyHeadlessNativeWindowSurface(window);
+    return report;
+  }
+
+  std::vector<NativeWindowBridgeEvent> events;
+  events.push_back({"bridge_created", metadata});
+
+  NativeWindowMetadata updated{
+      .width = metadata.width + 8,
+      .height = metadata.height + 4,
+      .format = metadata.format,
+      .stride = metadata.width + 8,
+  };
+  if (UpdateNativeWindowBufferGeometry(window, updated)) {
+    events.push_back({"geometry_updated", updated});
+  }
+
+  const auto observed = InspectNativeWindow(window);
+  report.native_window_bridge_ready = true;
+  report.width = observed.width;
+  report.height = observed.height;
+  report.format = observed.format;
+  report.stride = observed.stride;
+  report.geometry_updates = GetNativeWindowGeometryUpdateCount(window);
+  report.exit_reason =
+      report.backing_mode == "headless_fallback"
+          ? "native_window_bridge_ready_headless_fallback"
+          : "native_window_bridge_ready_probe_only";
+
+  WriteTextFile(report.metadata_path,
+                RenderNativeWindowBridgeFixtureJson(report));
+  WriteBridgeEventLog(report.event_log_path, events);
+  DestroyHeadlessNativeWindowSurface(window);
+  return report;
+}
+
+std::string RenderNativeWindowBridgeFixtureJson(
+    const NativeWindowBridgeFixtureReport& report) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"native_window_bridge_ready\": "
+         << (report.native_window_bridge_ready ? "true" : "false") << ",\n"
+         << "  \"width\": " << report.width << ",\n"
+         << "  \"height\": " << report.height << ",\n"
+         << "  \"format\": " << report.format << ",\n"
+         << "  \"stride\": " << report.stride << ",\n"
+         << "  \"geometry_updates\": " << report.geometry_updates << ",\n"
+         << "  \"artifact_root\": \"" << EscapeJson(report.artifact_root)
+         << "\",\n"
+         << "  \"metadata_path\": \"" << EscapeJson(report.metadata_path)
+         << "\",\n"
+         << "  \"event_log_path\": \"" << EscapeJson(report.event_log_path)
+         << "\",\n"
+         << "  \"backing_mode\": \"" << EscapeJson(report.backing_mode)
+         << "\",\n"
+         << "  \"wayland_surface_created\": "
+         << (report.wayland_surface_created ? "true" : "false") << ",\n"
+         << "  \"egl_pbuffer_created\": "
+         << (report.egl_pbuffer_created ? "true" : "false") << ",\n"
+         << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
+         << "\"\n"
          << "}\n";
   return output.str();
 }

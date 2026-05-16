@@ -1227,6 +1227,90 @@ void TestEglSmokeFixtureReportsAvailabilityHonestly() {
   fs::remove_all(root);
 }
 
+void TestNativeWindowBridgeFixtureWritesStableArtifacts() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-native-window-bridge-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunNativeWindowBridgeFixture(
+      root.string(),
+      {.width = 40,
+       .height = 30,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 40});
+
+  Expect(report.native_window_bridge_ready,
+         "expected native-window bridge readiness");
+  Expect(report.width == 48, "expected deterministic bridge width update");
+  Expect(report.height == 34, "expected deterministic bridge height update");
+  Expect(report.format == wfa::kNativeWindowFormatRgba8888,
+         "expected bridge format to remain rgba8888");
+  Expect(report.stride == 48, "expected deterministic bridge stride update");
+  Expect(report.geometry_updates == 1,
+         "expected exactly one geometry update");
+  Expect(report.artifact_root == root.string(),
+         "expected deterministic bridge artifact root");
+  Expect(report.metadata_path ==
+             (root / "native-window-bridge-metadata.json").string(),
+         "expected deterministic bridge metadata path");
+  Expect(report.event_log_path ==
+             (root / "native-window-bridge-events.jsonl").string(),
+         "expected deterministic bridge event log path");
+  Expect(fs::exists(report.metadata_path), "expected bridge metadata artifact");
+  Expect(fs::exists(report.event_log_path), "expected bridge event log");
+
+  std::ifstream event_input(report.event_log_path);
+  std::string event_log((std::istreambuf_iterator<char>(event_input)),
+                        std::istreambuf_iterator<char>());
+  Expect(event_log.find("\"event_name\": \"bridge_created\"") !=
+             std::string::npos,
+         "expected bridge-created event");
+  Expect(event_log.find("\"event_name\": \"geometry_updated\"") !=
+             std::string::npos,
+         "expected geometry-updated event");
+
+  const auto rendered = wfa::RenderNativeWindowBridgeFixtureJson(report);
+  Expect(rendered.find("\"native_window_bridge_ready\": true") !=
+             std::string::npos,
+         "expected bridge-ready json flag");
+  Expect(rendered.find("\"metadata_path\": \"" + report.metadata_path + "\"") !=
+             std::string::npos,
+         "expected bridge metadata path in json");
+
+  fs::remove_all(root);
+}
+
+void TestNativeWindowBridgeFixtureReportsFallbackHonestly() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-native-window-bridge-fallback-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunNativeWindowBridgeFixture(
+      root.string(),
+      {.width = 32,
+       .height = 24,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 32});
+
+  Expect(report.native_window_bridge_ready,
+         "expected bridge contract to stay testable");
+  if (report.wayland_surface_created && report.egl_pbuffer_created) {
+    Expect(report.backing_mode == "probe_only_wayland_egl_available",
+           "expected probe-only mode when both backing probes succeed");
+    Expect(report.exit_reason == "native_window_bridge_ready_probe_only",
+           "expected probe-only bridge exit reason");
+  } else {
+    Expect(report.backing_mode == "headless_fallback",
+           "expected honest fallback mode when real backing is unavailable");
+    Expect(report.exit_reason == "native_window_bridge_ready_headless_fallback",
+           "expected fallback bridge exit reason");
+  }
+
+  fs::remove_all(root);
+}
+
 void TestNativeLifecycleShimWritesSessionArtifacts() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "linuxoid-native-lifecycle-test";
@@ -3297,6 +3381,8 @@ int main() {
     TestWaylandSurfaceFixtureReportsAvailabilityHonestly();
     TestEglSmokeFixtureWritesDeterministicMetadata();
     TestEglSmokeFixtureReportsAvailabilityHonestly();
+    TestNativeWindowBridgeFixtureWritesStableArtifacts();
+    TestNativeWindowBridgeFixtureReportsFallbackHonestly();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

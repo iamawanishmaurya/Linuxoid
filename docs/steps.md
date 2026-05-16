@@ -1069,3 +1069,13 @@
   Action: Updated the README Mermaid graph, verify examples, phased plan, changelog, dependency notes, and status output to reflect the verified real EGL smoke fixture and the new native execution readiness value.
   Result: Linuxoid now reports `execution 58/100`, documents the real EGL context plus pbuffer proof honestly, and keeps Wayland-EGL binding plus `ANativeWindow` backing clearly marked as the next graphics gate.
   Timestamp: 2026-05-17T01:08:14+05:30
+
+- Step: P2.3 native-window bridge contract implementation
+  Action: Added a minimal `ANativeWindow` bridge contract with deterministic buffer-geometry updates, stable metadata plus event artifacts, and honest probe-only versus headless-fallback reporting over the existing Wayland and EGL fixture seams.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` now passes, `native-window-bridge-fixture` emits a stable bridge contract JSON surface, and Linuxoid proves one deterministic geometry update without claiming full Android rendering.
+  Timestamp: 2026-05-17T01:14:42+05:30
+
+- Step: P2.3 bridge status and architecture sync
+  Action: Updated the README Mermaid graph, verify examples, phased plan, changelog, dependency notes, and status output to reflect the verified `ANativeWindow` bridge contract and the new native execution readiness value.
+  Result: Linuxoid now reports `execution 64/100`, documents the bridge contract honestly, and keeps real Android drawing over a bound Wayland plus EGL path clearly marked as the next graphics gate.
+  Timestamp: 2026-05-17T01:18:57+05:30
