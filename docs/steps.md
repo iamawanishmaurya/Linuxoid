@@ -404,3 +404,8 @@
   Action: Added the current full working Mermaid architecture to the GitHub README and updated the release metadata for the documentation refresh.
   Result: Linuxoid's README now shows the verified end-to-end working architecture, including the APK-backed keyboard flow and the installed-package Waydroid launch flow.
   Timestamp: 2026-05-16T12:11:53+05:30
+
+- Step: Linuxoid v0.1.11 release and publish
+  Action: Staged the README architecture refresh, committed it as `docs: add current Mermaid architecture to README`, tagged `v0.1.11`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
+  Result: Linuxoid now publishes the current working Mermaid architecture directly in the GitHub README as part of `v0.1.11`.
+  Timestamp: 2026-05-16T12:16:59+05:30
