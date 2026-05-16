@@ -32,6 +32,7 @@ flowchart TB
     Compatctl --> NativeEgl["P2.2 EGL Smoke Fixture"]
     Compatctl --> NativeBridge["P2.3 ANativeWindow Bridge Fixture"]
     Compatctl --> NativeInput["P2.4 Focused Input Queue Fixture"]
+    Compatctl --> NativeBinder["P4.1 Binder-shaped Service Manager Fixture"]
     Compatctl --> Preflight["Runtime Discovery and Preflight"]
     Compatctl --> Inspector["Package Metadata and Launcher Resolver"]
     Compatctl --> Desktopify["Desktop Artifact Generator"]
@@ -54,6 +55,7 @@ flowchart TB
     NativeBridge --> NativeWayland
     NativeBridge --> NativeEgl
     NativeInput --> NativeBridge
+    NativeBinder --> NativeLifecycle
     NativeRunner --> NativeStubs["JNI Stub / APK-backed Asset Bridge / Looper Stub / Signal Handler"]
     NativeSurface --> NativeMarker["Headless First-pixel Marker"]
     NativeCallbacks --> NativeCallbackJournal["Window Callback Journal"]
@@ -61,6 +63,7 @@ flowchart TB
     NativeEgl --> NativeEglArtifact["egl-metadata.json"]
     NativeBridge --> NativeBridgeArtifact["native-window-bridge-metadata.json / events.jsonl"]
     NativeInput --> NativeInputArtifact["native-input-queue-metadata.json / events.jsonl"]
+    NativeBinder --> NativeBinderArtifact["binder/service-manager.json / lookups / transactions"]
     NativeLifecycle --> NativeStubRunner["Linuxoid-owned Native Entrypoint Stub"]
     NativeExecute --> NativeSession["Truthful Session / Runner Logs / JSON Reports"]
     MachineSurface --> Reports["Reports / Status / Bootstrap Specs"]
@@ -106,6 +109,7 @@ flowchart TB
   NativeEgl --> NativeEglProof["Real EGL Context / Pbuffer Proof"]
   NativeBridge --> NativeBridgeProof["ANativeWindow Bridge Contract Proof"]
   NativeInput --> NativeInputProof["Focused Input Queue Contract Proof"]
+  NativeBinder --> NativeBinderProof["Binder-shaped Local Service Manager Proof"]
   NativeStubRunner --> NativeStubProof["Generated Entrypoint Now Calls Native Runner"]
 ```
 
@@ -130,7 +134,7 @@ This diagram is the current working architecture and should stay in sync with th
 
 Linuxoid now treats the phased execution plan as the repo-facing source of truth for the direct-runtime push:
 
-- Current state: scaffold `95/100`, execution `70/100`
+- Current state: scaffold `96/100`, execution `74/100`
 - Current focus: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Critical path: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Browser work is frozen until `P5`
@@ -231,6 +235,7 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
 - A `native-egl-smoke-fixture <session-root> [width] [height]` path that uses the system `libEGL` when available to initialize a real EGL display, choose a config, create an OpenGL ES context plus pbuffer surface, and write a stable `egl-metadata.json` artifact, while still falling back honestly when EGL is unavailable
 - A `native-window-bridge-fixture <session-root> [width] [height] [format]` path that exposes a minimal `ANativeWindow` bridge contract with width, height, format, stride, deterministic buffer-geometry updates, stable metadata/event artifacts, and honest probe-only versus headless-fallback reporting
 - A `native-input-queue-fixture <session-root> [width] [height] [format]` path that injects a deterministic focus-acquire plus pointer/key event sequence against the bridge contract, writes stable metadata plus JSONL event artifacts, and reports honest probe-only versus headless-fallback backing without claiming full IME or text composition support
+- A `native-service-manager-fixture <bootstrap-manifest>` path that emits a local Binder-shaped service-manager contract with deterministic service registration, lookup, and transaction artifacts for Linuxoid-owned `package_manager` and `activity_manager` stubs
 - Minimal `P1` runtime surfaces for a future direct runner:
   - JNI stub
   - asset-manager stub
@@ -249,6 +254,11 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
   - pointer down/move/up injection journal
   - keyboard down/up injection journal
   - explicit note that full IME and text composition are still pending
+- Minimal `P4.1` Binder-shaped service seams for a future direct runner:
+  - local service registration metadata
+  - deterministic package/activity-manager lookups
+  - transaction JSONL artifacts for bootstrap-time service calls
+  - explicit note that real Binder transport is still pending
 - A `launch-waydroid-package` compatibility alias that still launches an already installed app through the Waydroid adapter without requiring an APK reinstall or a hardcoded ADB serial
 - A `desktopify-waydroid-package` path that generates a Linux launcher and `.desktop` entry for an installed Waydroid app
 - A generic `verify-package` path that proves direct Linux launch for an installed package by checking runtime launch, generated host-launch artifacts, and generated launcher execution across backend contracts
@@ -268,6 +278,7 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
 - A live attached-ADB proof that `verify-package-matrix` now passes `3/3` for `com.android.settings`, `com.android.calculator2`, and `org.fdroid.fdroid` without explicit components
 - A live local-APK proof that `plan-native-spike` now accepts Calculator as a native candidate, writes a native bundle plan, and emits a bootstrap spec with no blockers
 - A live local-Linux proof that `native-lifecycle-shim` creates Calculator session artifacts, keeps the pre-launch state at `NOT_CREATED`, and exposes the first Linuxoid-owned service bindings
+- A live local-Linux proof that `native-service-manager-fixture` now writes deterministic Binder-shaped registration, lookup, and transaction artifacts for `package_manager` and `activity_manager` under the lifecycle session root
 - A live local-Linux proof that the current dex-only Calculator bundle now returns a structured soft failure with `exit_reason = no_native_libraries_found` instead of pretending the missing execution core is generic
 - A live local-Linux proof that `native-execute-stub` now loads a fixture shared library, calls `JNI_OnLoad`, resolves `ANativeActivity_onCreate`, reaches the five-second watchdog gate, and exits `0`
 - A local test-backed proof that `native-execute-stub <bootstrap-manifest>` forks the fixture runner, writes `runner.log` plus `runner-report.json`, records `jni_onload_results`, and exits `0`
@@ -300,8 +311,8 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 
 - The new `launch-package` core path is backend-neutral, but **native Linux execution is still not implemented**.
 - The new `plan-native-spike` core path materializes Linuxoid-owned native launch assets, but **those assets are not executing Android bytecode on Linux yet**.
-- The new `bootstrap-native-spike` and `native-execute-stub` paths now prove Linuxoid can own the local bootstrap surface, `execve` a real child runner, persist truthful session state, stage host-ABI native libraries plus extracted assets/resources, and emit structured JNI/library results, the new `native-first-pixel-fixture` plus `native-window-callback-fixture` prove headless host-surface and callback-marker paths, the `native-wayland-surface-fixture` proves a real optional `wl_display` plus `wl_surface` path, the `native-egl-smoke-fixture` proves a real optional EGL context plus pbuffer path, the `native-window-bridge-fixture` proves a minimal `ANativeWindow` bridge contract over those seams, and the new `native-input-queue-fixture` proves focused pointer/key injection plus stable event artifacts, but **binding EGL to the real Wayland surface, backing that path with the bridge contract for actual Android drawing, compositor-backed activity callbacks, full IME/text composition, DEX/ART, Binder, and full Android resource-table loading are still pending**.
-- The new `native-lifecycle-shim` path proves Linuxoid can own lifecycle/session handoff and service binding artifacts locally, but **it is still a pre-DEX, pre-Binder, pre-graphics scaffold seam**.
+- The new `bootstrap-native-spike` and `native-execute-stub` paths now prove Linuxoid can own the local bootstrap surface, `execve` a real child runner, persist truthful session state, stage host-ABI native libraries plus extracted assets/resources, and emit structured JNI/library results, the new `native-first-pixel-fixture` plus `native-window-callback-fixture` prove headless host-surface and callback-marker paths, the `native-wayland-surface-fixture` proves a real optional `wl_display` plus `wl_surface` path, the `native-egl-smoke-fixture` proves a real optional EGL context plus pbuffer path, the `native-window-bridge-fixture` proves a minimal `ANativeWindow` bridge contract over those seams, the `native-input-queue-fixture` proves focused pointer/key injection plus stable event artifacts, and the new `native-service-manager-fixture` proves local Binder-shaped registration, lookup, and package/activity-manager transaction artifacts, but **binding EGL to the real Wayland surface, backing that path with the bridge contract for actual Android drawing, compositor-backed activity callbacks, full IME/text composition, DEX/ART, real Binder transport, and full Android resource-table loading are still pending**.
+- The new `native-lifecycle-shim` path proves Linuxoid can own lifecycle/session handoff and service binding artifacts locally, but **it is still a pre-DEX, pre-real-Binder, pre-graphics scaffold seam**.
 - The current local `com.android.calculator2` APK staged for Linuxoid is **dex-only** and contains no `lib/*.so`, so it currently serves as a negative oracle rather than the literal `P1` gate app.
 - The current live proofs on GitHub are still **runtime-backed**: Waydroid handles the installed-package Linux launch path, and `attached-adb` remains a transition backend plus regression oracle.
 - `attached-adb` is now part of the core contract with target-side launcher and metadata lookup, but it is still not the final goal.
@@ -319,8 +330,8 @@ These are the next five highest-value moves from the current state if the goal i
 2. Start the host-ART + `PathClassLoader` path and make JNI ownership real.
    The next major boundary is resolving classes from staged `base.apk` through a Linuxoid-owned ART sidecar, not pretending Java apps can already run.
 
-3. Replace placeholder services with loopback Binder-shaped `package_manager` and `activity_manager`.
-   Lifecycle truth, package resolution, and future resolver/storage work all need to move out of the current placeholder service registry.
+3. Replace the local Binder-shaped manager with real transaction transport behind the same contract.
+   Linuxoid now has deterministic service registration, lookup, and package/activity-manager transaction artifacts, but the next step is a real transport seam instead of an in-process bootstrap fixture.
 
 4. Bind the current Wayland/EGL probes plus focused input seam into one real native activity surface path.
    Linuxoid now has separate Wayland, EGL, `ANativeWindow`, and focused input proofs; the next user-visible step is one combined path that lets a native activity observe the same surface and input contract instead of isolated fixtures.
@@ -346,7 +357,7 @@ What stays frozen until then:
 
 Why the freeze exists:
 
-- Linuxoid still has only `execution 70/100` on the native path.
+- Linuxoid still has only `execution 74/100` on the native path.
 - `P1 -> P2` is the real blocker for the whole project.
 - Browser work only makes sense after Linuxoid can already host Android UI and app code directly.
 
@@ -392,6 +403,7 @@ ctest --test-dir build --output-on-failure
 ./build/compatctl native-wayland-surface-fixture /tmp/linuxoid-wayland-surface-smoke 120 90
 ./build/compatctl native-window-bridge-fixture /tmp/linuxoid-native-window-bridge-smoke 44 28 1
 ./build/compatctl native-input-queue-fixture /tmp/linuxoid-native-input-queue-smoke 48 32 1
+./build/compatctl native-service-manager-fixture /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json
 ./build/compatctl native-window-callback-fixture /tmp/linuxoid-native-window-callback-smoke
 ./build/compatctl verify-apk-host-launch-auto emulator-5590 /path/to/app.apk /tmp/linuxoid-apk-verify /tmp/linuxoid-apk-applications /tmp/linuxoid-apk-launchers
 ./build/compatctl launch-waydroid-package com.android.calculator2

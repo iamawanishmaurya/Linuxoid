@@ -1,6 +1,7 @@
 #ifndef WFA_NATIVE_LIFECYCLE_HPP
 #define WFA_NATIVE_LIFECYCLE_HPP
 
+#include "wfa/binder_service_manager.hpp"
 #include "wfa/native_spike.hpp"
 
 #include <string>
@@ -22,6 +23,9 @@ struct NativeLifecycleShim {
   std::string session_manifest_path;
   std::string activity_state_path;
   std::string service_registry_path;
+  std::string binder_manager_metadata_path;
+  std::string binder_lookup_log_path;
+  std::string binder_transaction_log_path;
   std::string report_path;
   std::string runner_log_path;
   std::string runner_report_path;
@@ -32,7 +36,9 @@ struct NativeLifecycleShim {
   std::string failure_reason;
   std::string selected_library_path;
   std::vector<NativeServiceBinding> services;
+  BinderServiceManagerFixtureReport binder_service_manager;
   bool lifecycle_handoff_ready = false;
+  bool binder_service_manager_ready = false;
   bool native_library_found = false;
   bool dlopen_ok = false;
   bool entrypoint_found = false;

@@ -1099,3 +1099,28 @@
   Action: Re-ran the full build/test gate, refreshed the README Mermaid architecture, phased plan, changelog, and status text, and documented the solved linker gap in `docs/solutions/`.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, Linuxoid now reports `execution 70/100`, and the repo truthfully describes the new focused input queue contract while keeping full IME/text composition, bound Wayland-EGL rendering, DEX/ART, Binder, and richer resources clearly pending.
   Timestamp: 2026-05-17T01:44:59+05:30
+
+- Step: P4.1 Binder-shaped service-manager inspection
+  Action: Audited the current lifecycle shim, service registry artifacts, native bootstrap tests, and roadmap/docs to locate where Linuxoid still exposes placeholder service bindings instead of a structured Binder-shaped local contract.
+  Result: Confirmed that `src/native_lifecycle.cpp` currently writes only a flat `services.txt` registry, making it the right seam to upgrade into a deterministic in-process Binder-shaped service manager with registration, lookup, and transaction artifacts.
+  Timestamp: 2026-05-17T02:07:21+05:30
+
+- Step: P4.1 Binder-shaped service-manager red test
+  Action: Added failing tests for deterministic Binder-shaped service registration, package/activity-manager lookup coverage, transaction metadata, stable JSON/JSONL artifact paths, and structured fixture JSON rendering.
+  Result: `cmake --build build` now fails at link time with undefined references to `wfa::RunBinderServiceManagerFixture(...)` and `wfa::RenderBinderServiceManagerFixtureJson(...)`, confirming the missing implementation seam before touching lifecycle integration.
+  Timestamp: 2026-05-17T02:10:09+05:30
+
+- Step: P4.1 Binder-shaped status regression
+  Action: Re-ran the full build/test gate after integrating the new Binder-shaped service-manager slice and status bump.
+  Result: `ctest --test-dir build --output-on-failure` failed immediately because `wfa_tests` still expected the old average scaffold progress value (`95`) after the `P4` progress increase.
+  Timestamp: 2026-05-17T02:18:34+05:30
+
+- Step: P4.1 Binder-shaped service-manager implementation
+  Action: Implemented `src/binder_service_manager.cpp`, wired it into `wfa_core`, exposed `compatctl native-service-manager-fixture`, and threaded deterministic Binder-shaped registration, lookup, and transaction artifacts into the native lifecycle shim.
+  Result: `native-service-manager-fixture` now returns `manager_ready: true`, writes stable `binder/service-manager.json`, `registered-services.json`, `service-lookups.jsonl`, and `service-transactions.jsonl` artifacts, and the lifecycle shim now points at those machine-readable service-manager paths.
+  Timestamp: 2026-05-17T02:22:48+05:30
+
+- Step: P4.1 Binder-shaped verification and status sync
+  Action: Fixed the stale scaffold-progress expectation in `wfa_tests`, regenerated a fresh bootstrap manifest, re-ran the full build/test gate, and refreshed the README Mermaid graph, phased plan, changelog, and status output.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, `native-service-manager-fixture` now verifies cleanly on a current Calculator bootstrap manifest, and Linuxoid now reports `scaffold 96/100` and `execution 74/100` while still marking real Binder transport, DEX/ART, bound Wayland-EGL rendering, and full IME/text composition as pending.
+  Timestamp: 2026-05-17T02:27:31+05:30

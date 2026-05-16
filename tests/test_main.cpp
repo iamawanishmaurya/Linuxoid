@@ -1,6 +1,7 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/asset_manager_stub.hpp"
+#include "wfa/binder_service_manager.hpp"
 #include "wfa/checkpoint.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/egl_smoke_fixture.hpp"
@@ -76,8 +77,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 95,
-         "expected average phase progress to equal 95");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 96,
+         "expected average phase progress to equal 96");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -126,7 +127,7 @@ void TestStatusRenderingContainsLoadingBars() {
          "expected scaffold readiness heading");
   Expect(report.find("Native Execution Readiness") != std::string::npos,
          "expected native execution readiness heading");
-  Expect(report.find("95/100") != std::string::npos,
+  Expect(report.find("96/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
@@ -1399,6 +1400,83 @@ void TestNativeInputQueueFixtureReportsFallbackHonestly() {
   fs::remove_all(root);
 }
 
+void TestBinderServiceManagerFixtureWritesStableArtifacts() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-binder-service-manager-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunBinderServiceManagerFixture(
+      {.package_name = "com.example.simple",
+       .launcher_component = "com.example.simple/.MainActivity",
+       .apk_path = "/tmp/simple.apk",
+       .artifact_root = root.string()});
+
+  Expect(report.manager_ready, "expected binder-shaped service manager ready");
+  Expect(report.package_name == "com.example.simple",
+         "expected deterministic binder package name");
+  Expect(report.launcher_component == "com.example.simple/.MainActivity",
+         "expected deterministic launcher component");
+  Expect(report.transport_kind == "in_process_binder_shape",
+         "expected deterministic binder transport kind");
+  Expect(report.metadata_path ==
+             (root / "binder" / "service-manager.json").string(),
+         "expected deterministic binder metadata path");
+  Expect(report.registry_path ==
+             (root / "binder" / "registered-services.json").string(),
+         "expected deterministic binder registry path");
+  Expect(report.lookup_log_path ==
+             (root / "binder" / "service-lookups.jsonl").string(),
+         "expected deterministic binder lookup log path");
+  Expect(report.transaction_log_path ==
+             (root / "binder" / "service-transactions.jsonl").string(),
+         "expected deterministic binder transaction log path");
+  Expect(fs::exists(report.metadata_path), "expected binder metadata artifact");
+  Expect(fs::exists(report.registry_path), "expected binder registry artifact");
+  Expect(fs::exists(report.lookup_log_path),
+         "expected binder lookup log artifact");
+  Expect(fs::exists(report.transaction_log_path),
+         "expected binder transaction log artifact");
+
+  Expect(report.services.size() == 3,
+         "expected three deterministic binder services");
+  Expect(report.lookups.size() == 2,
+         "expected two deterministic binder lookups");
+  Expect(report.transactions.size() == 2,
+         "expected two deterministic binder transactions");
+
+  std::ifstream registry_input(report.registry_path);
+  std::string registry((std::istreambuf_iterator<char>(registry_input)),
+                       std::istreambuf_iterator<char>());
+  Expect(registry.find("\"service_name\": \"package_manager\"") !=
+             std::string::npos,
+         "expected package manager registration");
+  Expect(registry.find("\"service_name\": \"activity_manager\"") !=
+             std::string::npos,
+         "expected activity manager registration");
+
+  std::ifstream transaction_input(report.transaction_log_path);
+  std::string transactions(
+      (std::istreambuf_iterator<char>(transaction_input)),
+      std::istreambuf_iterator<char>());
+  Expect(transactions.find("\"transaction_name\": \"getPackageInfo\"") !=
+             std::string::npos,
+         "expected package manager transaction");
+  Expect(transactions.find(
+             "\"transaction_name\": \"scheduleLaunchActivity\"") !=
+             std::string::npos,
+         "expected activity manager transaction");
+
+  const auto rendered = wfa::RenderBinderServiceManagerFixtureJson(report);
+  Expect(rendered.find("\"manager_ready\": true") != std::string::npos,
+         "expected binder manager ready json flag");
+  Expect(rendered.find("\"metadata_path\": \"" + report.metadata_path + "\"") !=
+             std::string::npos,
+         "expected binder metadata path in json");
+
+  fs::remove_all(root);
+}
+
 void TestNativeLifecycleShimWritesSessionArtifacts() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "linuxoid-native-lifecycle-test";
@@ -1479,6 +1557,12 @@ void TestNativeLifecycleShimWritesSessionArtifacts() {
          "expected activity state file");
   Expect(fs::exists(lifecycle.service_registry_path),
          "expected service registry file");
+  Expect(fs::exists(lifecycle.binder_manager_metadata_path),
+         "expected binder manager metadata file");
+  Expect(fs::exists(lifecycle.binder_lookup_log_path),
+         "expected binder lookup log file");
+  Expect(fs::exists(lifecycle.binder_transaction_log_path),
+         "expected binder transaction log file");
   Expect(fs::exists(lifecycle.report_path),
          "expected lifecycle report");
 
@@ -1502,10 +1586,30 @@ void TestNativeLifecycleShimWritesSessionArtifacts() {
   Expect(services.find("package_manager") != std::string::npos,
          "expected package manager service");
 
+  std::ifstream binder_lookup_input(lifecycle.binder_lookup_log_path);
+  std::string binder_lookups(
+      (std::istreambuf_iterator<char>(binder_lookup_input)),
+      std::istreambuf_iterator<char>());
+  Expect(binder_lookups.find("\"service_name\": \"package_manager\"") !=
+             std::string::npos,
+         "expected package manager lookup");
+
+  std::ifstream binder_transaction_input(lifecycle.binder_transaction_log_path);
+  std::string binder_transactions(
+      (std::istreambuf_iterator<char>(binder_transaction_input)),
+      std::istreambuf_iterator<char>());
+  Expect(binder_transactions.find(
+             "\"transaction_name\": \"scheduleLaunchActivity\"") !=
+             std::string::npos,
+         "expected activity manager transaction");
+
   const auto rendered = wfa::RenderNativeLifecycleShimReport(lifecycle);
   Expect(rendered.find("Lifecycle Handoff Ready: yes") !=
              std::string::npos,
          "expected lifecycle handoff line");
+  Expect(rendered.find("Binder Service Manager Ready: yes") !=
+             std::string::npos,
+         "expected binder manager readiness line");
   Expect(rendered.find("Execution Engine Ready: no") != std::string::npos,
          "expected lifecycle execution readiness line");
   Expect(rendered.find("Process State: BOOTSTRAPPED") != std::string::npos,
@@ -3473,6 +3577,7 @@ int main() {
     TestNativeWindowBridgeFixtureReportsFallbackHonestly();
     TestNativeInputQueueFixtureWritesStableArtifacts();
     TestNativeInputQueueFixtureReportsFallbackHonestly();
+    TestBinderServiceManagerFixtureWritesStableArtifacts();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

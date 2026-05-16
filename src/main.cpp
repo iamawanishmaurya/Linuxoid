@@ -1,5 +1,6 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
+#include "wfa/binder_service_manager.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/egl_smoke_fixture.hpp"
 #include "wfa/manifest_assessment.hpp"
@@ -34,6 +35,7 @@ void PrintUsage() {
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
+      << "  compatctl native-service-manager-fixture <bootstrap-manifest>\n"
       << "  compatctl native-lifecycle-shim <bootstrap-manifest>\n"
       << "  compatctl native-process-bootstrap <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <bootstrap-manifest>\n"
@@ -234,6 +236,20 @@ int main(int argc, char** argv) {
           argv[2], compat_root, native_root, compatctl_path);
       std::cout << wfa::RenderNativeActivityBootstrapReport(bootstrap);
       return bootstrap.bootstrap_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-service-manager-fixture") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto lifecycle =
+          wfa::BuildNativeLifecycleShimFromManifest(argv[2]);
+      std::cout << wfa::RenderBinderServiceManagerFixtureJson(
+          lifecycle.binder_service_manager);
+      return lifecycle.binder_service_manager.manager_ready ? EXIT_SUCCESS
+                                                            : EXIT_FAILURE;
     }
 
     if (command == "native-lifecycle-shim") {

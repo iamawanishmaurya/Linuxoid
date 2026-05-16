@@ -213,6 +213,17 @@ std::vector<NativeServiceBinding> BuildDefaultServiceBindings() {
   };
 }
 
+std::vector<NativeServiceBinding> BuildServiceBindingsFromBinderFixture(
+    const BinderServiceManagerFixtureReport& binder_fixture) {
+  std::vector<NativeServiceBinding> services;
+  services.reserve(binder_fixture.services.size());
+  for (const auto& registration : binder_fixture.services) {
+    services.push_back({registration.service_name, registration.interface_name,
+                        registration.status, registration.notes});
+  }
+  return services;
+}
+
 bool FileExists(const std::string& path) {
   return !path.empty() && fs::exists(path);
 }
@@ -251,6 +262,18 @@ void WriteLifecycleArtifacts(const NativeLifecycleShim& lifecycle) {
                    << RenderJsonArray(
                           lifecycle.bootstrap.plan.unsupported_native_libraries)
                    << ",\n"
+                   << "  \"binder_service_manager_ready\": "
+                   << (lifecycle.binder_service_manager_ready ? "true"
+                                                              : "false")
+                   << ",\n"
+                   << "  \"binder_manager_metadata_path\": \""
+                   << EscapeJson(lifecycle.binder_manager_metadata_path)
+                   << "\",\n"
+                   << "  \"binder_lookup_log_path\": \""
+                   << EscapeJson(lifecycle.binder_lookup_log_path) << "\",\n"
+                   << "  \"binder_transaction_log_path\": \""
+                   << EscapeJson(lifecycle.binder_transaction_log_path)
+                   << "\",\n"
                    << "  \"activity_state\": \""
                    << EscapeJson(lifecycle.current_activity_state) << "\",\n"
                    << "  \"process_state\": \""
@@ -316,7 +339,9 @@ void WriteLifecycleArtifacts(const NativeLifecycleShim& lifecycle) {
     services << service.service_name << "|" << service.service_kind << "|"
              << service.status << "|" << service.notes << "\n";
   }
-  WriteTextFile(lifecycle.service_registry_path, services.str());
+  if (!lifecycle.binder_service_manager_ready) {
+    WriteTextFile(lifecycle.service_registry_path, services.str());
+  }
 
   WriteTextFile(lifecycle.report_path,
                 RenderNativeLifecycleShimReport(lifecycle));
@@ -503,6 +528,15 @@ NativeLifecycleShim BuildNativeLifecycleShim(
       (fs::path(lifecycle.session_root) / "activity-state.txt").string();
   lifecycle.service_registry_path =
       (fs::path(lifecycle.session_root) / "services.txt").string();
+  lifecycle.binder_manager_metadata_path =
+      (fs::path(lifecycle.session_root) / "binder" / "service-manager.json")
+          .string();
+  lifecycle.binder_lookup_log_path =
+      (fs::path(lifecycle.session_root) / "binder" / "service-lookups.jsonl")
+          .string();
+  lifecycle.binder_transaction_log_path =
+      (fs::path(lifecycle.session_root) / "binder" / "service-transactions.jsonl")
+          .string();
   lifecycle.report_path =
       (fs::path(lifecycle.session_root) / "lifecycle-report.txt").string();
   lifecycle.runner_log_path =
@@ -512,16 +546,36 @@ NativeLifecycleShim BuildNativeLifecycleShim(
   lifecycle.current_activity_state = "NOT_CREATED";
   lifecycle.process_state = "BOOTSTRAPPED";
   lifecycle.exit_reason = "bootstrap_not_started";
-  lifecycle.services = BuildDefaultServiceBindings();
   lifecycle.execution_engine_ready = false;
 
   fs::create_directories(lifecycle.session_root);
+  lifecycle.binder_service_manager = RunBinderServiceManagerFixture(
+      {.package_name = bootstrap.plan.assessment.package_name,
+       .launcher_component = bootstrap.plan.assessment.launcher_component,
+       .apk_path = bootstrap.plan.apk_path,
+       .artifact_root = lifecycle.session_root});
+  lifecycle.binder_service_manager_ready =
+      lifecycle.binder_service_manager.manager_ready;
+  lifecycle.binder_manager_metadata_path =
+      lifecycle.binder_service_manager.metadata_path;
+  lifecycle.service_registry_path = lifecycle.binder_service_manager.registry_path;
+  lifecycle.binder_lookup_log_path =
+      lifecycle.binder_service_manager.lookup_log_path;
+  lifecycle.binder_transaction_log_path =
+      lifecycle.binder_service_manager.transaction_log_path;
+  lifecycle.services = lifecycle.binder_service_manager_ready
+                           ? BuildServiceBindingsFromBinderFixture(
+                                 lifecycle.binder_service_manager)
+                           : BuildDefaultServiceBindings();
   WriteLifecycleArtifacts(lifecycle);
 
   lifecycle.lifecycle_handoff_ready =
       FileExists(lifecycle.session_manifest_path) &&
       FileExists(lifecycle.activity_state_path) &&
       FileExists(lifecycle.service_registry_path) &&
+      FileExists(lifecycle.binder_manager_metadata_path) &&
+      FileExists(lifecycle.binder_lookup_log_path) &&
+      FileExists(lifecycle.binder_transaction_log_path) &&
       FileExists(lifecycle.report_path) && !lifecycle.services.empty();
   return lifecycle;
 }
@@ -645,6 +699,9 @@ NativeLifecycleShim RunNativeProcessBootstrap(
       FileExists(lifecycle.session_manifest_path) &&
       FileExists(lifecycle.activity_state_path) &&
       FileExists(lifecycle.service_registry_path) &&
+      FileExists(lifecycle.binder_manager_metadata_path) &&
+      FileExists(lifecycle.binder_lookup_log_path) &&
+      FileExists(lifecycle.binder_transaction_log_path) &&
       FileExists(lifecycle.report_path) &&
       FileExists(lifecycle.runner_log_path) && !lifecycle.services.empty();
   return lifecycle;
@@ -672,10 +729,17 @@ std::string RenderNativeLifecycleShimReport(
   output << "Session Manifest: " << lifecycle.session_manifest_path << "\n";
   output << "Activity State File: " << lifecycle.activity_state_path << "\n";
   output << "Service Registry: " << lifecycle.service_registry_path << "\n";
+  output << "Binder Manager Metadata: " << lifecycle.binder_manager_metadata_path
+         << "\n";
+  output << "Binder Lookup Log: " << lifecycle.binder_lookup_log_path << "\n";
+  output << "Binder Transaction Log: " << lifecycle.binder_transaction_log_path
+         << "\n";
   output << "Runner Log: " << lifecycle.runner_log_path << "\n";
   output << "Runner Report: " << lifecycle.runner_report_path << "\n";
   output << "Lifecycle Handoff Ready: "
          << (lifecycle.lifecycle_handoff_ready ? "yes" : "no") << "\n";
+  output << "Binder Service Manager Ready: "
+         << (lifecycle.binder_service_manager_ready ? "yes" : "no") << "\n";
   output << "Execution Engine Ready: "
          << (lifecycle.execution_engine_ready ? "yes" : "no") << "\n";
   output << "Current Activity State: " << lifecycle.current_activity_state
@@ -719,7 +783,7 @@ std::string RenderNativeLifecycleShimReport(
   }
   output << "Next Steps:\n";
   output << "  - Keep process state truthful and machine-readable for MCP clients and validation harnesses.\n";
-  output << "  - Attach DEX/class loading, resource lookup, and Binder-compatible services.\n";
+  output << "  - Attach DEX/class loading, resource lookup, and real Binder-compatible transport behind the local service-manager contract.\n";
   output << "  - Grow from bootstrap truth into real Android process execution.\n";
   return output.str();
 }
@@ -762,6 +826,12 @@ std::string RenderNativeProcessBootstrapJson(
          << EscapeJson(lifecycle.activity_state_path) << "\",\n"
          << "    \"service_registry_path\": \""
          << EscapeJson(lifecycle.service_registry_path) << "\",\n"
+         << "    \"binder_manager_metadata_path\": \""
+         << EscapeJson(lifecycle.binder_manager_metadata_path) << "\",\n"
+         << "    \"binder_lookup_log_path\": \""
+         << EscapeJson(lifecycle.binder_lookup_log_path) << "\",\n"
+         << "    \"binder_transaction_log_path\": \""
+         << EscapeJson(lifecycle.binder_transaction_log_path) << "\",\n"
          << "    \"runner_log_path\": \""
          << EscapeJson(lifecycle.runner_log_path) << "\",\n"
          << "    \"runner_report_path\": \""

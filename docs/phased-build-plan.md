@@ -1,6 +1,6 @@
 # Linuxoid — Phased Build Plan
 
-> Current state: scaffold `95/100` · execution `70/100`  
+> Current state: scaffold `96/100` · execution `74/100`  
 > Goal: Android apps on Linux. No Waydroid. No ADB. No emulator.
 
 ---
@@ -230,6 +230,8 @@ Duration: 4-6 weeks
 Goal: fake Binder IPC so apps can query essential services without a real Android runtime.  
 Outcome: PackageManager, ActivityManager, and peer services become callable.
 
+Current repo note as of `2026-05-17`: Linuxoid now has a verified local Binder-shaped service-manager fixture that writes deterministic service registration, lookup, and transaction artifacts for `package_manager` and `activity_manager`, and the lifecycle shim now points at those machine-readable artifacts instead of only a flat text registry. Real Binder transport, Parcel semantics, and cross-process service calls are still pending.
+
 ### Tasks
 
 #### P4.1 — Userspace Binder over Unix sockets
@@ -362,7 +364,7 @@ P0 (audit)
 
 - Native execution still is not implemented; `P1` fixes that.
 - `plan-native-spike` materializes assets but does not execute app code; `P1` and `P2` address that gap.
-- `bootstrap-native-spike` and `native-execute-stub` now own the local bootstrap and child-runner surface with deterministic cwd, Linuxoid-only environment variables, fd hygiene, and structured JNI reporting, but they remain pre-graphics, pre-DEX/ART, pre-Binder, pre-input, and pre-resource-loading until `P1.6` and beyond.
-- `native-lifecycle-shim` owns truthful pre-launch session handoff and process-state artifacts, but it remains a scaffold seam until `P2.4`.
+- `bootstrap-native-spike` and `native-execute-stub` now own the local bootstrap and child-runner surface with deterministic cwd, Linuxoid-only environment variables, fd hygiene, and structured JNI reporting, but they remain pre-bound-graphics, pre-DEX/ART, pre-real-Binder, and pre-full-resource-loading until later phases.
+- `native-lifecycle-shim` now owns truthful pre-launch session handoff, process-state artifacts, and Binder-shaped service-manager paths, but it remains a scaffold seam until the project has real transport, class loading, and activity rendering behind those contracts.
 - Waydroid and attached ADB remain regression oracles through `P0-P4`.
 - All new commands must remain MCP- and harness-compatible: machine-readable output, stable artifact paths, and composable verification.

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.37 - 2026-05-17
+
+- Add a minimal `native-service-manager-fixture` command and Binder-shaped local service-manager contract so Linuxoid now writes deterministic service registration, lookup, and transaction artifacts for `package_manager` and `activity_manager` without depending on Waydroid, ADB, or an emulator for the native direct-run path.
+- Thread the new Binder-shaped artifact set into the native lifecycle shim so session state now carries service-manager metadata, lookup logs, and transaction logs instead of relying only on a flat placeholder registry.
+- Refresh the Mermaid architecture, phased plan, verify examples, and status output so Linuxoid now reports the local Binder-shaped manager honestly while still marking real Binder transport, DEX/ART, bound Wayland-EGL rendering, IME/text composition, and richer resources as pending.
+
 ## v0.1.36 - 2026-05-17
 
 - Add a minimal `native-input-queue-fixture` contract so Linuxoid now proves focused native-surface ownership, deterministic pointer/key injection, and stable metadata plus JSONL event artifacts without depending on Waydroid, ADB, or an emulator for the native direct-run path.
