@@ -32,11 +32,14 @@ struct NativeArtRuntimeSmokeReport {
   bool runtime_probe_succeeded = false;
   bool pathclassloader_resolution_planned = false;
   bool pathclassloader_resolution_attempted = false;
+  bool runtime_class_resolution_succeeded = false;
   std::size_t resolved_target_count = 0;
   std::size_t missing_target_count = 0;
   int runtime_exit_code = -1;
   std::string art_runtime_probe;
   std::string runtime_probe_command;
+  std::string resolved_target_class_name;
+  std::string resolved_target_class_descriptor;
   std::string exit_reason;
   std::vector<std::string> target_class_names;
   std::vector<std::string> target_class_descriptors;

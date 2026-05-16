@@ -2,9 +2,11 @@
 
 #include "wfa/art_classloader_fixture.hpp"
 #include "wfa/art_class_resolution_fixture.hpp"
+#include "wfa/native_lifecycle.hpp"
 
 #include <sys/wait.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -88,6 +90,19 @@ bool IsSafeRuntimeProbe(const std::string& runtime_probe_path) {
   return runtime_path.filename() == "dalvikvm";
 }
 
+bool LooksLikeResolvedClassWithoutMain(const std::string& output) {
+  return output.find("main") != std::string::npos &&
+         (output.find("No static") != std::string::npos ||
+          output.find("main method") != std::string::npos ||
+          output.find("Main method") != std::string::npos);
+}
+
+bool LooksLikeMissingClassFailure(const std::string& output) {
+  return output.find("ClassNotFoundException") != std::string::npos ||
+         output.find("Didn't find class") != std::string::npos ||
+         output.find("Could not find class") != std::string::npos;
+}
+
 CommandCaptureResult RunCommandCapture(const std::string& command) {
   const std::string wrapped_command = command + " 2>&1";
   FILE* pipe = popen(wrapped_command.c_str(), "r");
@@ -137,11 +152,18 @@ std::string BuildInvocationPlanJson(const NativeArtRuntimeSmokeReport& report) {
          << (report.safe_runtime_probe_available ? "true" : "false") << ",\n"
          << "  \"runtime_probe_command\": \""
          << EscapeJson(report.runtime_probe_command) << "\",\n"
+         << "  \"resolved_target_class_name\": \""
+         << EscapeJson(report.resolved_target_class_name) << "\",\n"
+         << "  \"resolved_target_class_descriptor\": \""
+         << EscapeJson(report.resolved_target_class_descriptor) << "\",\n"
          << "  \"pathclassloader_resolution_planned\": "
          << (report.pathclassloader_resolution_planned ? "true" : "false")
          << ",\n"
          << "  \"pathclassloader_resolution_attempted\": "
          << (report.pathclassloader_resolution_attempted ? "true" : "false")
+         << ",\n"
+         << "  \"runtime_class_resolution_succeeded\": "
+         << (report.runtime_class_resolution_succeeded ? "true" : "false")
          << ",\n"
          << "  \"resolved_target_count\": " << report.resolved_target_count
          << ",\n"
@@ -164,6 +186,10 @@ std::string BuildRuntimeLog(const NativeArtRuntimeSmokeReport& report,
   output << "Install ID: " << report.install_id << "\n";
   output << "Runtime Probe: " << report.art_runtime_probe << "\n";
   output << "Runtime Probe Command: " << report.runtime_probe_command << "\n";
+  output << "Resolved Target Class Name: "
+         << report.resolved_target_class_name << "\n";
+  output << "Resolved Target Class Descriptor: "
+         << report.resolved_target_class_descriptor << "\n";
   output << "Offline Resolution Ready: "
          << (report.offline_resolution_ready ? "yes" : "no") << "\n";
   output << "Resolved Target Count: " << report.resolved_target_count << "\n";
@@ -178,6 +204,9 @@ std::string BuildRuntimeLog(const NativeArtRuntimeSmokeReport& report,
          << (report.pathclassloader_resolution_planned ? "yes" : "no") << "\n";
   output << "PathClassLoader Resolution Attempted: "
          << (report.pathclassloader_resolution_attempted ? "yes" : "no")
+         << "\n";
+  output << "Runtime Class Resolution Succeeded: "
+         << (report.runtime_class_resolution_succeeded ? "yes" : "no")
          << "\n";
   output << "Captured Output:\n" << command_result.output;
   return output.str();
@@ -195,6 +224,10 @@ std::string BuildRuntimeTraceJsonl(const NativeArtRuntimeSmokeReport& report,
          << (report.art_runtime_detected ? "true" : "false") << ", "
          << "\"safe_runtime_probe_available\": "
          << (report.safe_runtime_probe_available ? "true" : "false") << ", "
+         << "\"resolved_target_class_name\": \""
+         << EscapeJson(report.resolved_target_class_name) << "\", "
+         << "\"resolved_target_class_descriptor\": \""
+         << EscapeJson(report.resolved_target_class_descriptor) << "\", "
          << "\"target_class_descriptors\": "
          << RenderJsonArray(report.target_class_descriptors) << "}\n";
 
@@ -206,11 +239,16 @@ std::string BuildRuntimeTraceJsonl(const NativeArtRuntimeSmokeReport& report,
   } else {
     output << "{\"event_type\": \"runtime_probe_attempted\", "
            << "\"runtime_probe_command\": \""
-           << EscapeJson(report.runtime_probe_command) << "\"}\n";
+           << EscapeJson(report.runtime_probe_command) << "\", "
+           << "\"resolved_target_class_name\": \""
+           << EscapeJson(report.resolved_target_class_name) << "\"}\n";
     output << "{\"event_type\": \"runtime_probe_result\", "
            << "\"runtime_exit_code\": " << report.runtime_exit_code << ", "
            << "\"runtime_probe_succeeded\": "
            << (report.runtime_probe_succeeded ? "true" : "false") << ", "
+           << "\"runtime_class_resolution_succeeded\": "
+           << (report.runtime_class_resolution_succeeded ? "true" : "false")
+           << ", "
            << "\"captured_output\": \"" << EscapeJson(command_result.output)
            << "\"}\n";
   }
@@ -221,6 +259,9 @@ std::string BuildRuntimeTraceJsonl(const NativeArtRuntimeSmokeReport& report,
          << ", "
          << "\"pathclassloader_resolution_attempted\": "
          << (report.pathclassloader_resolution_attempted ? "true" : "false")
+         << ", "
+         << "\"runtime_class_resolution_succeeded\": "
+         << (report.runtime_class_resolution_succeeded ? "true" : "false")
          << ", "
          << "\"resolved_target_count\": " << report.resolved_target_count << ", "
          << "\"missing_target_count\": " << report.missing_target_count << ", "
@@ -238,6 +279,8 @@ NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
     const std::string& bootstrap_manifest_path) {
   const auto resolution_report =
       RunNativeArtClassResolutionFixture(bootstrap_manifest_path);
+  const NativeLifecycleShim lifecycle =
+      BuildNativeLifecycleShimFromManifest(bootstrap_manifest_path);
 
   NativeArtRuntimeSmokeReport report;
   report.package_name = resolution_report.package_name;
@@ -272,6 +315,21 @@ NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
   report.target_class_descriptors =
       resolution_report.target_class_descriptors;
   report.dex_entry_paths = resolution_report.dex_entry_paths;
+  if (!resolution_report.target_results.empty()) {
+    const auto resolved_it = std::find_if(
+        resolution_report.target_results.begin(),
+        resolution_report.target_results.end(),
+        [](const ResolvedClassTarget& target) { return target.resolved_in_dex; });
+    if (resolved_it != resolution_report.target_results.end()) {
+      report.resolved_target_class_name = resolved_it->class_name;
+      report.resolved_target_class_descriptor = resolved_it->class_descriptor;
+    } else {
+      report.resolved_target_class_name =
+          resolution_report.target_results.front().class_name;
+      report.resolved_target_class_descriptor =
+          resolution_report.target_results.front().class_descriptor;
+    }
+  }
 
   const auto classloader_report =
       RunNativeArtClassloaderFixture(bootstrap_manifest_path);
@@ -284,7 +342,13 @@ NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
       report.offline_resolution_ready;
   report.pathclassloader_resolution_attempted = false;
 
-  if (report.safe_runtime_probe_available) {
+  if (report.safe_runtime_probe_available &&
+      !report.resolved_target_class_name.empty()) {
+    report.runtime_probe_command =
+        QuoteForShell(report.art_runtime_probe) + " -cp " +
+        QuoteForShell(lifecycle.bootstrap.plan.bundle_apk_path) + " " +
+        QuoteForShell(report.resolved_target_class_name);
+  } else if (report.safe_runtime_probe_available) {
     report.runtime_probe_command =
         QuoteForShell(report.art_runtime_probe) + " -help";
   }
@@ -296,18 +360,30 @@ NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
     report.exit_reason = "classpath_plan_not_ready";
   } else if (!report.offline_resolution_ready) {
     report.exit_reason = "offline_class_resolution_incomplete";
+  } else if (report.resolved_target_class_name.empty()) {
+    report.exit_reason = "no_runtime_resolution_target";
   } else if (!report.art_runtime_detected) {
     report.exit_reason = "art_runtime_not_detected";
   } else if (!report.safe_runtime_probe_available) {
     report.exit_reason = "art_runtime_detected_without_safe_probe";
   } else {
     report.runtime_probe_attempted = true;
+    report.pathclassloader_resolution_attempted = true;
     capture = RunCommandCapture(report.runtime_probe_command);
     report.runtime_exit_code = capture.exit_code;
     report.runtime_probe_succeeded = capture.exit_code == 0;
-    report.exit_reason = report.runtime_probe_succeeded
-                             ? "art_runtime_probe_succeeded_class_resolution_pending"
-                             : "art_runtime_probe_failed";
+    report.runtime_class_resolution_succeeded =
+        report.runtime_probe_succeeded ||
+        LooksLikeResolvedClassWithoutMain(capture.output);
+    if (report.runtime_probe_succeeded) {
+      report.exit_reason = "art_runtime_class_resolution_command_succeeded";
+    } else if (report.runtime_class_resolution_succeeded) {
+      report.exit_reason = "art_runtime_class_resolved_no_main";
+    } else if (LooksLikeMissingClassFailure(capture.output)) {
+      report.exit_reason = "art_runtime_class_not_found";
+    } else {
+      report.exit_reason = "art_runtime_probe_failed";
+    }
   }
 
   WriteTextFile(report.invocation_log_path, BuildRuntimeLog(report, capture));
@@ -372,6 +448,9 @@ std::string RenderNativeArtRuntimeSmokeFixtureJson(
          << "  \"pathclassloader_resolution_attempted\": "
          << (report.pathclassloader_resolution_attempted ? "true" : "false")
          << ",\n"
+         << "  \"runtime_class_resolution_succeeded\": "
+         << (report.runtime_class_resolution_succeeded ? "true" : "false")
+         << ",\n"
          << "  \"resolved_target_count\": " << report.resolved_target_count
          << ",\n"
          << "  \"missing_target_count\": " << report.missing_target_count
@@ -381,6 +460,10 @@ std::string RenderNativeArtRuntimeSmokeFixtureJson(
          << "\",\n"
          << "  \"runtime_probe_command\": \""
          << EscapeJson(report.runtime_probe_command) << "\",\n"
+         << "  \"resolved_target_class_name\": \""
+         << EscapeJson(report.resolved_target_class_name) << "\",\n"
+         << "  \"resolved_target_class_descriptor\": \""
+         << EscapeJson(report.resolved_target_class_descriptor) << "\",\n"
          << "  \"target_class_names\": "
          << RenderJsonArray(report.target_class_names) << ",\n"
          << "  \"target_class_descriptors\": "

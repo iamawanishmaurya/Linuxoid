@@ -2190,11 +2190,15 @@ void TestNativeArtRuntimeSmokeHandlesRuntimeAvailabilityHonestly() {
   if (!report.art_runtime_detected) {
     Expect(!report.runtime_probe_attempted,
            "expected no runtime probe when ART is absent");
+    Expect(!report.pathclassloader_resolution_attempted,
+           "expected no class resolution attempt when ART is absent");
     Expect(report.exit_reason == "art_runtime_not_detected",
            "expected absent-art exit reason");
   } else if (!report.safe_runtime_probe_available) {
     Expect(!report.runtime_probe_attempted,
            "expected no unsafe runtime probe attempt");
+    Expect(!report.pathclassloader_resolution_attempted,
+           "expected no class resolution attempt without safe probe");
     Expect(report.exit_reason ==
                "art_runtime_detected_without_safe_probe",
            "expected no-safe-probe exit reason");
@@ -2203,6 +2207,33 @@ void TestNativeArtRuntimeSmokeHandlesRuntimeAvailabilityHonestly() {
            "expected runtime probe attempt when safe ART probe exists");
     Expect(report.runtime_exit_code >= 0,
            "expected concrete runtime probe exit code");
+    Expect(report.pathclassloader_resolution_attempted,
+           "expected class resolution attempt when safe ART probe exists");
+    Expect(!report.resolved_target_class_name.empty(),
+           "expected deterministic target class name for runtime attempt");
+  }
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtRuntimeSmokeRecordsClassResolutionIntent() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-runtime-class-resolution-intent", true, true);
+
+  const auto report = wfa::RunNativeArtRuntimeSmokeFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.pathclassloader_resolution_planned,
+         "expected runtime smoke to keep class resolution planned");
+  Expect(!report.resolved_target_class_name.empty(),
+         "expected resolved target class name");
+  Expect(!report.resolved_target_class_descriptor.empty(),
+         "expected resolved target class descriptor");
+  if (report.safe_runtime_probe_available) {
+    Expect(report.runtime_probe_command.find(
+               report.resolved_target_class_name) != std::string::npos,
+           "expected runtime probe command to target resolved class");
   }
 
   fs::remove_all(fixture.root);
@@ -2226,6 +2257,9 @@ void TestNativeArtRuntimeSmokeCommandWritesStableJson() {
   Expect(output.find("\"pathclassloader_resolution_planned\": true") !=
              std::string::npos,
          "expected pathclassloader plan flag in runtime smoke json");
+  Expect(output.find("\"resolved_target_class_name\": ") !=
+             std::string::npos,
+         "expected resolved target class name in runtime smoke json");
 
   fs::remove_all(fixture.root);
 }

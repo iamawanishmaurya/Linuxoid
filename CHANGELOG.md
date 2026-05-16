@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.46 - 2026-05-17
+
+- Upgrade `native-art-runtime-smoke` from a generic ART availability probe into a real host-side class-resolution attempt seam: Linuxoid now selects a deterministic manifest-derived target class and prepares or runs `dalvikvm -cp <apk> <class>` when a safe local ART runtime exists.
+- Add regression coverage that proves the runtime-smoke seam records a deterministic target class, attempts host-side class resolution only when safe, and keeps fallback behavior honest when ART is absent.
+- Refresh the README, phased plan, self-healing runtime note, changelog, and status output so Linuxoid now reports the first real host-side ART class-resolution attempt honestly while still marking full Android app bootstrap and execution as pending.
+
 ## v0.1.45 - 2026-05-17
 
 - Clarify in the README, phased plan, and self-healing runtime note what Linuxoid self-healing means today: deterministic diagnosis, bounded recovery planning, replayable trace artifacts, and refusal of false success.

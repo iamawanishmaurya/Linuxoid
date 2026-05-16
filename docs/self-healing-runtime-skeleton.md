@@ -36,6 +36,7 @@ What that means **today**:
   - `art/runtime-smoke-invocation.log`
   - `art/runtime-smoke-trace.jsonl`
   - `art/runtime-smoke-result.json`
+  - a deterministic manifest-derived class target for the first real host-side class-resolution attempt when `dalvikvm` is safely available
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -50,8 +51,8 @@ What it **does not** mean yet:
 
 - Linuxoid does **not** yet self-heal by automatically making the app run after a failure.
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
-- Linuxoid does **not** yet have ART or a real `PathClassLoader`.
-- Linuxoid does **not** yet execute application classes through a real host-side ART invocation, even though it can now resolve manifest-target descriptors offline from real DEX contents.
+- Linuxoid does **not** yet own a full embedded ART runtime or a real in-process `PathClassLoader`.
+- Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents and prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
@@ -71,7 +72,7 @@ Current meaning of “self-healing” in Linuxoid:
 
 The self-healing layer is no longer the main blocker. The remaining blockers are execution blockers:
 
-1. A real host-side ART invocation that can move beyond planning/smoke into first class resolution or app bootstrap.
+1. A real host-side ART invocation that can move beyond the first class-resolution attempt into app bootstrap.
 2. Real Android framework/service behavior behind the Binder-shaped local seam.
 3. A bound Wayland + EGL + `ANativeWindow` path that can carry actual Android drawing.
 4. Input that goes beyond deterministic pointer/key fixtures into real IME/text composition.
@@ -101,4 +102,4 @@ Current deterministic scenarios:
 
 Next gate after this skeleton:
 
-- use the existing offline class-resolution plus host-ART smoke seams to drive the first real `PathClassLoader` or equivalent class-resolution attempt for simple APKs.
+- use the existing offline class-resolution plus host-ART smoke seams to drive the first real application or activity bootstrap step after class resolution, not just the first class-target lookup.

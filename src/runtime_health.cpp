@@ -316,7 +316,15 @@ RuntimeHealthRecord BuildDexRecord(const RuntimeObservationContext& context) {
           std::to_string(context.art_resolution.missing_target_count) +
       "; art_runtime_detected=" +
           std::string(context.art_runtime.art_runtime_detected ? "true"
-                                                               : "false"));
+                                                               : "false") +
+      "; runtime_class_resolution_attempted=" +
+          std::string(context.art_runtime.pathclassloader_resolution_attempted
+                          ? "true"
+                          : "false") +
+      "; runtime_class_resolution_succeeded=" +
+          std::string(context.art_runtime.runtime_class_resolution_succeeded
+                          ? "true"
+                          : "false"));
 }
 
 RuntimeHealthReplayReport BuildReplayReportFromEvents(

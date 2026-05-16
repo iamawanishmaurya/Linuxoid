@@ -1272,3 +1272,28 @@
   Action: Updated the README, phased build plan, and self-healing runtime note to explain what self-healing means today, what it does not mean yet, and which blockers still stand before full native Android app execution.
   Result: The repo now describes self-healing as bounded diagnosis, replay, and recovery planning rather than full autonomous app execution, while explicitly listing the remaining ART, Binder, graphics, input, and resource gaps.
   Timestamp: 2026-05-17T23:02:00+05:30
+
+- Step: ART runtime class-resolution red test
+  Action: Added failing expectations so the runtime-smoke seam must expose a deterministic target class and attempt real host-side ART class resolution when a safe `dalvikvm` surface exists.
+  Result: The next gate is now pinned to a concrete execution-attempt contract instead of a generic runtime probe.
+  Timestamp: 2026-05-17T23:14:00+05:30
+
+- Step: ART runtime class-resolution missing-surface failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the new runtime-smoke expectations.
+  Result: The build failed because `NativeArtRuntimeSmokeReport` does not yet expose deterministic resolved-target fields, confirming that the host-side class-resolution attempt surface is still missing.
+  Timestamp: 2026-05-17T23:16:00+05:30
+
+- Step: ART runtime smoke compile-fix capture
+  Action: Rebuilt after the class-resolution attempt changes and recorded the first compiler failure.
+  Result: The build failed because `src/art_runtime_smoke.cpp` uses `std::find_if` without including `<algorithm>`, so the next change is a minimal header fix.
+  Timestamp: 2026-05-17T23:19:00+05:30
+
+- Step: ART runtime class-resolution implementation
+  Action: Extended the ART runtime smoke seam so it now selects a deterministic manifest-derived target class, exposes that target in structured artifacts, and attempts a real `dalvikvm -cp <apk> <class>` class-resolution command when the local ART probe is safe.
+  Result: Linuxoid now has a genuine host-side class-resolution attempt seam instead of only a generic ART availability probe, while still reporting runtime absence honestly on this host.
+  Timestamp: 2026-05-17T23:31:00+05:30
+
+- Step: ART runtime class-resolution gate verification
+  Action: Rebuilt Linuxoid, reran the full test suite, verified `native-art-runtime-smoke` against the staged Calculator bootstrap, and refreshed the status/docs/version metadata for the new runtime-smoke behavior.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the runtime-smoke JSON now exposes `resolved_target_class_name` and `resolved_target_class_descriptor`, and the host without ART still reports an honest `art_runtime_not_detected` fallback.
+  Timestamp: 2026-05-17T23:34:00+05:30
