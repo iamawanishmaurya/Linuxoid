@@ -1019,3 +1019,18 @@
   Action: Updated the README Mermaid graph, phased plan, changelog, and status output to reflect the verified headless first-pixel fixture and the new native execution readiness value.
   Result: Linuxoid now reports `execution 42/100`, documents the `native-first-pixel-fixture` proof honestly, and keeps real Wayland/EGL integration clearly marked as the next rendering gate.
   Timestamp: 2026-05-17T00:02:31+05:30
+
+- Step: P2.2 native-window callback tests red
+  Action: Added failing tests for a headless native-activity callback fixture that should record deterministic `window_created`, `window_changed`, and `window_destroyed` lifecycle events through Linuxoid-owned artifacts.
+  Result: `cmake --build build` now fails at link time because the new callback fixture functions are declared in the surface header but not implemented or linked yet, which gives a clean first red bar for the callback-plumbing gate.
+  Timestamp: 2026-05-17T00:11:44+05:30
+
+- Step: P2.2 native-window callback fixture green
+  Action: Added a minimal `ANativeActivityCallbacks` contract, wired the headless native-window surface into created/changed/destroyed dispatch helpers, added a deterministic callback journal artifact, and re-ran the local build plus test gate.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` now passes with a verified `native-window-callback-fixture` JSON report and `native-window-callbacks.jsonl` artifact, while Linuxoid still marks real Wayland/EGL surfaces, compositor callbacks, DEX/ART, Binder, input, and full resources as pending.
+  Timestamp: 2026-05-17T00:17:09+05:30
+
+- Step: P2.2 status and README sync
+  Action: Updated the README Mermaid graph, phased plan, changelog, verify examples, and status output to reflect the verified native-window callback fixture and the new native execution readiness value.
+  Result: Linuxoid now reports `execution 46/100`, documents the callback journal seam honestly, and keeps real Wayland/EGL surface wiring plus compositor-backed callbacks clearly marked as the next graphics gate.
+  Timestamp: 2026-05-17T00:21:44+05:30

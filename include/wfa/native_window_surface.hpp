@@ -40,16 +40,41 @@ struct FirstPixelFixtureReport {
   std::string exit_reason;
 };
 
+struct NativeWindowCallbackEvent {
+  std::string event_name;
+  bool window_present = false;
+  NativeWindowMetadata metadata;
+};
+
+struct NativeWindowCallbackFixtureReport {
+  NativeWindowSurfaceState surface;
+  std::string callback_journal_path;
+  std::vector<NativeWindowCallbackEvent> events;
+  bool surface_ready = false;
+  bool callbacks_ready = false;
+  std::string exit_reason;
+};
+
 ANativeWindow* CreateHeadlessNativeWindowSurface(
     const NativeWindowMetadata& metadata, const std::string& session_root);
 NativeWindowMetadata InspectNativeWindow(const ANativeWindow* window);
 bool NativeWindowLifecycleReady(const ANativeWindow* window);
 void DestroyHeadlessNativeWindowSurface(ANativeWindow* window);
+void DispatchNativeWindowCreated(ANativeActivity* activity,
+                                 ANativeWindow* window);
+void DispatchNativeWindowChanged(ANativeActivity* activity,
+                                 ANativeWindow* window);
+void DispatchNativeWindowDestroyed(ANativeActivity* activity,
+                                   ANativeWindow* window);
 FirstPixelFixtureReport RunHeadlessFirstPixelFixture(
     const std::string& session_root, const NativeWindowMetadata& metadata,
     std::uint32_t first_pixel_value);
 std::string RenderFirstPixelFixtureJson(
     const FirstPixelFixtureReport& report);
+NativeWindowCallbackFixtureReport RunHeadlessNativeWindowCallbackFixture(
+    const std::string& session_root, const NativeWindowMetadata& metadata);
+std::string RenderNativeWindowCallbackFixtureJson(
+    const NativeWindowCallbackFixtureReport& report);
 
 }  // namespace wfa
 

@@ -16,6 +16,11 @@ struct ANativeWindowStub {
   std::vector<std::uint32_t> pixels;
 };
 
+struct CallbackJournalState {
+  std::string journal_path;
+  std::vector<NativeWindowCallbackEvent>* events = nullptr;
+};
+
 namespace {
 
 constexpr const char* kHeadlessBackendName = "wayland-egl-headless-fixture";
@@ -63,12 +68,74 @@ void WriteTextFile(const fs::path& path, const std::string& contents) {
   output << contents;
 }
 
+std::string RenderCallbackEventJson(const NativeWindowCallbackEvent& event) {
+  std::ostringstream output;
+  output << "{"
+         << "\"event_name\": \"" << EscapeJson(event.event_name) << "\", "
+         << "\"window_present\": "
+         << (event.window_present ? "true" : "false") << ", "
+         << "\"width\": " << event.metadata.width << ", "
+         << "\"height\": " << event.metadata.height << ", "
+         << "\"format\": " << event.metadata.format << ", "
+         << "\"stride\": " << event.metadata.stride
+         << "}";
+  return output.str();
+}
+
+void WriteCallbackJournal(
+    const std::string& journal_path,
+    const std::vector<NativeWindowCallbackEvent>& events) {
+  std::ostringstream output;
+  for (const auto& event : events) {
+    output << RenderCallbackEventJson(event) << "\n";
+  }
+  WriteTextFile(journal_path, output.str());
+}
+
 ANativeWindowStub* AsStub(ANativeWindow* window) {
   return reinterpret_cast<ANativeWindowStub*>(window);
 }
 
 const ANativeWindowStub* AsStub(const ANativeWindow* window) {
   return reinterpret_cast<const ANativeWindowStub*>(window);
+}
+
+NativeWindowCallbackEvent BuildCallbackEvent(const std::string& event_name,
+                                             ANativeWindow* window) {
+  NativeWindowCallbackEvent event;
+  event.event_name = event_name;
+  event.window_present = window != nullptr;
+  if (window != nullptr) {
+    event.metadata = InspectNativeWindow(window);
+  }
+  return event;
+}
+
+void RecordCallbackEvent(ANativeActivity* activity, ANativeWindow* window,
+                         const std::string& event_name) {
+  if (activity == nullptr || activity->instance == nullptr) {
+    return;
+  }
+
+  auto* journal = reinterpret_cast<CallbackJournalState*>(activity->instance);
+  if (journal->events == nullptr) {
+    return;
+  }
+
+  journal->events->push_back(BuildCallbackEvent(event_name, window));
+  WriteCallbackJournal(journal->journal_path, *journal->events);
+}
+
+void OnNativeWindowCreated(ANativeActivity* activity, ANativeWindow* window) {
+  RecordCallbackEvent(activity, window, "window_created");
+}
+
+void OnNativeWindowChanged(ANativeActivity* activity, ANativeWindow* window) {
+  RecordCallbackEvent(activity, window, "window_changed");
+}
+
+void OnNativeWindowDestroyed(ANativeActivity* activity, ANativeWindow* window) {
+  RecordCallbackEvent(activity, window, "window_destroyed");
 }
 
 }  // namespace
@@ -115,6 +182,38 @@ bool NativeWindowLifecycleReady(const ANativeWindow* window) {
 
 void DestroyHeadlessNativeWindowSurface(ANativeWindow* window) {
   delete AsStub(window);
+}
+
+void DispatchNativeWindowCreated(ANativeActivity* activity,
+                                 ANativeWindow* window) {
+  if (activity == nullptr || activity->callbacks == nullptr ||
+      activity->callbacks->onNativeWindowCreated == nullptr) {
+    return;
+  }
+  activity->callbacks->onNativeWindowCreated(activity, window);
+}
+
+void DispatchNativeWindowChanged(ANativeActivity* activity,
+                                 ANativeWindow* window) {
+  if (activity == nullptr || activity->callbacks == nullptr ||
+      activity->callbacks->onNativeWindowResized == nullptr) {
+    return;
+  }
+  activity->callbacks->onNativeWindowResized(activity, window);
+}
+
+void DispatchNativeWindowDestroyed(ANativeActivity* activity,
+                                   ANativeWindow* window) {
+  if (activity != nullptr && activity->callbacks != nullptr &&
+      activity->callbacks->onNativeWindowDestroyed != nullptr) {
+    activity->callbacks->onNativeWindowDestroyed(activity, window);
+  }
+  if (window != nullptr) {
+    AsStub(window)->state.activity_window_attached = false;
+  }
+  if (activity != nullptr && activity->window == window) {
+    activity->window = nullptr;
+  }
 }
 
 FirstPixelFixtureReport RunHeadlessFirstPixelFixture(
@@ -194,6 +293,89 @@ std::string RenderFirstPixelFixtureJson(
          << (report.surface.first_pixel_observed ? "true" : "false") << ",\n"
          << "  \"first_pixel_value\": \""
          << HexPixel(report.surface.first_pixel_value) << "\"\n"
+         << "}\n";
+  return output.str();
+}
+
+NativeWindowCallbackFixtureReport RunHeadlessNativeWindowCallbackFixture(
+    const std::string& session_root, const NativeWindowMetadata& metadata) {
+  NativeWindowCallbackFixtureReport report;
+  report.callback_journal_path =
+      (fs::path(session_root) / "native-window-callbacks.jsonl").string();
+
+  ANativeWindow* window =
+      CreateHeadlessNativeWindowSurface(metadata, session_root);
+  report.surface = AsStub(window)->state;
+  report.surface_ready = NativeWindowLifecycleReady(window);
+  if (!report.surface_ready) {
+    report.exit_reason = report.surface.failure_reason.empty()
+                             ? "surface_not_ready"
+                             : report.surface.failure_reason;
+    DestroyHeadlessNativeWindowSurface(window);
+    return report;
+  }
+
+  std::vector<NativeWindowCallbackEvent> events;
+  CallbackJournalState journal{
+      .journal_path = report.callback_journal_path,
+      .events = &events,
+  };
+  ANativeActivityCallbacks callbacks{
+      .onNativeWindowCreated = OnNativeWindowCreated,
+      .onNativeWindowResized = OnNativeWindowChanged,
+      .onNativeWindowDestroyed = OnNativeWindowDestroyed,
+  };
+  ANativeActivity activity{};
+  activity.instance = &journal;
+  activity.callbacks = &callbacks;
+  activity.window = window;
+
+  auto* stub = AsStub(window);
+  stub->state.activity_window_attached = true;
+
+  DispatchNativeWindowCreated(&activity, window);
+  DispatchNativeWindowChanged(&activity, window);
+  DispatchNativeWindowDestroyed(&activity, window);
+
+  report.surface = stub->state;
+  report.events = events;
+  report.callbacks_ready = report.events.size() == 3 &&
+                           report.events[0].event_name == "window_created" &&
+                           report.events[1].event_name == "window_changed" &&
+                           report.events[2].event_name == "window_destroyed";
+  report.exit_reason = report.callbacks_ready
+                           ? "native_window_callbacks_recorded"
+                           : "callback_dispatch_incomplete";
+
+  DestroyHeadlessNativeWindowSurface(window);
+  return report;
+}
+
+std::string RenderNativeWindowCallbackFixtureJson(
+    const NativeWindowCallbackFixtureReport& report) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"surface_ready\": "
+         << (report.surface_ready ? "true" : "false") << ",\n"
+         << "  \"callbacks_ready\": "
+         << (report.callbacks_ready ? "true" : "false") << ",\n"
+         << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
+         << "\",\n"
+         << "  \"callback_journal_path\": \""
+         << EscapeJson(report.callback_journal_path) << "\",\n"
+         << "  \"backend_name\": \""
+         << EscapeJson(report.surface.backend_name) << "\",\n"
+         << "  \"activity_window_attached\": "
+         << (report.surface.activity_window_attached ? "true" : "false")
+         << ",\n"
+         << "  \"events\": [";
+  for (std::size_t index = 0; index < report.events.size(); ++index) {
+    if (index != 0) {
+      output << ", ";
+    }
+    output << RenderCallbackEventJson(report.events[index]);
+  }
+  output << "]\n"
          << "}\n";
   return output.str();
 }

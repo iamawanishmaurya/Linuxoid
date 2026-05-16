@@ -1025,6 +1025,56 @@ void TestHeadlessFirstPixelFixtureWritesDeterministicMarker() {
   fs::remove_all(root);
 }
 
+void TestHeadlessNativeWindowCallbackFixtureWritesJournal() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-native-window-callback-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunHeadlessNativeWindowCallbackFixture(
+      root.string(),
+      {.width = 12,
+       .height = 9,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 12});
+
+  Expect(report.surface_ready, "expected callback-fixture surface readiness");
+  Expect(report.callbacks_ready,
+         "expected callback fixture to dispatch lifecycle callbacks");
+  Expect(report.events.size() == 3,
+         "expected created, changed, and destroyed callbacks");
+  Expect(report.events[0].event_name == "window_created",
+         "expected created callback first");
+  Expect(report.events[1].event_name == "window_changed",
+         "expected changed callback second");
+  Expect(report.events[2].event_name == "window_destroyed",
+         "expected destroyed callback third");
+  Expect(report.events[0].window_present,
+         "expected created callback to receive a window");
+  Expect(report.events[1].metadata.width == 12,
+         "expected changed callback width metadata");
+  Expect(fs::exists(report.callback_journal_path),
+         "expected callback journal artifact");
+
+  std::ifstream journal_input(report.callback_journal_path);
+  std::string journal((std::istreambuf_iterator<char>(journal_input)),
+                      std::istreambuf_iterator<char>());
+  Expect(journal.find("\"event_name\": \"window_created\"") !=
+             std::string::npos,
+         "expected callback journal created event");
+  Expect(journal.find("\"event_name\": \"window_destroyed\"") !=
+             std::string::npos,
+         "expected callback journal destroyed event");
+
+  const auto rendered = wfa::RenderNativeWindowCallbackFixtureJson(report);
+  Expect(rendered.find("\"callbacks_ready\": true") != std::string::npos,
+         "expected callbacks-ready json flag");
+  Expect(rendered.find("\"callback_journal_path\":") != std::string::npos,
+         "expected callback journal path in fixture json");
+
+  fs::remove_all(root);
+}
+
 void TestNativeLifecycleShimWritesSessionArtifacts() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "linuxoid-native-lifecycle-test";
@@ -3090,6 +3140,7 @@ int main() {
     TestAssetManagerReadsFixtureAsset();
     TestHeadlessNativeWindowSurfaceTracksMetadataAndLifecycle();
     TestHeadlessFirstPixelFixtureWritesDeterministicMarker();
+    TestHeadlessNativeWindowCallbackFixtureWritesJournal();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

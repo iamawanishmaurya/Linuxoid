@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.32 - 2026-05-17
+
+- Add a minimal `ANativeActivityCallbacks` contract and a `native-window-callback-fixture` command so Linuxoid can dispatch deterministic `window_created`, `window_changed`, and `window_destroyed` events against the existing headless native-window surface.
+- Write a stable `native-window-callbacks.jsonl` artifact and structured callback JSON so the future direct native graphics path now has a Linuxoid-owned lifecycle journal instead of a placeholder callback story.
+- Refresh the tests, Mermaid architecture, phased plan, and status output so Linuxoid now reports verified callback plumbing honestly while still marking real Wayland/EGL surfaces, compositor-backed callbacks, DEX/ART, Binder, input, and full resources as pending.
+
 ## v0.1.31 - 2026-05-16
 
 - Add the first `P2.1` host-side `ANativeWindow`-shaped surface seam with explicit width, height, format, and stride metadata plus lifecycle checks for a future direct native runner.

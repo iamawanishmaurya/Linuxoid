@@ -5,6 +5,7 @@
 
 namespace wfa {
 
+struct ANativeActivity;
 struct JNIEnvStub;
 struct JavaVMStub;
 struct AAssetManagerStub;
@@ -17,6 +18,12 @@ using AAssetManager = AAssetManagerStub;
 using ALooper = ALooperStub;
 using ANativeWindow = ANativeWindowStub;
 
+struct ANativeActivityCallbacks {
+  void (*onNativeWindowCreated)(ANativeActivity*, ANativeWindow*) = nullptr;
+  void (*onNativeWindowResized)(ANativeActivity*, ANativeWindow*) = nullptr;
+  void (*onNativeWindowDestroyed)(ANativeActivity*, ANativeWindow*) = nullptr;
+};
+
 struct ANativeActivity {
   JavaVM* vm = nullptr;
   JNIEnv* env = nullptr;
@@ -26,7 +33,7 @@ struct ANativeActivity {
   int sdkVersion = 0;
   AAssetManager* assetManager = nullptr;
   void* instance = nullptr;
-  void* callbacks = nullptr;
+  ANativeActivityCallbacks* callbacks = nullptr;
   ANativeWindow* window = nullptr;
 };
 
