@@ -754,3 +754,8 @@
   Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, reran `./build/compatctl foundation`, reran `./build/compatctl bootstrap-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, reran `./build/compatctl native-lifecycle-shim /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json`, inspected the generated session manifest plus service registry, and reran the generated local entrypoint script.
   Result: The build and tests are green, status still reports `95/100`, Linuxoid now owns a verified lifecycle/session handoff for Calculator, and the local path remains honest about the missing execution engine.
   Timestamp: 2026-05-16T16:06:03+05:30
+
+- Step: Native lifecycle shim release preparation
+  Action: Staged the lifecycle and service shim slice, confirmed the staged release set with `git status`, and created the feature commit `feat: add native lifecycle shim`.
+  Result: Linuxoid now has a clean release candidate commit for the lifecycle/service shim slice, ready to be tagged and pushed as `v0.1.23`.
+  Timestamp: 2026-05-16T16:06:53+05:30
