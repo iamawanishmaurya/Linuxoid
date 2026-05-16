@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.20 - 2026-05-16
+
+- Add a README Mermaid maintenance rule so the current and target Linuxoid architecture graphs are updated in the same commit as meaningful architecture changes.
+- Keep the GitHub documentation honest by making diagram upkeep an explicit project workflow requirement instead of an informal convention.
+
 ## v0.1.19 - 2026-05-16
 
 - Add the first `plan-native-spike` flow so Linuxoid can stage a local APK, assess whether it fits the first native app slice, and write a Linuxoid-owned bundle layout plus bootstrap spec for future no-runtime execution.

@@ -65,6 +65,12 @@ flowchart TB
 
 This diagram is the current working architecture and should stay in sync with the verified Linuxoid flow on GitHub.
 
+## Mermaid Update Rule
+
+- Update the **Current Working Architecture** Mermaid graph in the same commit as every meaningful change to runtime flow, backend contracts, native execution slices, or verification surfaces.
+- Update the **Target Architecture** Mermaid graph whenever the long-term no-runtime design changes.
+- Keep the README diagrams GitHub-ready so the current state of Linuxoid is visible without opening source files first.
+
 ## Target Architecture
 
 ```mermaid

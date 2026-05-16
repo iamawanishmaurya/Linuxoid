@@ -664,3 +664,13 @@
   Action: Staged the native spike planner slice, confirmed the full staged set with `git status`, and created the feature commit `feat: add native spike planner`.
   Result: Linuxoid now has a clean release candidate commit for the native planner slice, ready to be tagged and pushed as `v0.1.19`.
   Timestamp: 2026-05-16T15:45:20+05:30
+
+- Step: Mermaid maintenance rule
+  Action: Added an explicit README rule that the GitHub Mermaid architecture graphs must be updated in the same commit as every meaningful Linuxoid architecture change.
+  Result: The repository now makes Mermaid upkeep part of the documented workflow instead of relying on memory.
+  Timestamp: 2026-05-16T15:46:43+05:30
+
+- Step: Mermaid rule verification
+  Action: Rebuilt Linuxoid with `cmake --build build`, re-read the README Mermaid section, and reviewed the resulting diff before release.
+  Result: The new Mermaid maintenance rule is visible in the GitHub-facing README, and the documentation-only release leaves the build green.
+  Timestamp: 2026-05-16T15:47:12+05:30
