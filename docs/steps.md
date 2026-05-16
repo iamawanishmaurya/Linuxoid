@@ -429,3 +429,8 @@
   Action: Updated the Linuxoid status model, README, changelog, and release version metadata to reflect the new APK-backed verifier and the live keyboard proof, then rebuilt the project and reran the tests plus `compatctl status`.
   Result: The binary now reports `89/100` overall phase loading with `P5` at `72/100`, `P6` at `84/100`, and the repo-facing documentation matches the verified state.
   Timestamp: 2026-05-16T12:47:55+05:30
+
+- Step: Linuxoid v0.1.12 release and publish
+  Action: Staged the APK-backed host verifier slice, committed it as `feat: add apk-backed host launch verifier`, tagged `v0.1.12`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
+  Result: Linuxoid now publishes a verified local-APK Linux launch verifier on GitHub as `v0.1.12`.
+  Timestamp: 2026-05-16T12:52:46+05:30
