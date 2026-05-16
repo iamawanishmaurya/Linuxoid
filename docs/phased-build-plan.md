@@ -359,7 +359,7 @@ P0 (audit)
 
 - Native execution still is not implemented; `P1` fixes that.
 - `plan-native-spike` materializes assets but does not execute app code; `P1` and `P2` address that gap.
-- `bootstrap-native-spike` plus `native-execute-stub` currently own the local surface but stay stubbed until `P1.6`.
-- `native-lifecycle-shim` owns lifecycle/session handoff but remains a scaffold seam until `P2.4`.
+- `bootstrap-native-spike`, `native-process-bootstrap`, and `native-execute-stub` now own the local bootstrap and child-runner surface, but they remain pre-graphics and pre-DEX until `P1.6` and beyond.
+- `native-lifecycle-shim` owns truthful pre-launch session handoff and process-state artifacts, but it remains a scaffold seam until `P2.4`.
 - Waydroid and attached ADB remain regression oracles through `P0-P4`.
 - All new commands must remain MCP- and harness-compatible: machine-readable output, stable artifact paths, and composable verification.

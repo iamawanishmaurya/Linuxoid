@@ -31,6 +31,7 @@ void PrintUsage() {
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl native-lifecycle-shim <bootstrap-manifest>\n"
+      << "  compatctl native-process-bootstrap <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <package> <launcher-component> <bundle-apk> <sandbox-root> <dex-cache-root> <resource-root> <library-root> <bootstrap-manifest>\n"
       << "  compatctl discover-runtime <backend>\n"
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
@@ -226,6 +227,18 @@ int main(int argc, char** argv) {
           wfa::BuildNativeLifecycleShimFromManifest(argv[2]);
       std::cout << wfa::RenderNativeLifecycleShimReport(lifecycle);
       return lifecycle.execution_engine_ready ? EXIT_SUCCESS : 2;
+    }
+
+    if (command == "native-process-bootstrap") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto lifecycle =
+          wfa::RunNativeProcessBootstrapFromManifest(argv[2]);
+      std::cout << wfa::RenderNativeLifecycleShimReport(lifecycle);
+      return lifecycle.exit_code == -1 ? EXIT_FAILURE : lifecycle.exit_code;
     }
 
     if (command == "native-execute-stub") {

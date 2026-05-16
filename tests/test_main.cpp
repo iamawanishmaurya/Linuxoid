@@ -706,13 +706,10 @@ void TestNativeActivityBootstrapWritesArtifacts() {
   std::ifstream entrypoint_input(bootstrap.entrypoint_script_path);
   std::string entrypoint((std::istreambuf_iterator<char>(entrypoint_input)),
                          std::istreambuf_iterator<char>());
-  Expect(entrypoint.find("native-execute-stub") != std::string::npos,
-         "expected native execute stub in entrypoint script");
+  Expect(entrypoint.find("native-process-bootstrap") != std::string::npos,
+         "expected native process bootstrap in entrypoint script");
   Expect(entrypoint.find(plan.assessment.package_name) != std::string::npos,
          "expected package name in entrypoint script");
-  Expect(entrypoint.find(plan.assessment.launcher_component) !=
-             std::string::npos,
-         "expected launcher component in entrypoint script");
   Expect(entrypoint.find(bootstrap.bootstrap_manifest_path) !=
              std::string::npos,
          "expected bootstrap manifest path in entrypoint script");
@@ -798,8 +795,8 @@ void TestNativeLifecycleShimWritesSessionArtifacts() {
          "expected lifecycle shim handoff to be ready");
   Expect(!lifecycle.execution_engine_ready,
          "expected lifecycle execution engine to remain pending");
-  Expect(lifecycle.current_activity_state == "RESUMED",
-         "expected lifecycle shim to reach resumed state");
+  Expect(lifecycle.current_activity_state == "NOT_CREATED",
+         "expected lifecycle shim to remain pre-launch");
   Expect(fs::exists(lifecycle.session_manifest_path),
          "expected session manifest");
   Expect(fs::exists(lifecycle.activity_state_path),
@@ -812,8 +809,14 @@ void TestNativeLifecycleShimWritesSessionArtifacts() {
   std::ifstream state_input(lifecycle.activity_state_path);
   std::string state((std::istreambuf_iterator<char>(state_input)),
                     std::istreambuf_iterator<char>());
-  Expect(state.find("current_state=RESUMED") != std::string::npos,
-         "expected resumed activity state in lifecycle file");
+  Expect(state.find("created=false") != std::string::npos,
+         "expected pre-launch created state in lifecycle file");
+  Expect(state.find("started=false") != std::string::npos,
+         "expected pre-launch started state in lifecycle file");
+  Expect(state.find("resumed=false") != std::string::npos,
+         "expected pre-launch resumed state in lifecycle file");
+  Expect(state.find("current_state=NOT_CREATED") != std::string::npos,
+         "expected pre-launch activity state in lifecycle file");
 
   std::ifstream services_input(lifecycle.service_registry_path);
   std::string services((std::istreambuf_iterator<char>(services_input)),
@@ -829,6 +832,125 @@ void TestNativeLifecycleShimWritesSessionArtifacts() {
          "expected lifecycle handoff line");
   Expect(rendered.find("Execution Engine Ready: no") != std::string::npos,
          "expected lifecycle execution readiness line");
+  Expect(rendered.find("Process State: BOOTSTRAPPED") != std::string::npos,
+         "expected bootstrapped process state in lifecycle report");
+
+  fs::remove_all(root);
+}
+
+void TestNativeProcessBootstrapRunsFixtureAndWritesSessionState() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-native-process-bootstrap-test";
+  fs::remove_all(root);
+  const fs::path compat_root = root / "compat";
+  const fs::path native_root = root / "native";
+  const fs::path compatctl_path = ResolveBuildDirFromTestBinary() / "compatctl";
+  fs::create_directories(root);
+
+  const auto layout = wfa::BuildPackageLayout(
+      {.package_name = "com.example.simple",
+       .install_id = "vc7-1.0.0",
+       .version_code = 7},
+      compat_root.string());
+  fs::create_directories(layout.host_package_root);
+
+  {
+    std::ofstream apk(layout.host_package_root + "/base.apk");
+    apk << "apk payload\n";
+  }
+  {
+    std::ofstream manifest(layout.host_package_root + "/AndroidManifest.xml");
+    manifest << "<manifest package=\"com.example.simple\"/>\n";
+  }
+  {
+    std::ofstream assessment(layout.host_package_root + "/assessment.txt");
+    assessment << "simple candidate\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/simple.apk",
+      .install_id = "vc7-1.0.0",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "simple.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 7,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.simple",
+          .launcher_activity_name = "com.example.simple.MainActivity",
+          .declared_components = {"com.example.simple.MainActivity"},
+          .declared_activity_components = {"com.example.simple.MainActivity"},
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.simple",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+          .has_launcher_activity = true,
+      },
+      .layout = layout,
+      .install_root = layout.host_package_root,
+  };
+
+  const auto plan = wfa::BuildNativeLaunchPlan(report, native_root.string());
+  const auto bootstrap =
+      wfa::BuildNativeActivityBootstrap(plan, compatctl_path.string());
+
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path fixture_library = build_dir / "liblinuxoid_p1_fixture.so";
+  Expect(fs::exists(fixture_library),
+         "expected linuxoid p1 fixture library to exist");
+  fs::copy_file(fixture_library, fs::path(plan.library_root) / "libcalculator.so",
+                fs::copy_options::overwrite_existing);
+
+  const std::string command =
+      compatctl_path.string() + " native-process-bootstrap " +
+      bootstrap.bootstrap_manifest_path;
+
+  int status = 0;
+  const std::string output = ReadCommandOutput(command, &status);
+
+  Expect(WIFEXITED(status), "expected bootstrap command to exit normally");
+  Expect(WEXITSTATUS(status) == 0,
+         "expected fixture native process bootstrap to exit 0");
+  Expect(output.find("Process State: EXITED") != std::string::npos,
+         "expected exited process state in bootstrap report");
+  Expect(output.find("Execution Engine Ready: yes") != std::string::npos,
+         "expected execution readiness in bootstrap report");
+
+  const fs::path session_root =
+      fs::path(plan.package_root) / "lifecycle" / (plan.assessment.install_id + "-default");
+  const fs::path session_manifest = session_root / "session.json";
+  const fs::path runner_log = session_root / "runner.log";
+  Expect(fs::exists(session_manifest),
+         "expected session manifest after process bootstrap");
+  Expect(fs::exists(runner_log),
+         "expected runner log after process bootstrap");
+
+  std::ifstream session_input(session_manifest);
+  std::string session((std::istreambuf_iterator<char>(session_input)),
+                      std::istreambuf_iterator<char>());
+  Expect(session.find("\"process_state\": \"EXITED\"") != std::string::npos,
+         "expected exited process state in session manifest");
+  Expect(session.find("\"exit_code\": 0") != std::string::npos,
+         "expected zero exit code in session manifest");
+  Expect(session.find("\"entrypoint_found\": true") != std::string::npos,
+         "expected entrypoint flag in session manifest");
+
+  std::ifstream runner_input(runner_log);
+  std::string runner((std::istreambuf_iterator<char>(runner_input)),
+                     std::istreambuf_iterator<char>());
+  Expect(runner.find("[p1] entrypoint found: ANativeActivity_onCreate") !=
+             std::string::npos,
+         "expected native runner entrypoint line in log");
+  Expect(runner.find("[p1] watchdog: 5s elapsed, clean exit") !=
+             std::string::npos,
+         "expected native runner watchdog line in log");
 
   fs::remove_all(root);
 }
@@ -2630,6 +2752,7 @@ int main() {
     TestNativeLaunchPlanBuildsBundleLayout();
     TestNativeActivityBootstrapWritesArtifacts();
     TestNativeLifecycleShimWritesSessionArtifacts();
+    TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();
     TestNativeExecuteStubRunsFixtureNativeActivity();
     TestRuntimeBridgeOutputParsers();

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.28 - 2026-05-16
+
+- Add `native-process-bootstrap` so Linuxoid now turns a bootstrap manifest into a real parent/child native runner handoff with `pid`, `process_state`, `exit_code`, runner logs, and structured session state.
+- Make `native-lifecycle-shim` truthful before launch by keeping activity state at `NOT_CREATED` instead of prewriting `RESUMED`, and persist richer process/report fields for later native slices.
+- Switch generated native entrypoints to `native-process-bootstrap`, add fixture-backed tests for the new bootstrap path, and refresh the README Mermaid architecture plus roadmap to match the new execution flow.
+
 ## v0.1.27 - 2026-05-16
 
 - Complete a 15-track Linuxoid research wave covering process bootstrap, DEX/ART, JNI, Binder/services, graphics/input, browser-control surfaces, and storage/sandboxing for the direct Android-on-Linux roadmap.

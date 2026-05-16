@@ -934,3 +934,23 @@
   Action: Reconfigured and rebuilt Linuxoid with `cmake -S . -B build` and `cmake --build build`, reran `ctest --test-dir build --output-on-failure`, and reran `./build/compatctl status` after the `v0.1.27` documentation and version updates.
   Result: The build and tests remain green, and `compatctl status` still reports the expected current state: scaffold `95/100`, native execution `20/100`, and checkpoint gates `70/100`.
   Timestamp: 2026-05-16T18:39:22+05:30
+
+- Step: Native process bootstrap TDD red
+  Action: Added failing tests for the next native-execution slice so Linuxoid now expects bootstrap entrypoints to call `native-process-bootstrap`, expects pre-launch lifecycle state to remain truthful instead of claiming `RESUMED`, and expects a fixture-backed process bootstrap to leave a real session/log trail.
+  Result: `ctest --test-dir build --output-on-failure` now fails at `expected native process bootstrap in entrypoint script`, giving a clean first red bar for the implementation.
+  Timestamp: 2026-05-16T21:24:01+05:30
+
+- Step: Native process bootstrap first build failure logged
+  Action: Logged the compile failure from `cmake --build build` in `docs/problems/2026-05-16-native-process-bootstrap-missing-iostream.md` and prepared the matching solution note in `docs/solutions/native-process-bootstrap-missing-iostream.md` before applying the code fix.
+  Result: The first implementation error is now recorded with exact compiler output, reproduction steps, and a concrete hypothesis instead of being fixed silently.
+  Timestamp: 2026-05-16T21:27:52+05:30
+
+- Step: Native process bootstrap implementation green
+  Action: Added `native-process-bootstrap`, extended the lifecycle/session model with truthful process fields plus runner log/report paths, switched generated native entrypoints to the new parent bootstrap command, updated the README Mermaid/runtime notes, and reran `cmake --build build`, `ctest --test-dir build --output-on-failure`, and `./build/compatctl status`.
+  Result: Linuxoid now has a real parent/child native bootstrap seam, the test suite is green again, and the repo-facing docs match the new execution flow.
+  Timestamp: 2026-05-16T21:27:52+05:30
+
+- Step: Native process bootstrap final verification
+  Action: Reran `ctest --test-dir build --output-on-failure` and `./build/compatctl status` after the README, phased-plan, changelog, and version updates for the native process bootstrap slice.
+  Result: The suite is still green, and Linuxoid still reports scaffold `95/100`, native execution `20/100`, and checkpoint gates `70/100` after the documentation refresh.
+  Timestamp: 2026-05-16T21:31:28+05:30
