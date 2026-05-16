@@ -430,6 +430,26 @@
   Result: The binary now reports `89/100` overall phase loading with `P5` at `72/100`, `P6` at `84/100`, and the repo-facing documentation matches the verified state.
   Timestamp: 2026-05-16T12:47:55+05:30
 
+- Step: APK-backed non-IME candidate failure capture
+  Action: Ran the local-APK host verifier against `/home/astra/Downloads/F-Droid.apk`, captured the failing generated-launcher output, and logged the exact inference error in a problem report before attempting a fix.
+  Result: Linuxoid proved the F-Droid APK can load and desktopify, but automatic launcher inference currently picks a missing component and blocks direct Linux launch verification for that APK.
+  Timestamp: 2026-05-16T13:00:34+05:30
+
+- Step: Disabled-launcher inference fix
+  Action: Updated Linuxoid's manifest parser to skip disabled launcher candidates, added a regression test for the F-Droid-style manifest shape, rebuilt the project, and reran the tests.
+  Result: Automatic launcher inference now falls through to the real enabled launcher activity instead of selecting a disabled manifest entry.
+  Timestamp: 2026-05-16T13:09:28+05:30
+
+- Step: APK-backed live F-Droid verification
+  Action: Re-ran the local-APK host verifier against `/home/astra/Downloads/F-Droid.apk` on the live Android target `192.168.240.112:5555` after the inference fix.
+  Result: Linuxoid now has a second verified end-to-end local-APK Linux launcher proof, with the F-Droid APK launching successfully through the inferred main activity.
+  Timestamp: 2026-05-16T13:10:46+05:30
+
+- Step: F-Droid local-APK progress model refresh
+  Action: Updated the Linuxoid status model, README, changelog, and release version metadata to reflect the repaired launcher inference and the live F-Droid local-APK proof, then prepared the release slice.
+  Result: Linuxoid's repo-facing architecture and progress model now reflect both the keyboard and F-Droid local-APK Linux launch proofs, with overall phase loading moving to `90/100`.
+  Timestamp: 2026-05-16T13:13:22+05:30
+
 - Step: Linuxoid v0.1.12 release and publish
   Action: Staged the APK-backed host verifier slice, committed it as `feat: add apk-backed host launch verifier`, tagged `v0.1.12`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
   Result: Linuxoid now publishes a verified local-APK Linux launch verifier on GitHub as `v0.1.12`.

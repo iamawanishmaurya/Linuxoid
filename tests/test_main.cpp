@@ -38,8 +38,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 89,
-         "expected average phase progress to equal 89");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 90,
+         "expected average phase progress to equal 90");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -86,7 +86,7 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("89/100") != std::string::npos,
+  Expect(report.find("90/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
@@ -193,6 +193,39 @@ void TestActivityAliasLauncherAssessment() {
          "expected alias name to be used for launcher component");
   Expect(assessment.earliest_ui_phase == "P6",
          "expected alias launcher UI phase to remain P6");
+}
+
+void TestDisabledLauncherCandidateFallsThroughToEnabledActivity() {
+  const std::string manifest = R"(
+<manifest package="org.fdroid.fdroid">
+  <application>
+    <activity android:name="org.fdroid.fdroid.panic.CalculatorActivity"
+              android:enabled="false">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+    <activity android:name="org.fdroid.fdroid.views.main.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+
+  const auto profile = wfa::ParseDecodedManifest(manifest);
+  const auto assessment = wfa::AssessRuntimeRequirements(profile);
+
+  Expect(profile.has_launcher_activity,
+         "expected enabled launcher activity to be found");
+  Expect(profile.launcher_activity_name ==
+             "org.fdroid.fdroid.views.main.MainActivity",
+         "expected disabled launcher candidate to be skipped");
+  Expect(assessment.earliest_ui_phase == "P6",
+         "expected enabled launcher UI phase to remain P6");
 }
 
 void TestAdvancedRuntimeBlockersPushFullUsePastP6() {
@@ -1516,6 +1549,7 @@ int main() {
     TestSimpleLauncherAssessment();
     TestKeyboardAssessmentRequiresPostP6ImeIntegration();
     TestActivityAliasLauncherAssessment();
+    TestDisabledLauncherCandidateFallsThroughToEnabledActivity();
     TestAdvancedRuntimeBlockersPushFullUsePastP6();
     TestInvalidManifestRejected();
     TestApktoolMetadataParsing();

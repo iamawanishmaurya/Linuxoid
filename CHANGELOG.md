@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.13 - 2026-05-16
+
+- Fix automatic launcher inference so Linuxoid skips disabled manifest launcher candidates when generating Linux launchers from local APKs.
+- Verify the repaired APK-backed path live with `/home/astra/Downloads/F-Droid.apk`, reaching a successful Linux launch through the inferred main activity.
+- Raise verified project loading to `90/100` while checkpoint gates remain `70/100`.
+
 ## v0.1.12 - 2026-05-16
 
 - Add `verify-apk-host-launch-auto` so Linuxoid can verify the full local-APK Linux launcher flow against a live Android runtime.

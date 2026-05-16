@@ -108,6 +108,11 @@ bool Contains(std::string_view text, std::string_view token) {
   return text.find(token) != std::string_view::npos;
 }
 
+bool AttributeIsFalse(std::string_view attributes,
+                      const std::string& attribute_name) {
+  return ExtractAttribute(attributes, attribute_name) == "false";
+}
+
 void RecordDeclaredComponent(ManifestProfile& profile,
                              const std::string& component_name) {
   if (component_name.empty()) {
@@ -170,7 +175,8 @@ ManifestProfile ParseDecodedManifest(std::string_view xml) {
     const bool launcher =
         Contains(activity.body, "android.intent.action.MAIN") &&
         Contains(activity.body, "android.intent.category.LAUNCHER");
-    if (launcher && !profile.has_launcher_activity) {
+    if (launcher && !AttributeIsFalse(activity.attributes, "android:enabled") &&
+        !profile.has_launcher_activity) {
       profile.has_launcher_activity = true;
       profile.launcher_activity_name = activity_name;
     }
@@ -191,7 +197,8 @@ ManifestProfile ParseDecodedManifest(std::string_view xml) {
     const bool launcher =
         Contains(alias.body, "android.intent.action.MAIN") &&
         Contains(alias.body, "android.intent.category.LAUNCHER");
-    if (launcher && !profile.has_launcher_activity) {
+    if (launcher && !AttributeIsFalse(alias.attributes, "android:enabled") &&
+        !profile.has_launcher_activity) {
       profile.has_launcher_activity = true;
       profile.launcher_activity_name =
           !alias_name.empty() ? alias_name : target_activity;
