@@ -1,6 +1,6 @@
 # Linuxoid — Phased Build Plan
 
-> Current state: scaffold `96/100` · execution `82/100`  
+> Current state: scaffold `96/100` · execution `86/100`  
 > Goal: Android apps on Linux. No Waydroid. No ADB. No emulator.
 
 ---
@@ -183,7 +183,7 @@ Duration: 4-6 weeks
 Goal: run Kotlin and Java APKs, not only NDK-first apps.  
 Outcome: F-Droid or Settings launches natively.
 
-Current repo note as of `2026-05-17`: Linuxoid now has a verified pre-ART APK resource bridge that can inspect plain APK/ZIP manifest metadata, list normalized asset paths, reject traversal, and emit stable readiness JSON for harnesses. Linuxoid also now has a verified self-healing runtime health skeleton that can classify staging, native-load, surface, input, Binder, and DEX/classloader readiness, select deterministic recovery actions, and emit replayable JSONL traces. Full `resources.arsc` semantics, binary XML handling, and actual ART/DEX execution are still pending.
+Current repo note as of `2026-05-17`: Linuxoid now has a verified pre-ART APK resource bridge that can inspect plain APK/ZIP manifest metadata, list normalized asset paths, reject traversal, and emit stable readiness JSON for harnesses. Linuxoid also now has a verified self-healing runtime health skeleton that can classify staging, native-load, surface, input, Binder, and DEX/classloader readiness, select deterministic recovery actions, and emit replayable JSONL traces. Linuxoid now also has a verified ART/classloader preparation fixture that inventories staged dex entries, normalizes manifest target classes, writes deterministic classpath artifacts, and reports missing host ART honestly. Full `resources.arsc` semantics, binary XML handling, and actual ART/DEX execution are still pending.
 
 ### Tasks
 

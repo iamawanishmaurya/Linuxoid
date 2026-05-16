@@ -1,4 +1,5 @@
 #include "wfa/apk_host_integration.hpp"
+#include "wfa/art_classloader_fixture.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/asset_manager_stub.hpp"
 #include "wfa/binder_service_manager.hpp"
@@ -73,6 +74,36 @@ void WriteStoredZipFixture(
     const std::filesystem::path& zip_path,
     const std::vector<std::pair<std::string, std::string>>& entries);
 
+std::string BuildStubDexPayload() {
+  std::string payload(112, '\0');
+  payload[0] = 'd';
+  payload[1] = 'e';
+  payload[2] = 'x';
+  payload[3] = '\n';
+  payload[4] = '0';
+  payload[5] = '3';
+  payload[6] = '5';
+  payload[7] = '\0';
+
+  auto write_le32 = [&](std::size_t offset, std::uint32_t value) {
+    payload[offset + 0] = static_cast<char>(value & 0xFFu);
+    payload[offset + 1] = static_cast<char>((value >> 8) & 0xFFu);
+    payload[offset + 2] = static_cast<char>((value >> 16) & 0xFFu);
+    payload[offset + 3] = static_cast<char>((value >> 24) & 0xFFu);
+  };
+
+  write_le32(32, static_cast<std::uint32_t>(payload.size()));
+  write_le32(36, 0x70u);
+  write_le32(40, 0x12345678u);
+  write_le32(56, 0u);
+  write_le32(60, 0u);
+  write_le32(88, 0u);
+  write_le32(92, 0u);
+  write_le32(104, 0u);
+  write_le32(108, 0u);
+  return payload;
+}
+
 struct RuntimeHealthBootstrapFixture {
   std::filesystem::path root;
   wfa::NativeActivityBootstrap bootstrap;
@@ -121,7 +152,7 @@ RuntimeHealthBootstrapFixture CreateRuntimeHealthBootstrapFixture(
       {"resources.arsc", "arsc"},
   };
   if (include_classes_dex) {
-    archive_entries.push_back({"classes.dex", "dex payload\n"});
+    archive_entries.push_back({"classes.dex", BuildStubDexPayload()});
   }
   WriteStoredZipFixture(fs::path(layout.host_package_root) / "base.apk",
                         archive_entries);
@@ -1936,6 +1967,87 @@ void TestRuntimeHealthFixtureWritesStableArtifacts() {
   Expect(rendered.find("\"trace_jsonl_path\": \"" + report.trace_jsonl_path +
                            "\"") != std::string::npos,
          "expected trace path in runtime health json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtClassloaderFixtureWritesStableArtifacts() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-classloader-fixture", true, true);
+
+  const auto report = wfa::RunNativeArtClassloaderFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.classpath_plan_ready,
+         "expected deterministic ART classpath plan to be ready");
+  Expect(report.dex_entries_present, "expected dex inventory to be present");
+  Expect(report.manifest_targets_ready,
+         "expected manifest target classes to be ready");
+  Expect(fs::exists(report.dex_inventory_path),
+         "expected dex inventory artifact");
+  Expect(fs::exists(report.classloader_plan_path),
+         "expected classloader plan artifact");
+  Expect(fs::exists(report.trace_jsonl_path),
+         "expected classloader trace artifact");
+  Expect(report.target_class_names.size() == 2,
+         "expected application and launcher target classes");
+  Expect(report.target_class_names[0] == "com.example.runtimehealth.App",
+         "expected normalized application class name");
+  Expect(report.target_class_descriptors[1] ==
+             "Lcom/example/runtimehealth/MainActivity;",
+         "expected launcher descriptor");
+  Expect(report.dex_entries.size() == 1, "expected one dex entry");
+  Expect(report.dex_entries[0].valid_dex_magic,
+         "expected stub dex magic to be recognized");
+  Expect(report.dex_entries[0].dex_version == "035",
+         "expected dex version 035");
+
+  const auto rendered = wfa::RenderNativeArtClassloaderFixtureJson(report);
+  Expect(rendered.find("\"classloader_plan_path\": \"" +
+                           report.classloader_plan_path + "\"") !=
+             std::string::npos,
+         "expected classloader plan path in json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtClassloaderFixtureHandlesMissingDexHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-classloader-missing-dex", false, true);
+
+  const auto report = wfa::RunNativeArtClassloaderFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(!report.dex_entries_present, "expected no dex entries");
+  Expect(!report.classpath_plan_ready,
+         "expected classpath plan to stay unready without dex entries");
+  Expect(!report.pathclassloader_probe_ready,
+         "expected no false classloader readiness without dex entries");
+  Expect(report.exit_reason == "no_dex_entries_found",
+         "expected missing-dex exit reason");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtClassloaderCommandWritesStableJson() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-classloader-command", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-art-classloader-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path,
+      &exit_code);
+  Expect(exit_code == 0, "expected native-art-classloader-fixture success");
+  Expect(output.find("\"classpath_plan_ready\": true") !=
+             std::string::npos,
+         "expected classpath readiness in json");
+  Expect(output.find("\"exit_reason\": ") != std::string::npos,
+         "expected classloader exit reason in json");
 
   fs::remove_all(fixture.root);
 }
@@ -4173,6 +4285,9 @@ int main() {
     TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
     TestRuntimeHealthReplaySummarizesTrace();
     TestRuntimeHealthCommandWritesStableJson();
+    TestNativeArtClassloaderFixtureWritesStableArtifacts();
+    TestNativeArtClassloaderFixtureHandlesMissingDexHonestly();
+    TestNativeArtClassloaderCommandWritesStableJson();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.40 - 2026-05-17
+
+- Add a Linuxoid-owned `native-art-classloader-fixture` seam so staged APK dex entries can be inventoried, manifest application/activity targets can be normalized into deterministic descriptors, and stable `art/classloader-plan.json` plus trace artifacts can be written without depending on Waydroid, ADB, or an emulator.
+- Thread the new classloader preparation artifact into the self-healing runtime story so `dex_classloader_readiness` now points at a concrete classpath plan instead of a bundle-level placeholder while still refusing false success when host ART is unavailable.
+- Refresh the README Mermaid architecture, phased plan, self-healing runtime note, changelog, and status output so Linuxoid now reports the ART/classloader preparation gate honestly while still marking real ART execution, full Android Binder behavior, compositor-backed rendering, and full IME/text composition as pending.
+
 ## v0.1.39 - 2026-05-17
 
 - Add a self-healing runtime observability skeleton so Linuxoid now records structured health for APK staging, native loading, surface readiness, input readiness, Binder/service readiness, and DEX/classloader readiness through `compatctl native-runtime-health-fixture`.

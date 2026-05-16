@@ -1,5 +1,6 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
+#include "wfa/art_classloader_fixture.hpp"
 #include "wfa/binder_service_manager.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/egl_smoke_fixture.hpp"
@@ -37,6 +38,7 @@ void PrintUsage() {
       << "  compatctl inspect-apk-resources <apk-path> [resource-root-or-dash]\n"
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
+      << "  compatctl native-art-classloader-fixture <bootstrap-manifest>\n"
       << "  compatctl native-service-manager-fixture <bootstrap-manifest>\n"
       << "  compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]\n"
       << "  compatctl native-runtime-health-replay <trace-jsonl-path>\n"
@@ -253,6 +255,17 @@ int main(int argc, char** argv) {
           argv[2], compat_root, native_root, compatctl_path);
       std::cout << wfa::RenderNativeActivityBootstrapReport(bootstrap);
       return bootstrap.bootstrap_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-art-classloader-fixture") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report = wfa::RunNativeArtClassloaderFixture(argv[2]);
+      std::cout << wfa::RenderNativeArtClassloaderFixtureJson(report);
+      return report.classpath_plan_ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "native-service-manager-fixture") {

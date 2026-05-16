@@ -1174,3 +1174,18 @@
   Action: Added the runtime-health solution notes, refreshed the Mermaid architecture, phased plan, changelog, and status output, then reran the full build/test gate and manually exercised the runtime-health fixture plus replay commands.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, Linuxoid now emits deterministic runtime health plus recovery artifacts for APK staging, native loading, surface, input, Binder, and DEX/classloader readiness, and the repo truthfully reports `scaffold 96/100` and `execution 82/100` while ART/DEX execution, full Binder semantics, compositor-backed rendering, and full IME/text composition remain pending.
   Timestamp: 2026-05-17T13:28:00+05:30
+
+- Step: ART classloader red test
+  Action: Added failing tests for a Linuxoid-owned ART/classloader preparation fixture with deterministic dex inventory, manifest target normalization, stable classpath artifacts, and CLI JSON output.
+  Result: The new tests are in place and ready to drive the next direct-runtime gate instead of leaving `prepare_art_sidecar_classpath` as a pure recovery placeholder.
+  Timestamp: 2026-05-17T14:05:00+05:30
+
+- Step: ART classloader missing-module failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the new ART/classloader fixture tests.
+  Result: The build failed in `tests/test_main.cpp` because the new `wfa/art_classloader_fixture.hpp` module does not exist yet, so the next change is to add the production classloader fixture seam and wire it into `compatctl`.
+  Timestamp: 2026-05-17T14:06:00+05:30
+
+- Step: ART classloader gate verification and repo sync
+  Action: Added the Linuxoid-owned ART/classloader preparation fixture, wired it into `compatctl` and the runtime-health seam, refreshed the README Mermaid graph plus phased plan and status text, and reran the full build/test gate together with live fixture commands.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, `native-art-classloader-fixture` now writes deterministic dex inventory plus classloader-plan artifacts, and `native-runtime-health-fixture` now points `dex_classloader_readiness` at the real ART plan instead of a bundle placeholder while still reporting missing host ART honestly.
+  Timestamp: 2026-05-17T14:24:00+05:30

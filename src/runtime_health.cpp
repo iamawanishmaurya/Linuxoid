@@ -1,5 +1,6 @@
 #include "wfa/runtime_health.hpp"
 
+#include "wfa/art_classloader_fixture.hpp"
 #include "wfa/apk_archive.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/native_input_queue_fixture.hpp"
@@ -24,6 +25,7 @@ namespace {
 struct RuntimeObservationContext {
   NativeLifecycleShim lifecycle;
   ApkResourceReadinessReport resources;
+  NativeArtClassloaderFixtureReport art;
   NativeWindowBridgeFixtureReport bridge;
   NativeInputQueueFixtureReport input;
   bool has_classes_dex = false;
@@ -84,25 +86,6 @@ std::string RenderJsonArray(const std::vector<std::string>& values) {
   }
   output << "]";
   return output.str();
-}
-
-bool HasArchiveEntry(const std::string& apk_path,
-                     const std::string& entry_prefix,
-                     const std::string& entry_suffix = "") {
-  for (const auto& entry : ListApkArchiveEntries(apk_path)) {
-    if (entry.path.rfind(entry_prefix, 0) != 0) {
-      continue;
-    }
-    if (!entry_suffix.empty()) {
-      if (entry.path.size() < entry_suffix.size() ||
-          entry.path.substr(entry.path.size() - entry_suffix.size()) !=
-              entry_suffix) {
-        continue;
-      }
-    }
-    return true;
-  }
-  return false;
 }
 
 std::string BuildTraceEventJson(int sequence, const std::string& event_type,
@@ -302,18 +285,23 @@ RuntimeHealthRecord BuildBinderRecord(
 }
 
 RuntimeHealthRecord BuildDexRecord(const RuntimeObservationContext& context) {
-  const bool dex_present = context.has_classes_dex;
+  const bool dex_present = context.art.dex_entries_present;
   if (!dex_present) {
     return MakeHealthRecord("dex_classloader_readiness", "not_required", true,
-                            context.lifecycle.bootstrap.plan.bundle_apk_path, "",
-                            "APK archive does not contain classes.dex.");
+                            context.art.classloader_plan_path, "",
+                            "APK archive does not contain classes.dex entries.");
   }
 
   return MakeHealthRecord(
       "dex_classloader_readiness", "pending", false,
-      context.lifecycle.bootstrap.plan.bundle_apk_path,
+      context.art.classloader_plan_path,
       "dex_classloader_unimplemented",
-      "classes.dex is present in the APK, but Linuxoid has not attached ART or PathClassLoader yet.");
+      "classpath_plan_ready=" +
+          std::string(context.art.classpath_plan_ready ? "true" : "false") +
+      "; art_runtime_detected=" +
+          std::string(context.art.art_runtime_detected ? "true" : "false") +
+      "; target_classes=" +
+          std::to_string(context.art.target_class_names.size()));
 }
 
 RuntimeHealthReplayReport BuildReplayReportFromEvents(
@@ -406,15 +394,14 @@ RuntimeHealthReport RunRuntimeHealthFixture(
   context.resources = InspectApkResourceReadiness(
       context.lifecycle.bootstrap.plan.bundle_apk_path,
       context.lifecycle.bootstrap.plan.resource_root);
+  context.art = RunNativeArtClassloaderFixture(bootstrap_manifest_path);
   context.bridge = RunNativeWindowBridgeFixture(
       (fs::path(context.lifecycle.session_root) / "health" / "surface").string(),
       {.width = 48, .height = 32, .format = kNativeWindowFormatRgba8888, .stride = 48});
   context.input = RunNativeInputQueueFixture(
       (fs::path(context.lifecycle.session_root) / "health" / "input").string(),
       {.width = 48, .height = 32, .format = kNativeWindowFormatRgba8888, .stride = 48});
-  context.has_classes_dex =
-      HasArchiveEntry(context.lifecycle.bootstrap.plan.bundle_apk_path, "classes",
-                      ".dex");
+  context.has_classes_dex = context.art.dex_entries_present;
 
   RuntimeHealthReport report;
   report.package_name = context.lifecycle.bootstrap.plan.assessment.package_name;

@@ -17,6 +17,11 @@ What that means **today**:
   - unavailable display
   - failed service lookup
   - pending DEX/classloader bootstrap
+- Linuxoid now has a concrete DEX/classloader preparation seam behind that recovery story:
+  - `native-art-classloader-fixture`
+  - `art/classloader-plan.json`
+  - `art/dex-inventory.json`
+  - `art/art-classloader-trace.jsonl`
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -27,6 +32,7 @@ What it **does not** mean yet:
 
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet have ART or a real `PathClassLoader`.
+- Linuxoid does **not** yet execute application classes through a real host-side ART invocation.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
@@ -44,6 +50,7 @@ Current commands:
 ```bash
 ./build/compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]
 ./build/compatctl native-runtime-health-replay <trace-jsonl-path>
+./build/compatctl native-art-classloader-fixture <bootstrap-manifest>
 ```
 
 Current deterministic scenarios:
@@ -56,4 +63,4 @@ Current deterministic scenarios:
 
 Next gate after this skeleton:
 
-- attach a real host-side ART + `PathClassLoader` smoke path so the DEX/classloader health record can move from `pending` toward `ready` for simple APKs.
+- attach a real host-side ART + `PathClassLoader` smoke path so the existing classpath plan and target-class artifacts can move from preparation into the first real class-resolution attempt for simple APKs.
