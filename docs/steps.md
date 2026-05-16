@@ -779,3 +779,8 @@
   Action: Rebuilt Linuxoid with `cmake --build build`, re-read the updated README sections, and reviewed the new browser architecture note before release.
   Result: The browser-architecture documentation is visible, internally consistent, and ships without disturbing the existing build.
   Timestamp: 2026-05-16T16:15:21+05:30
+
+- Step: Self-healing browser release preparation
+  Action: Staged the browser-architecture docs slice, confirmed the staged release set with `git status`, and created the feature commit `docs: add self-healing browser architecture`.
+  Result: Linuxoid now has a clean release candidate commit for the self-healing browser architecture direction, ready to be tagged and pushed as `v0.1.24`.
+  Timestamp: 2026-05-16T16:16:02+05:30
