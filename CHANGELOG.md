@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.17 - 2026-05-16
+
+- Add backend-neutral `verify-package` and `verify-package-matrix` commands so installed-package verification no longer depends on Waydroid-shaped product names.
+- Add attached-ADB generic verification tests and fix the matrix fixture so mocked `am start -W` output proves the launched component the same way the real runtime bridge expects.
+- Refresh the README architecture, verification examples, progress numbers, and next-step roadmap so the GitHub repo reflects the new generic verification surface and the next attached-target priorities.
+
 ## v0.1.16 - 2026-05-16
 
 - Add `discover-runtime` and `preflight-runtime` so Linuxoid can enumerate attached Android targets and check launch readiness before a generic installed-package launch.

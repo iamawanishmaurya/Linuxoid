@@ -9,6 +9,48 @@
 
 namespace wfa {
 
+struct InstalledPackageVerificationSpec {
+  RuntimeBackendKind backend = RuntimeBackendKind::kWaydroid;
+  std::string app_name;
+  std::string serial;
+  std::string package_name;
+  std::string component;
+  std::string compatctl_path;
+  std::string desktop_root;
+  std::string launcher_root;
+};
+
+struct InstalledPackageVerificationReport {
+  std::string backend_name;
+  std::string app_name;
+  std::string serial;
+  std::string package_name;
+  std::string component;
+  bool direct_launch_ok = false;
+  bool launcher_generation_ok = false;
+  bool generated_launcher_ok = false;
+  std::string direct_launch_output;
+  std::string generated_launcher_output;
+  InstalledPackageDesktopLaunchArtifacts artifacts;
+};
+
+struct InstalledPackageMatrixEntry {
+  std::string backend_name;
+  std::string serial;
+  std::string package_name;
+  std::string component;
+  bool verification_ok = false;
+  std::string error;
+  InstalledPackageVerificationReport verification;
+};
+
+struct InstalledPackageMatrixReport {
+  std::string backend_name;
+  std::string artifact_root;
+  std::string serial;
+  std::vector<InstalledPackageMatrixEntry> entries;
+};
+
 struct WaydroidPackageVerificationSpec {
   std::string app_name;
   std::string package_name;
@@ -39,6 +81,24 @@ struct WaydroidMatrixReport {
   std::string artifact_root;
   std::vector<WaydroidMatrixEntry> entries;
 };
+
+InstalledPackageVerificationReport VerifyInstalledPackageWithRunners(
+    const InstalledPackageVerificationSpec& spec,
+    const CommandRunner& runtime_runner,
+    const CommandRunner& launcher_runner);
+InstalledPackageVerificationReport VerifyInstalledPackage(
+    const InstalledPackageVerificationSpec& spec);
+InstalledPackageMatrixReport VerifyInstalledPackageMatrixWithRunners(
+    const std::vector<InstalledPackageVerificationSpec>& specs,
+    const std::string& artifact_root, const CommandRunner& runtime_runner,
+    const CommandRunner& launcher_runner);
+InstalledPackageMatrixReport VerifyInstalledPackageMatrix(
+    const std::vector<InstalledPackageVerificationSpec>& specs,
+    const std::string& artifact_root);
+std::string RenderInstalledPackageVerificationReport(
+    const InstalledPackageVerificationReport& report);
+std::string RenderInstalledPackageMatrixReport(
+    const InstalledPackageMatrixReport& report);
 
 WaydroidPackageVerificationReport VerifyWaydroidPackageWithRunners(
     const WaydroidPackageVerificationSpec& spec,

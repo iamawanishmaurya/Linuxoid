@@ -539,3 +539,43 @@
   Action: Bounded the attached-ADB discovery/preflight probes with timeouts, rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, and repeated the live `discover-runtime attached-adb`, `preflight-runtime attached-adb`, `preflight-runtime native`, and `compatctl status` smoke checks.
   Result: The hang was eliminated, the live attached-ADB path now returns promptly with the discovered target `192.168.240.112:5555`, the native path still fails honestly as not implemented, and Linuxoid now reports `92/100` phase loading with `P4` at `88/100`.
   Timestamp: 2026-05-16T14:59:02+05:30
+
+- Step: Generic verification slice kickoff
+  Action: Reviewed the current README roadmap and selected the next implementation slice: generic installed-package verification and matrix reporting without Waydroid-shaped product surface names.
+  Result: Locked the next coding pass to generic verification commands and report contracts that build on the existing backend-neutral launch seam and prepare the project for attached-target launcher resolution next.
+  Timestamp: 2026-05-16T15:00:52+05:30
+
+- Step: Generic verification confidence check
+  Action: Re-read the current CLI, verification layer, runtime bridge, and README roadmap to settle the command contract before editing more files.
+  Result: Raised confidence from an initial 82/100 to 100/100 for this slice by fixing the remaining ambiguities around placeholder arguments, `attached-adb` matrix package-spec format, and backward-compatible Waydroid aliases before implementation.
+  Timestamp: 2026-05-16T15:08:34+05:30
+
+- Step: Generic verification command implementation
+  Action: Added backend-neutral `verify-package` and `verify-package-matrix` CLI commands, plus attached-ADB-focused unit coverage for the new installed-package verification and matrix report contracts.
+  Result: Linuxoid now exposes a generic installed-package verification surface that matches the backend-neutral launch seam instead of forcing users through Waydroid-shaped command names, while the old Waydroid aliases remain available for compatibility.
+  Timestamp: 2026-05-16T15:15:27+05:30
+
+- Step: Generic verification regression capture
+  Action: Rebuilt Linuxoid, ran `ctest --test-dir build --output-on-failure`, and captured the first failing regression before attempting a fix.
+  Result: The build succeeded and the live generic Waydroid verification commands passed, but the new attached-ADB matrix unit test failed because its mocked launch output did not satisfy the component-confirmation rule; the failure was logged in `docs/problems/2026-05-16-installed-package-matrix-test-missing-component-proof.md`.
+  Timestamp: 2026-05-16T15:18:41+05:30
+
+- Step: Generic verification regression research
+  Action: Stopped after the same failure symptom appeared a second time, compared four distinct fixes, and recorded the chosen approach in `docs/solutions/installed-package-matrix-test-missing-component-proof.md`.
+  Result: Chose to keep the strict component-confirmation parser, strengthen the mocked attached-ADB launch output, and serialize rebuild plus `ctest` validation so the fresh test binary is always the one being executed.
+  Timestamp: 2026-05-16T15:24:02+05:30
+
+- Step: Generic verification validation pass
+  Action: Re-ran `ctest --test-dir build --output-on-failure`, `./build/compatctl verify-package waydroid com.android.calculator2 - - /tmp/linuxoid-generic-applications /tmp/linuxoid-generic-launchers`, `./build/compatctl verify-package-matrix waydroid /tmp/linuxoid-generic-matrix - com.android.calculator2 com.android.settings org.fdroid.fdroid`, and `./build/compatctl status` after the regression fix.
+  Result: The full local test suite is green again, the new generic single-package verifier passes live on Waydroid, the new generic matrix verifier passes 3/3 on Waydroid, and Linuxoid still reports `92/100` phase loading before the status copy is refreshed for this feature slice.
+  Timestamp: 2026-05-16T15:27:52+05:30
+
+- Step: Generic verification documentation refresh
+  Action: Updated the status model, README architecture, verification examples, next-step roadmap, changelog, and version metadata to reflect the new backend-neutral installed-package verification surface.
+  Result: Linuxoid now documents `verify-package` and `verify-package-matrix` as first-class commands, reports `93/100` phase loading for this slice, and points the next work toward attached-target launcher resolution and native execution spikes.
+  Timestamp: 2026-05-16T15:33:11+05:30
+
+- Step: Generic verification final verification
+  Action: Rebuilt Linuxoid after the status and documentation refresh, reran `ctest --test-dir build --output-on-failure`, reran the live generic `verify-package` and `verify-package-matrix` Waydroid checks, and rechecked `./build/compatctl status`.
+  Result: Linuxoid now verifies the generic installed-package flow cleanly end to end, the repo-backed status is `93/100`, and the documentation matches the behavior proven by the tests and live commands.
+  Timestamp: 2026-05-16T15:36:45+05:30

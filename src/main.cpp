@@ -29,6 +29,8 @@ void PrintUsage() {
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
       << "  compatctl launch-activity <serial> <component>\n"
       << "  compatctl launch-package <backend> <package> [serial] [component]\n"
+      << "  compatctl verify-package <backend> <package> [serial-or-dash] [component-or-dash] [desktop-entry-root] [launcher-root]\n"
+      << "  compatctl verify-package-matrix <backend> <artifact-root> <serial-or-dash> <package-spec> [package-spec...]\n"
       << "  compatctl verify-apk-host-launch-auto <serial> <apk-path> [compat-root] [desktop-entry-root] [launcher-root]\n"
       << "  compatctl launch-waydroid-package <package>\n"
       << "  compatctl verify-waydroid-package <package> [desktop-entry-root] [launcher-root]\n"
@@ -84,6 +86,38 @@ std::string DefaultLauncherRoot() {
 
 std::string DefaultVerificationCompatRoot() {
   return "/tmp/linuxoid-apk-verify";
+}
+
+std::string OptionalArgOrEmpty(const char* value) {
+  if (value == nullptr) {
+    return "";
+  }
+
+  const std::string parsed = value;
+  return parsed == "-" ? "" : parsed;
+}
+
+struct MatrixPackageSpec {
+  std::string package_name;
+  std::string component;
+};
+
+MatrixPackageSpec ParseMatrixPackageSpec(const std::string& value) {
+  if (value.empty()) {
+    throw std::invalid_argument("matrix package spec must not be empty");
+  }
+
+  const auto separator = value.find('=');
+  if (separator == std::string::npos) {
+    return {.package_name = value, .component = ""};
+  }
+  if (separator == 0 || separator == value.size() - 1) {
+    throw std::invalid_argument(
+        "matrix package spec must use package=component when a component is provided");
+  }
+
+  return {.package_name = value.substr(0, separator),
+          .component = value.substr(separator + 1)};
 }
 
 }  // namespace
@@ -242,6 +276,67 @@ int main(int argc, char** argv) {
                      report.generated_launcher_ok
                  ? EXIT_SUCCESS
                  : EXIT_FAILURE;
+    }
+
+    if (command == "verify-package") {
+      if (argc < 4 || argc > 8) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto backend = wfa::ParseRuntimeBackendKind(argv[2]);
+      const std::string serial = argc >= 5 ? OptionalArgOrEmpty(argv[4]) : "";
+      const std::string component =
+          argc >= 6 ? OptionalArgOrEmpty(argv[5]) : "";
+      const std::string desktop_root =
+          argc >= 7 ? argv[6] : DefaultDesktopEntryRoot();
+      const std::string launcher_root =
+          argc == 8 ? argv[7]
+                    : (argc >= 7 ? argv[6] : DefaultLauncherRoot());
+      const auto report = wfa::VerifyInstalledPackage(
+          {.backend = backend,
+           .app_name = argv[3],
+           .serial = serial,
+           .package_name = argv[3],
+           .component = component,
+           .compatctl_path = compatctl_path,
+           .desktop_root = desktop_root,
+           .launcher_root = launcher_root});
+      std::cout << wfa::RenderInstalledPackageVerificationReport(report);
+      return report.direct_launch_ok && report.launcher_generation_ok &&
+                     report.generated_launcher_ok
+                 ? EXIT_SUCCESS
+                 : EXIT_FAILURE;
+    }
+
+    if (command == "verify-package-matrix") {
+      if (argc < 6) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto backend = wfa::ParseRuntimeBackendKind(argv[2]);
+      const std::string serial = OptionalArgOrEmpty(argv[4]);
+      std::vector<wfa::InstalledPackageVerificationSpec> specs;
+      specs.reserve(static_cast<std::size_t>(argc - 5));
+      for (int index = 5; index < argc; ++index) {
+        const auto parsed = ParseMatrixPackageSpec(argv[index]);
+        specs.push_back({.backend = backend,
+                         .app_name = parsed.package_name,
+                         .serial = serial,
+                         .package_name = parsed.package_name,
+                         .component = parsed.component,
+                         .compatctl_path = compatctl_path});
+      }
+
+      const auto report = wfa::VerifyInstalledPackageMatrix(specs, argv[3]);
+      std::cout << wfa::RenderInstalledPackageMatrixReport(report);
+      for (const auto& entry : report.entries) {
+        if (!entry.verification_ok) {
+          return EXIT_FAILURE;
+        }
+      }
+      return EXIT_SUCCESS;
     }
 
     if (command == "verify-waydroid-package") {

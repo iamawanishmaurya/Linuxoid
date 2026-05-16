@@ -20,7 +20,7 @@ flowchart TB
     Compatctl --> Loader["APK Loader and Manifest Assessor"]
     Compatctl --> Preflight["Runtime Discovery and Preflight"]
     Compatctl --> Desktopify["Desktop Artifact Generator"]
-    Compatctl --> Verifier["Waydroid Verifier and Matrix Verifier"]
+    Compatctl --> Verifier["Installed-Package Verifier and Matrix Verifier"]
     Compatctl --> ApkVerifier["APK-backed Host Verifier"]
     Compatctl --> Runtime["Runtime Bridge Layer"]
     Loader --> CompatRoot["Compat Root and Package Staging"]
@@ -52,7 +52,7 @@ flowchart TB
   Compatctl --> InstalledFlow["Installed-package Linux Launch Flow"]
   InstalledFlow --> Verifier
   Verifier --> DesktopFiles
-  Verifier --> WaydroidCLI
+  Verifier --> BackendContract
   InstalledApps --> ProvenApps["Calculator, Settings, and F-Droid"]
 ```
 
@@ -104,12 +104,16 @@ This is the long-term goal state: run Android apps on Linux without depending on
 - A backend-neutral installed-package launcher-artifact seam that now emits `launch-package` wrappers instead of hard-coding Waydroid in the generated host script
 - A `launch-waydroid-package` compatibility alias that still launches an already installed app through the Waydroid adapter without requiring an APK reinstall or a hardcoded ADB serial
 - A `desktopify-waydroid-package` path that generates a Linux launcher and `.desktop` entry for an installed Waydroid app
+- A generic `verify-package` path that proves direct Linux launch for an installed package by checking runtime launch, generated host-launch artifacts, and generated launcher execution across backend contracts
+- A generic `verify-package-matrix` path that runs the installed-package verification loop across several apps and reports pass/fail per package without Waydroid-shaped command names
 - A `verify-waydroid-package` path that proves direct Linux launch for an installed Waydroid app by checking the runtime launch, the generated host launcher artifacts, and the generated launcher execution
 - A `verify-waydroid-matrix` path that runs the direct Linux verification loop across several installed Waydroid apps and reports pass/fail per package
 - A live Waydroid-backed proof that a Linuxoid-generated launcher can install the keyboard APK, enable it, set it as default, and return `Ready for typing: yes` from Linux
 - A live Waydroid-backed proof that the keyboard APK now verifies end to end from its local file path through the Linuxoid-generated launcher flow
 - A live Waydroid-backed proof that the local F-Droid APK now verifies end to end from its file path through the Linuxoid-generated launcher flow
 - A live Waydroid-backed proof that a Linuxoid-generated launcher can open `com.android.calculator2` from Linux through the new installed-package path
+- A live Waydroid-backed proof that the new generic `verify-package` command passes for `com.android.calculator2`
+- A live Waydroid-backed proof that the new generic `verify-package-matrix` command passes `3/3` for `com.android.calculator2`, `com.android.settings`, and `org.fdroid.fdroid`
 - A live Waydroid-backed mini-matrix that verifies direct Linux launch for `com.android.calculator2`, `com.android.settings`, and `org.fdroid.fdroid`
 - A local test suite that verifies the first scaffold behavior
 
@@ -137,11 +141,11 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 
 These are the next five highest-value moves from the current state if the goal is to run Android apps directly on Linux without depending on Waydroid or any other external Android runtime:
 
-1. Add **generic installed-package verification and matrix reporting** that no longer carries Waydroid-shaped names.
-   That keeps the transition harness honest while we replace backend-specific product surface area.
-
-2. Add **on-target launcher resolution and package metadata lookup** for `attached-adb`.
+1. Add **on-target launcher resolution and package metadata lookup** for `attached-adb`.
    That removes the need to hard-code activity components for simple installed-package launches on attached targets.
+
+2. Add an **attached-target compatibility matrix** that uses auto-resolved launcher metadata.
+   That gives Linuxoid a non-Waydroid proof path with the same repeatability we now have for the generic Waydroid-backed verifier.
 
 3. Implement a **native package launch spike** for one simple foreground app class.
    The first target should be a small app with one activity, no background services, no IME dependence, and no secondary processes.
@@ -149,7 +153,7 @@ These are the next five highest-value moves from the current state if the goal i
 4. Build the first **Linuxoid-owned lifecycle and service shim**.
    The smallest meaningful slice is activity launch, process state, and a minimal Binder/service bridge for one app shape.
 
-5. Build **native graphics, input, and window integration** for that simple app class.
+5. Add **native DEX/class loading plus graphics, input, and window integration** for that simple app class.
    This is the point where Linuxoid starts proving real no-runtime execution instead of only better orchestration around an external Android target.
 
 ## Build
@@ -174,6 +178,8 @@ ctest --test-dir build --output-on-failure
 ./build/compatctl launch-package waydroid com.android.calculator2
 ./build/compatctl launch-package attached-adb 192.168.240.112:5555 com.example.demo/.MainActivity
 ./build/compatctl launch-package native com.example.demo
+./build/compatctl verify-package waydroid com.android.calculator2 - - /tmp/linuxoid-generic-applications /tmp/linuxoid-generic-launchers
+./build/compatctl verify-package-matrix waydroid /tmp/linuxoid-generic-matrix - com.android.calculator2 com.android.settings org.fdroid.fdroid
 ./build/compatctl verify-apk-host-launch-auto emulator-5590 /path/to/app.apk /tmp/linuxoid-apk-verify /tmp/linuxoid-apk-applications /tmp/linuxoid-apk-launchers
 ./build/compatctl launch-waydroid-package com.android.calculator2
 ./build/compatctl verify-waydroid-package com.android.calculator2 /tmp/linuxoid-applications /tmp/linuxoid-launchers
@@ -188,7 +194,7 @@ ctest --test-dir build --output-on-failure
 
 ## Current Progress
 
-- Phase loading: `92/100`
+- Phase loading: `93/100`
 - Runtime checkpoint gates: `70/100`
 
 These values are generated by the code, not written by hand.

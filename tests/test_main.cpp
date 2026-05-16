@@ -38,8 +38,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 92,
-         "expected average phase progress to equal 92");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 93,
+         "expected average phase progress to equal 93");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -86,7 +86,7 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("92/100") != std::string::npos,
+  Expect(report.find("93/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
@@ -1189,6 +1189,134 @@ void TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage() {
   Expect(threw, "expected invalid waydroid package names to be rejected");
 }
 
+void TestInstalledPackageVerificationSuccessPath() {
+  const auto runtime_runner = [](const std::string& command)
+      -> wfa::CommandResult {
+    if (command ==
+        "adb -s 'device-01' shell am start -W -n 'com.example.demo/.MainActivity'") {
+      return {0,
+              "Starting: Intent { cmp=com.example.demo/.MainActivity }\nStatus: ok\nComplete\n"};
+    }
+    throw std::runtime_error(
+        "unexpected runtime command in installed package verification test");
+  };
+
+  const auto launcher_runner = [](const std::string& command)
+      -> wfa::CommandResult {
+    if (command.find("com.example.demo.sh") != std::string::npos) {
+      return {0, "launcher ok\n"};
+    }
+    throw std::runtime_error(
+        "unexpected launcher command in installed package verification test");
+  };
+
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-installed-verify";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path compatctl_path = root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  const auto report = wfa::VerifyInstalledPackageWithRunners(
+      {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+       .app_name = "Demo",
+       .serial = "device-01",
+       .package_name = "com.example.demo",
+       .component = "com.example.demo/.MainActivity",
+       .compatctl_path = compatctl_path.string(),
+       .desktop_root = (root / "applications").string(),
+       .launcher_root = (root / "launchers").string()},
+      runtime_runner, launcher_runner);
+
+  Expect(report.direct_launch_ok,
+         "expected direct installed-package launch success");
+  Expect(report.launcher_generation_ok,
+         "expected installed-package launcher generation success");
+  Expect(report.generated_launcher_ok,
+         "expected installed-package generated launcher success");
+  Expect(report.backend_name == "attached-adb",
+         "expected attached-adb backend name");
+
+  const auto rendered = wfa::RenderInstalledPackageVerificationReport(report);
+  Expect(rendered.find("Runtime Backend: attached-adb") != std::string::npos,
+         "expected backend name in generic verification report");
+  Expect(rendered.find("Verification Loading: [##########] 100/100") !=
+             std::string::npos,
+         "expected full generic verification loading");
+
+  fs::remove_all(root);
+}
+
+void TestInstalledPackageMatrixSuccessPath() {
+  const auto runtime_runner = [](const std::string& command)
+      -> wfa::CommandResult {
+    if (command ==
+            "adb -s 'device-01' shell am start -W -n 'com.example.demo/.MainActivity'" ||
+        command ==
+            "adb -s 'device-01' shell am start -W -n 'com.example.tools/.HomeActivity'") {
+      if (command.find("com.example.demo/.MainActivity") != std::string::npos) {
+        return {0,
+                "Starting: Intent { cmp=com.example.demo/.MainActivity }\nStatus: ok\nComplete\n"};
+      }
+      return {0,
+              "Starting: Intent { cmp=com.example.tools/.HomeActivity }\nStatus: ok\nComplete\n"};
+    }
+    return {1, "unexpected package"};
+  };
+
+  const auto launcher_runner = [](const std::string& command)
+      -> wfa::CommandResult {
+    if (command.find("com.example.demo.sh") != std::string::npos ||
+        command.find("com.example.tools.sh") != std::string::npos) {
+      return {0, "launcher ok\n"};
+    }
+    return {1, "unexpected launcher"};
+  };
+
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-installed-matrix";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path compatctl_path = root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  const auto report = wfa::VerifyInstalledPackageMatrixWithRunners(
+      {{.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+        .app_name = "Demo",
+        .serial = "device-01",
+        .package_name = "com.example.demo",
+        .component = "com.example.demo/.MainActivity",
+        .compatctl_path = compatctl_path.string()},
+       {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+        .app_name = "Tools",
+        .serial = "device-01",
+        .package_name = "com.example.tools",
+        .component = "com.example.tools/.HomeActivity",
+        .compatctl_path = compatctl_path.string()}},
+      root.string(), runtime_runner, launcher_runner);
+
+  Expect(report.entries.size() == 2, "expected two generic matrix entries");
+  Expect(report.entries[0].verification_ok,
+         "expected first generic matrix package to pass");
+  Expect(report.entries[1].verification_ok,
+         "expected second generic matrix package to pass");
+
+  const auto rendered = wfa::RenderInstalledPackageMatrixReport(report);
+  Expect(rendered.find("Runtime Backend: attached-adb") !=
+             std::string::npos,
+         "expected backend name in generic matrix report");
+  Expect(rendered.find("Packages Passed: 2/2") != std::string::npos,
+         "expected generic matrix pass count");
+
+  fs::remove_all(root);
+}
+
 void TestWaydroidPackageVerificationSuccessPath() {
   const auto runtime_runner = [](const std::string& command) -> wfa::CommandResult {
     if (command == "waydroid app launch com.android.calculator2") {
@@ -1803,6 +1931,8 @@ int main() {
     TestWaydroidDesktopLaunchArtifacts();
     TestInstalledPackageDesktopLaunchArtifactsRequireAttachedAdbFields();
     TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage();
+    TestInstalledPackageVerificationSuccessPath();
+    TestInstalledPackageMatrixSuccessPath();
     TestWaydroidPackageVerificationSuccessPath();
     TestWaydroidPackageMatrixSuccessPath();
     TestWaydroidPackageMatrixCapturesFailure();
