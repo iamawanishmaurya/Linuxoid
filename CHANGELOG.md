@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.11 - 2026-05-16
+
+- Add the current full working Mermaid architecture to the GitHub README so the live Linuxoid flow is visible at a glance.
+- Document both verified execution paths in the README diagram: APK-backed IME provisioning and installed-package Waydroid launch verification.
+
 ## v0.1.10 - 2026-05-16
 
 - Add `verify-waydroid-matrix` so Linuxoid can verify several installed Waydroid apps in one pass and report package-level pass/fail results.

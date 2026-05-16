@@ -399,3 +399,8 @@
   Action: Staged the compatibility-matrix slice, committed it as `feat: add Waydroid compatibility matrix verifier`, tagged `v0.1.10`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
   Result: Linuxoid now publishes a one-command Waydroid compatibility matrix verifier on GitHub as `v0.1.10`.
   Timestamp: 2026-05-16T12:02:44+05:30
+
+- Step: README architecture diagram update
+  Action: Added the current full working Mermaid architecture to the GitHub README and updated the release metadata for the documentation refresh.
+  Result: Linuxoid's README now shows the verified end-to-end working architecture, including the APK-backed keyboard flow and the installed-package Waydroid launch flow.
+  Timestamp: 2026-05-16T12:11:53+05:30

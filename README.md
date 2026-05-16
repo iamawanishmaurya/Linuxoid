@@ -8,6 +8,46 @@ Linuxoid currently contains the first executable MVP scaffold for an Android-on-
 - Runtime strategy: container-first Android userspace integration
 - Current executable: `compatctl`
 
+## Current Working Architecture
+
+```mermaid
+flowchart TB
+  User["Linux User"] --> Desktop["Linux Desktop Entry or Shell Launcher"]
+  Desktop --> Compatctl["Linuxoid compatctl"]
+
+  subgraph Host["Linux Host"]
+    Compatctl --> Status["Status and Checkpoint Engine"]
+    Compatctl --> Loader["APK Loader and Manifest Assessor"]
+    Compatctl --> Desktopify["Desktop Artifact Generator"]
+    Compatctl --> Verifier["Waydroid Verifier and Matrix Verifier"]
+    Compatctl --> Runtime["Runtime Bridge Layer"]
+    Loader --> CompatRoot["Compat Root and Package Staging"]
+    Desktopify --> DesktopFiles[".desktop Files and Launcher Scripts"]
+  end
+
+  subgraph Backend["Waydroid Runtime Backend"]
+    Runtime --> WaydroidCLI["waydroid app and session commands"]
+    Runtime --> AdbBridge["ADB Activity and IME Commands"]
+    WaydroidCLI --> Android["Android Userspace"]
+    AdbBridge --> Android
+    Android --> InstalledApps["Installed Android Apps"]
+  end
+
+  Compatctl --> KeyboardFlow["APK-backed IME Provisioning Flow"]
+  KeyboardFlow --> Loader
+  KeyboardFlow --> Desktopify
+  KeyboardFlow --> Runtime
+  Runtime --> KeyboardApp["FUTO Keyboard Ready-for-typing Proof"]
+
+  Compatctl --> InstalledFlow["Installed-package Linux Launch Flow"]
+  InstalledFlow --> Verifier
+  Verifier --> DesktopFiles
+  Verifier --> WaydroidCLI
+  InstalledApps --> ProvenApps["Calculator, Settings, and F-Droid"]
+```
+
+This diagram is the current working architecture and should stay in sync with the verified Linuxoid flow on GitHub.
+
 ## What Exists Today
 
 - A C++ checkpoint engine with weighted runtime gates
