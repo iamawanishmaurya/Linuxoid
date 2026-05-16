@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -57,6 +58,16 @@ std::string ReadCommandOutput(const std::string& command, int* exit_code) {
     *exit_code = status;
   }
   return output;
+}
+
+std::string ReadTextFile(const std::filesystem::path& path) {
+  std::ifstream input(path);
+  if (!input) {
+    throw std::runtime_error("unable to open file: " + path.string());
+  }
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  return buffer.str();
 }
 
 std::filesystem::path ResolveBuildDirFromTestBinary() {
@@ -2414,6 +2425,106 @@ void TestRuntimeHealthReplaySummarizesTrace() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeArtRuntimeSmokeWritesTraceJsonl() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-runtime-trace", true, true);
+
+  const auto report = wfa::RunNativeArtRuntimeSmokeFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(!report.trace_jsonl_path.empty(),
+         "expected runtime smoke trace path");
+  Expect(fs::exists(report.trace_jsonl_path),
+         "expected runtime smoke trace artifact");
+  const std::string trace = ReadTextFile(report.trace_jsonl_path);
+  Expect(trace.find("\"event_type\": \"runtime_smoke_started\"") !=
+             std::string::npos,
+         "expected runtime smoke start event");
+  Expect(trace.find("\"event_type\": \"runtime_smoke_complete\"") !=
+             std::string::npos,
+         "expected runtime smoke completion event");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeDiagnosticReplayWritesStableArtifacts() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-diagnostic-replay", true, true);
+
+  const auto health = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+  const auto replay =
+      wfa::ReplayRuntimeDiagnosticBundle(
+          fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(health.self_healing_ready, "expected baseline health fixture");
+  Expect(replay.replay_ready, "expected diagnostic replay readiness");
+  Expect(fs::exists(replay.result_json_path),
+         "expected diagnostic replay json artifact");
+  Expect(fs::exists(replay.merged_trace_jsonl_path),
+         "expected merged diagnostic trace artifact");
+  Expect(replay.total_events_read >= replay.trace_sources_found,
+         "expected trace events across diagnostic sources");
+  Expect(std::find(replay.selected_actions.begin(),
+                   replay.selected_actions.end(),
+                   "attempt_host_art_class_resolution") !=
+             replay.selected_actions.end(),
+         "expected dex recovery action in diagnostic replay");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeDiagnosticReplayHandlesMissingTraceHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-diagnostic-missing", true, true);
+
+  const auto health = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+  fs::remove(health.trace_jsonl_path);
+
+  const auto replay =
+      wfa::ReplayRuntimeDiagnosticBundle(
+          fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(!replay.replay_ready,
+         "expected replay to stay unready when a trace is missing");
+  Expect(replay.exit_reason == "missing_trace_artifact",
+         "expected missing-trace exit reason");
+  Expect(std::find(replay.missing_trace_sources.begin(),
+                   replay.missing_trace_sources.end(),
+                   "runtime_health_trace") !=
+             replay.missing_trace_sources.end(),
+         "expected missing runtime health trace classification");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeDiagnosticReplayCommandWritesStableJson() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-diagnostic-command", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  static_cast<void>(wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline"));
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-diagnostic-replay " +
+          fixture.bootstrap.bootstrap_manifest_path,
+      &exit_code);
+  Expect(exit_code == 0, "expected native-runtime-diagnostic-replay success");
+  Expect(output.find("\"replay_ready\": true") != std::string::npos,
+         "expected replay readiness in diagnostic replay json");
+  Expect(output.find("\"merged_trace_jsonl_path\": ") != std::string::npos,
+         "expected merged trace path in diagnostic replay json");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeHealthCommandWritesStableJson() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -4641,6 +4752,10 @@ int main() {
     TestRuntimeHealthFixtureSelectsUnavailableDisplayRecovery();
     TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
     TestRuntimeHealthReplaySummarizesTrace();
+    TestNativeArtRuntimeSmokeWritesTraceJsonl();
+    TestRuntimeDiagnosticReplayWritesStableArtifacts();
+    TestRuntimeDiagnosticReplayHandlesMissingTraceHonestly();
+    TestRuntimeDiagnosticReplayCommandWritesStableJson();
     TestRuntimeHealthCommandWritesStableJson();
     TestRuntimeRecoveryPlanWritesStableArtifacts();
     TestRuntimeRecoveryPlanScenariosSelectDeterministicActions();

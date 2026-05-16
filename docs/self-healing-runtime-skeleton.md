@@ -34,12 +34,15 @@ What that means **today**:
   - `native-art-runtime-smoke`
   - `art/runtime-smoke-invocation-plan.json`
   - `art/runtime-smoke-invocation.log`
+  - `art/runtime-smoke-trace.jsonl`
   - `art/runtime-smoke-result.json`
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
   - `runtime-health-replay.json`
-- The trace can be replayed without rerunning the full UI path.
+  - `runtime-diagnostic-events.jsonl`
+  - `runtime-diagnostic-replay.json`
+- The traces can now be replayed and merged without rerunning the full UI path.
 
 What it **does not** mean yet:
 
@@ -56,7 +59,8 @@ Current meaning of “self-healing” in Linuxoid:
 2. Classify the failure into a known subsystem bucket.
 3. Select a bounded recovery action.
 4. Persist the diagnosis and recovery plan in replayable artifacts.
-5. Refuse false success when a required dependency is still missing.
+5. Merge the existing JSONL traces back into one diagnostic replay bundle.
+6. Refuse false success when a required dependency is still missing.
 
 Current commands:
 
@@ -64,6 +68,7 @@ Current commands:
 ./build/compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]
 ./build/compatctl native-runtime-recovery-plan <bootstrap-manifest> [scenario]
 ./build/compatctl native-runtime-health-replay <trace-jsonl-path>
+./build/compatctl native-runtime-diagnostic-replay <bootstrap-manifest>
 ./build/compatctl native-art-classloader-fixture <bootstrap-manifest>
 ./build/compatctl native-art-class-resolution-fixture <bootstrap-manifest>
 ./build/compatctl native-art-runtime-smoke <bootstrap-manifest>

@@ -1232,3 +1232,23 @@
   Action: Rebuilt Linuxoid, reran the full test suite, verified the new `native-runtime-recovery-plan` command for baseline and missing-artifact scenarios, and refreshed status/docs for the deterministic recovery-plan surface.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, `native-runtime-recovery-plan` now writes stable `runtime-recovery-plan.json` and `runtime-recovery-actions.jsonl` artifacts, and `compatctl status` now reports `Native Execution Readiness: 91/100`.
   Timestamp: 2026-05-17T21:12:00+05:30
+
+- Step: Runtime diagnostic replay red test
+  Action: Added failing tests for runtime-smoke JSONL traces plus a replayable diagnostic bundle that should summarize failure evidence without rerunning the UI path.
+  Result: The new test expectations are in place and now define the next self-healing observability gate before production replay code is added.
+  Timestamp: 2026-05-17T22:05:00+05:30
+
+- Step: Runtime diagnostic replay missing-surface failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the replay tests.
+  Result: The build failed because `NativeArtRuntimeSmokeReport` does not yet expose a JSONL trace path and `ReplayRuntimeDiagnosticBundle(...)` is not implemented yet, confirming the replay bundle is genuinely missing.
+  Timestamp: 2026-05-17T22:07:00+05:30
+
+- Step: Runtime diagnostic replay implementation
+  Action: Added a JSONL trace for the ART runtime smoke seam, added a merged replay-bundle fixture/API plus CLI command, and refreshed the repo documentation and status text for the new self-healing diagnosis surface.
+  Result: Linuxoid can now merge health, recovery, classloader, class-resolution, and runtime-smoke traces into stable replay artifacts without rerunning the UI path, while still reporting missing trace sources honestly.
+  Timestamp: 2026-05-17T22:24:00+05:30
+
+- Step: Runtime diagnostic replay gate verification
+  Action: Rebuilt Linuxoid, reran the full test suite, verified `native-runtime-health-fixture`, verified `native-runtime-diagnostic-replay` first against a missing-trace race and then sequentially against a complete Calculator trace set, and refreshed the docs/changelog/version metadata.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the replay command now writes `runtime-diagnostic-events.jsonl` plus `runtime-diagnostic-replay.json`, reports missing trace sources honestly when a source is absent, and reports `replay_ready: true` with `trace_sources_found: 5` after the trace set is complete.
+  Timestamp: 2026-05-17T22:28:00+05:30

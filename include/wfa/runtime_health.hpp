@@ -60,6 +60,36 @@ struct RuntimeHealthReplayReport {
   std::vector<std::string> selected_actions;
 };
 
+struct RuntimeDiagnosticTraceSource {
+  std::string source_name;
+  std::string trace_path;
+  bool present = false;
+  int events_read = 0;
+  std::string failure_reason;
+};
+
+struct RuntimeDiagnosticReplayReport {
+  std::string package_name;
+  std::string install_id;
+  std::string bootstrap_manifest_path;
+  std::string session_root;
+  std::string artifact_root;
+  std::string merged_trace_jsonl_path;
+  std::string result_json_path;
+  bool replay_ready = false;
+  std::string overall_state;
+  std::string exit_reason;
+  int total_events_read = 0;
+  int trace_sources_found = 0;
+  bool runtime_probe_attempted = false;
+  bool runtime_probe_succeeded = false;
+  std::vector<RuntimeDiagnosticTraceSource> trace_sources;
+  std::vector<std::string> missing_trace_sources;
+  std::vector<std::string> failing_subsystems;
+  std::vector<std::string> selected_actions;
+  std::vector<std::string> unresolved_classes;
+};
+
 RuntimeHealthReport RunRuntimeHealthFixture(
     const std::string& bootstrap_manifest_path,
     const std::string& scenario_name = "baseline");
@@ -70,6 +100,11 @@ RuntimeHealthReplayReport ReplayRuntimeHealthTrace(
     const std::string& trace_jsonl_path);
 std::string RenderRuntimeHealthReplayJson(
     const RuntimeHealthReplayReport& report);
+
+RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
+    const std::string& bootstrap_manifest_path);
+std::string RenderRuntimeDiagnosticReplayJson(
+    const RuntimeDiagnosticReplayReport& report);
 
 }  // namespace wfa
 

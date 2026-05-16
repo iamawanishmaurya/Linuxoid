@@ -20,6 +20,7 @@ struct NativeArtRuntimeSmokeReport {
   std::string class_resolution_result_json_path;
   std::string invocation_plan_path;
   std::string invocation_log_path;
+  std::string trace_jsonl_path;
   std::string result_json_path;
   bool dex_entries_present = false;
   bool manifest_targets_ready = false;

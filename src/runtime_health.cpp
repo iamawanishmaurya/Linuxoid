@@ -422,6 +422,61 @@ std::string BuildRecoveryActionsJsonl(const RuntimeHealthReport& report) {
   return output.str();
 }
 
+std::string ExtractJsonStringField(const std::string& json_line,
+                                   const std::string& field_name) {
+  const std::regex pattern("\"" + field_name + "\"\\s*:\\s*\"([^\"]*)\"");
+  std::smatch match;
+  if (std::regex_search(json_line, match, pattern) && match.size() == 2) {
+    return match[1].str();
+  }
+  return "";
+}
+
+bool ExtractJsonBoolField(const std::string& json_line,
+                          const std::string& field_name,
+                          bool* present) {
+  const std::regex pattern("\"" + field_name + "\"\\s*:\\s*(true|false)");
+  std::smatch match;
+  if (std::regex_search(json_line, match, pattern) && match.size() == 2) {
+    *present = true;
+    return match[1].str() == "true";
+  }
+  *present = false;
+  return false;
+}
+
+std::vector<std::string> ReadJsonlLinesIfPresent(const std::string& path) {
+  if (!FileExists(path)) {
+    return {};
+  }
+  std::vector<std::string> lines;
+  std::istringstream input(ReadFile(path));
+  for (std::string line; std::getline(input, line);) {
+    if (!line.empty()) {
+      lines.push_back(line);
+    }
+  }
+  return lines;
+}
+
+std::string BuildDiagnosticMergedEventJson(int sequence,
+                                           const std::string& source_name,
+                                           const std::string& source_path,
+                                           int source_line_number,
+                                           const std::string& event_type,
+                                           const std::string& raw_json) {
+  std::ostringstream output;
+  output << "{"
+         << "\"sequence\": " << sequence << ", "
+         << "\"source_name\": \"" << EscapeJson(source_name) << "\", "
+         << "\"source_path\": \"" << EscapeJson(source_path) << "\", "
+         << "\"source_line_number\": " << source_line_number << ", "
+         << "\"event_type\": \"" << EscapeJson(event_type) << "\", "
+         << "\"raw_json\": \"" << EscapeJson(raw_json) << "\""
+         << "}";
+  return output.str();
+}
+
 }  // namespace
 
 RuntimeHealthReport RunRuntimeHealthFixture(
@@ -677,6 +732,219 @@ std::string RenderRuntimeHealthReplayJson(
          << RenderJsonArray(report.failing_subsystems) << ",\n"
          << "  \"selected_actions\": "
          << RenderJsonArray(report.selected_actions) << "\n"
+         << "}\n";
+  return output.str();
+}
+
+RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
+    const std::string& bootstrap_manifest_path) {
+  const NativeLifecycleShim lifecycle =
+      BuildNativeLifecycleShimFromManifest(bootstrap_manifest_path);
+
+  RuntimeDiagnosticReplayReport report;
+  report.package_name = lifecycle.bootstrap.plan.assessment.package_name;
+  report.install_id = lifecycle.bootstrap.plan.assessment.install_id;
+  report.bootstrap_manifest_path = bootstrap_manifest_path;
+  report.session_root = lifecycle.session_root;
+  report.artifact_root = (fs::path(lifecycle.session_root) / "health").string();
+  report.merged_trace_jsonl_path =
+      (fs::path(report.artifact_root) / "runtime-diagnostic-events.jsonl")
+          .string();
+  report.result_json_path =
+      (fs::path(report.artifact_root) / "runtime-diagnostic-replay.json")
+          .string();
+
+  const std::vector<std::pair<std::string, std::string>> source_specs = {
+      {"runtime_health_trace",
+       (fs::path(report.artifact_root) / "runtime-health-trace.jsonl").string()},
+      {"runtime_recovery_actions",
+       (fs::path(report.artifact_root) / "runtime-recovery-actions.jsonl")
+           .string()},
+      {"art_classloader_trace",
+       (fs::path(lifecycle.session_root) / "art" / "art-classloader-trace.jsonl")
+           .string()},
+      {"art_class_resolution_trace",
+       (fs::path(lifecycle.session_root) / "art" /
+        "art-class-resolution-trace.jsonl")
+           .string()},
+      {"art_runtime_smoke_trace",
+       (fs::path(lifecycle.session_root) / "art" / "runtime-smoke-trace.jsonl")
+           .string()},
+  };
+
+  std::set<std::string> failing_subsystems;
+  std::set<std::string> selected_actions;
+  std::set<std::string> unresolved_classes;
+  std::ostringstream merged_trace;
+  int merged_sequence = 1;
+
+  for (const auto& [source_name, source_path] : source_specs) {
+    RuntimeDiagnosticTraceSource source;
+    source.source_name = source_name;
+    source.trace_path = source_path;
+    const auto lines = ReadJsonlLinesIfPresent(source_path);
+    source.present = !lines.empty();
+    source.events_read = static_cast<int>(lines.size());
+    if (!source.present) {
+      source.failure_reason = "trace_missing_or_empty";
+      report.missing_trace_sources.push_back(source_name);
+      report.trace_sources.push_back(source);
+      continue;
+    }
+
+    ++report.trace_sources_found;
+    report.total_events_read += source.events_read;
+    int source_line_number = 1;
+    for (const auto& line : lines) {
+      std::string event_type = ExtractJsonStringField(line, "event_type");
+      if (event_type.empty()) {
+        event_type = source_name == "runtime_recovery_actions"
+                         ? "recovery_action"
+                         : "trace_event";
+      }
+
+      if (source_name == "runtime_health_trace") {
+        bool ready_present = false;
+        const bool ready = ExtractJsonBoolField(line, "ready", &ready_present);
+        if (ready_present && !ready) {
+          const std::string subsystem =
+              ExtractJsonStringField(line, "subsystem_name");
+          if (!subsystem.empty()) {
+            failing_subsystems.insert(subsystem);
+          }
+        }
+        const std::string action_name =
+            ExtractJsonStringField(line, "action_name");
+        if (!action_name.empty() && action_name != "no_recovery_action") {
+          selected_actions.insert(action_name);
+        }
+      } else if (source_name == "runtime_recovery_actions") {
+        const std::string action_name =
+            ExtractJsonStringField(line, "action_name");
+        if (!action_name.empty()) {
+          selected_actions.insert(action_name);
+        }
+      } else if (source_name == "art_class_resolution_trace") {
+        bool resolved_present = false;
+        const bool resolved =
+            ExtractJsonBoolField(line, "resolved_in_dex", &resolved_present);
+        if (resolved_present && !resolved) {
+          const std::string class_name =
+              ExtractJsonStringField(line, "class_name");
+          if (!class_name.empty()) {
+            unresolved_classes.insert(class_name);
+          }
+        }
+      } else if (source_name == "art_runtime_smoke_trace") {
+        bool attempted_present = false;
+        const bool attempted =
+            ExtractJsonBoolField(line, "runtime_probe_attempted",
+                                 &attempted_present);
+        if (attempted_present) {
+          report.runtime_probe_attempted =
+              report.runtime_probe_attempted || attempted;
+        }
+        bool succeeded_present = false;
+        const bool succeeded =
+            ExtractJsonBoolField(line, "runtime_probe_succeeded",
+                                 &succeeded_present);
+        if (succeeded_present) {
+          report.runtime_probe_succeeded =
+              report.runtime_probe_succeeded || succeeded;
+        }
+      }
+
+      merged_trace << BuildDiagnosticMergedEventJson(
+                          merged_sequence++, source_name, source_path,
+                          source_line_number++, event_type, line)
+                   << "\n";
+    }
+
+    report.trace_sources.push_back(source);
+  }
+
+  report.replay_ready = report.missing_trace_sources.empty();
+  report.failing_subsystems.assign(failing_subsystems.begin(),
+                                   failing_subsystems.end());
+  report.selected_actions.assign(selected_actions.begin(),
+                                 selected_actions.end());
+  report.unresolved_classes.assign(unresolved_classes.begin(),
+                                   unresolved_classes.end());
+  if (!report.replay_ready) {
+    report.overall_state = "incomplete";
+    report.exit_reason = "missing_trace_artifact";
+  } else if (!report.failing_subsystems.empty() ||
+             !report.unresolved_classes.empty()) {
+    report.overall_state = "recovery_needed";
+    report.exit_reason = "diagnostic_replay_identified_recovery_needed";
+  } else {
+    report.overall_state = "ready";
+    report.exit_reason = "diagnostic_replay_ready";
+  }
+
+  fs::create_directories(report.artifact_root);
+  WriteTextFile(report.merged_trace_jsonl_path, merged_trace.str());
+  WriteTextFile(report.result_json_path,
+                RenderRuntimeDiagnosticReplayJson(report));
+  return report;
+}
+
+std::string RenderRuntimeDiagnosticReplayJson(
+    const RuntimeDiagnosticReplayReport& report) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"package_name\": \"" << EscapeJson(report.package_name)
+         << "\",\n"
+         << "  \"install_id\": \"" << EscapeJson(report.install_id)
+         << "\",\n"
+         << "  \"bootstrap_manifest_path\": \""
+         << EscapeJson(report.bootstrap_manifest_path) << "\",\n"
+         << "  \"session_root\": \"" << EscapeJson(report.session_root)
+         << "\",\n"
+         << "  \"artifact_root\": \"" << EscapeJson(report.artifact_root)
+         << "\",\n"
+         << "  \"merged_trace_jsonl_path\": \""
+         << EscapeJson(report.merged_trace_jsonl_path) << "\",\n"
+         << "  \"result_json_path\": \"" << EscapeJson(report.result_json_path)
+         << "\",\n"
+         << "  \"replay_ready\": "
+         << (report.replay_ready ? "true" : "false") << ",\n"
+         << "  \"overall_state\": \"" << EscapeJson(report.overall_state)
+         << "\",\n"
+         << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
+         << "\",\n"
+         << "  \"total_events_read\": " << report.total_events_read << ",\n"
+         << "  \"trace_sources_found\": " << report.trace_sources_found
+         << ",\n"
+         << "  \"runtime_probe_attempted\": "
+         << (report.runtime_probe_attempted ? "true" : "false") << ",\n"
+         << "  \"runtime_probe_succeeded\": "
+         << (report.runtime_probe_succeeded ? "true" : "false") << ",\n"
+         << "  \"missing_trace_sources\": "
+         << RenderJsonArray(report.missing_trace_sources) << ",\n"
+         << "  \"failing_subsystems\": "
+         << RenderJsonArray(report.failing_subsystems) << ",\n"
+         << "  \"selected_actions\": "
+         << RenderJsonArray(report.selected_actions) << ",\n"
+         << "  \"unresolved_classes\": "
+         << RenderJsonArray(report.unresolved_classes) << ",\n"
+         << "  \"trace_sources\": [\n";
+  for (std::size_t index = 0; index < report.trace_sources.size(); ++index) {
+    const auto& source = report.trace_sources[index];
+    if (index != 0) {
+      output << ",\n";
+    }
+    output << "    {"
+           << "\"source_name\": \"" << EscapeJson(source.source_name)
+           << "\", "
+           << "\"trace_path\": \"" << EscapeJson(source.trace_path) << "\", "
+           << "\"present\": " << (source.present ? "true" : "false") << ", "
+           << "\"events_read\": " << source.events_read << ", "
+           << "\"failure_reason\": \""
+           << EscapeJson(source.failure_reason) << "\""
+           << "}";
+  }
+  output << "\n  ]\n"
          << "}\n";
   return output.str();
 }

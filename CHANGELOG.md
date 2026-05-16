@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.43 - 2026-05-17
+
+- Add a Linuxoid-owned `runtime-smoke-trace.jsonl` artifact so the ART runtime smoke seam now emits structured JSONL events instead of only a plan, log, and result file.
+- Add a `native-runtime-diagnostic-replay <bootstrap-manifest>` seam so Linuxoid can merge health, recovery, classloader, class-resolution, and runtime-smoke traces into one replayable diagnostic bundle without rerunning the UI path.
+- Refresh the README Mermaid architecture, phased plan, self-healing runtime note, changelog, and status output so Linuxoid now reports the merged replay-bundle gate honestly while still marking real ART/DEX execution, full Android Binder behavior, compositor-backed rendering, and IME/text composition as pending.
+
 ## v0.1.42 - 2026-05-17
 
 - Add a Linuxoid-owned `native-runtime-recovery-plan` seam so the self-healing runtime can now materialize deterministic recovery-plan and action-trace artifacts instead of only selecting bounded recovery actions inside `runtime-health.json`.

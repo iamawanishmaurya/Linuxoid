@@ -1,6 +1,6 @@
 # Linuxoid — Phased Build Plan
 
-> Current state: scaffold `96/100` · execution `91/100`  
+> Current state: scaffold `96/100` · execution `92/100`  
 > Goal: Android apps on Linux. No Waydroid. No ADB. No emulator.
 
 ---

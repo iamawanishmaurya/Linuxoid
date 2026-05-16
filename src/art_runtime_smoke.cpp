@@ -183,6 +183,55 @@ std::string BuildRuntimeLog(const NativeArtRuntimeSmokeReport& report,
   return output.str();
 }
 
+std::string BuildRuntimeTraceJsonl(const NativeArtRuntimeSmokeReport& report,
+                                   const CommandCaptureResult& command_result) {
+  std::ostringstream output;
+  output << "{\"event_type\": \"runtime_smoke_started\", "
+         << "\"classpath_plan_ready\": "
+         << (report.classpath_plan_ready ? "true" : "false") << ", "
+         << "\"offline_resolution_ready\": "
+         << (report.offline_resolution_ready ? "true" : "false") << ", "
+         << "\"art_runtime_detected\": "
+         << (report.art_runtime_detected ? "true" : "false") << ", "
+         << "\"safe_runtime_probe_available\": "
+         << (report.safe_runtime_probe_available ? "true" : "false") << ", "
+         << "\"target_class_descriptors\": "
+         << RenderJsonArray(report.target_class_descriptors) << "}\n";
+
+  if (!report.runtime_probe_attempted) {
+    output << "{\"event_type\": \"runtime_probe_skipped\", "
+           << "\"runtime_probe_command\": \""
+           << EscapeJson(report.runtime_probe_command) << "\", "
+           << "\"exit_reason\": \"" << EscapeJson(report.exit_reason) << "\"}\n";
+  } else {
+    output << "{\"event_type\": \"runtime_probe_attempted\", "
+           << "\"runtime_probe_command\": \""
+           << EscapeJson(report.runtime_probe_command) << "\"}\n";
+    output << "{\"event_type\": \"runtime_probe_result\", "
+           << "\"runtime_exit_code\": " << report.runtime_exit_code << ", "
+           << "\"runtime_probe_succeeded\": "
+           << (report.runtime_probe_succeeded ? "true" : "false") << ", "
+           << "\"captured_output\": \"" << EscapeJson(command_result.output)
+           << "\"}\n";
+  }
+
+  output << "{\"event_type\": \"runtime_smoke_complete\", "
+         << "\"pathclassloader_resolution_planned\": "
+         << (report.pathclassloader_resolution_planned ? "true" : "false")
+         << ", "
+         << "\"pathclassloader_resolution_attempted\": "
+         << (report.pathclassloader_resolution_attempted ? "true" : "false")
+         << ", "
+         << "\"resolved_target_count\": " << report.resolved_target_count << ", "
+         << "\"missing_target_count\": " << report.missing_target_count << ", "
+         << "\"runtime_probe_attempted\": "
+         << (report.runtime_probe_attempted ? "true" : "false") << ", "
+         << "\"runtime_probe_succeeded\": "
+         << (report.runtime_probe_succeeded ? "true" : "false") << ", "
+         << "\"exit_reason\": \"" << EscapeJson(report.exit_reason) << "\"}\n";
+  return output.str();
+}
+
 }  // namespace
 
 NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
@@ -209,6 +258,8 @@ NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
           .string();
   report.invocation_log_path =
       (fs::path(report.artifact_root) / "runtime-smoke-invocation.log").string();
+  report.trace_jsonl_path =
+      (fs::path(report.artifact_root) / "runtime-smoke-trace.jsonl").string();
   report.result_json_path =
       (fs::path(report.artifact_root) / "runtime-smoke-result.json").string();
   report.dex_entries_present = resolution_report.dex_entries_present;
@@ -260,6 +311,7 @@ NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
   }
 
   WriteTextFile(report.invocation_log_path, BuildRuntimeLog(report, capture));
+  WriteTextFile(report.trace_jsonl_path, BuildRuntimeTraceJsonl(report, capture));
   WriteTextFile(report.result_json_path,
                 RenderNativeArtRuntimeSmokeFixtureJson(report));
   return report;
@@ -293,6 +345,8 @@ std::string RenderNativeArtRuntimeSmokeFixtureJson(
          << EscapeJson(report.invocation_plan_path) << "\",\n"
          << "  \"invocation_log_path\": \""
          << EscapeJson(report.invocation_log_path) << "\",\n"
+         << "  \"trace_jsonl_path\": \""
+         << EscapeJson(report.trace_jsonl_path) << "\",\n"
          << "  \"result_json_path\": \""
          << EscapeJson(report.result_json_path) << "\",\n"
          << "  \"dex_entries_present\": "

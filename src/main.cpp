@@ -47,6 +47,7 @@ void PrintUsage() {
       << "  compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]\n"
       << "  compatctl native-runtime-recovery-plan <bootstrap-manifest> [scenario]\n"
       << "  compatctl native-runtime-health-replay <trace-jsonl-path>\n"
+      << "  compatctl native-runtime-diagnostic-replay <bootstrap-manifest>\n"
       << "  compatctl native-lifecycle-shim <bootstrap-manifest>\n"
       << "  compatctl native-process-bootstrap <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <bootstrap-manifest>\n"
@@ -341,6 +342,17 @@ int main(int argc, char** argv) {
 
       const auto report = wfa::ReplayRuntimeHealthTrace(argv[2]);
       std::cout << wfa::RenderRuntimeHealthReplayJson(report);
+      return EXIT_SUCCESS;
+    }
+
+    if (command == "native-runtime-diagnostic-replay") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report = wfa::ReplayRuntimeDiagnosticBundle(argv[2]);
+      std::cout << wfa::RenderRuntimeDiagnosticReplayJson(report);
       return EXIT_SUCCESS;
     }
 
