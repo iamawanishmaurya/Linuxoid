@@ -509,3 +509,18 @@
   Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, and smoke-checked `compatctl status`, `compatctl foundation`, and `compatctl launch-package native com.example.demo`.
   Result: The build and tests passed, the binary now reports `91/100` phase loading with `70/100` checkpoint gates, and the new generic launch path returns an honest `native backend is not implemented yet` report instead of pretending native execution works.
   Timestamp: 2026-05-16T14:42:24+05:30
+
+- Step: README dependency-and-roadmap refresh kickoff
+  Action: Re-checked the published README, changelog, Git status, and the code paths that call external tools before preparing the next GitHub docs update.
+  Result: Confirmed a clean `main` branch at `v0.1.14` and verified that the current project still depends on a C++20 toolchain, `apktool`, `adb`, and a live Android runtime adapter for anything beyond static APK analysis.
+  Timestamp: 2026-05-16T14:46:44+05:30
+
+- Step: README architecture and dependency refresh
+  Action: Updated the GitHub README with a refreshed Mermaid architecture, a new goal-state Mermaid graph, a current external-dependencies section, and five concrete next-step recommendations focused on eliminating external Android runtime dependencies.
+  Result: The repo front page now explains both the current verified Linuxoid path and the long-term native Linux runtime goal in a clearer, dependency-aware way, and the release metadata was bumped to `v0.1.15`.
+  Timestamp: 2026-05-16T14:47:51+05:30
+
+- Step: README docs verification
+  Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, and reviewed the final README/changelog/version diff before publishing the docs release.
+  Result: The docs slice stayed green, the build and test suite passed, and the README now accurately reflects the current dependencies and next-step roadmap.
+  Timestamp: 2026-05-16T14:48:15+05:30

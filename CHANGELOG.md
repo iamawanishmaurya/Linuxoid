@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.15 - 2026-05-16
+
+- Refresh the GitHub README Mermaid architecture so it now shows both the current working backend-neutral transition architecture and the long-term native Linux runtime target.
+- Add a clear external-dependencies section to the README covering the current build and runtime requirements, including `apktool`, `adb`, and a live Android runtime adapter.
+- Add five concrete next-step recommendations in the README focused on the goal of running Android apps on Linux without external Android runtime dependencies.
+
 ## v0.1.14 - 2026-05-16
 
 - Add a backend-neutral `launch-package` runtime seam for installed-package launches, with `waydroid`, `attached-adb`, and `native` backend routing.

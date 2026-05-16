@@ -56,6 +56,33 @@ flowchart TB
 
 This diagram is the current working architecture and should stay in sync with the verified Linuxoid flow on GitHub.
 
+## Target Architecture
+
+```mermaid
+flowchart TB
+  User["Linux User"] --> Linuxoid["Linuxoid Native Runtime"]
+
+  subgraph Host["Linux Host"]
+    Linuxoid --> Loader["APK / Resources / Manifest Loader"]
+    Linuxoid --> DexArt["DEX / ART Execution Layer"]
+    Linuxoid --> Binder["Binder-Compatible IPC Layer"]
+    Linuxoid --> Services["Android Service and Lifecycle Layer"]
+    Linuxoid --> Graphics["Linux Window / Graphics Integration"]
+    Linuxoid --> Input["Keyboard / Mouse / IME / Clipboard Integration"]
+    Linuxoid --> Storage["App Sandbox / Filesystem Mapping"]
+  end
+
+  Loader --> App["Android App Process"]
+  DexArt --> App
+  Binder --> Services
+  Services --> App
+  Graphics --> App
+  Input --> App
+  Storage --> App
+```
+
+This is the long-term goal state: run Android apps on Linux without depending on Waydroid, an emulator, or another external Android runtime.
+
 ## What Exists Today
 
 - A C++ checkpoint engine with weighted runtime gates
@@ -82,6 +109,44 @@ This diagram is the current working architecture and should stay in sync with th
 - A live Waydroid-backed mini-matrix that verifies direct Linux launch for `com.android.calculator2`, `com.android.settings`, and `org.fdroid.fdroid`
 - A local test suite that verifies the first scaffold behavior
 
+## Current External Dependencies
+
+Linuxoid does **not** yet run Android apps natively on Linux by itself. The current project still relies on these external dependencies:
+
+- `CMake 4.0+`
+- a `C++20` compiler such as `g++` or `clang++`
+- `adb` for runtime attachment, activity launch, IME control, and status checks
+- `apktool` for APK decode and manifest/resource staging during `load-apk` flows
+- a live Android runtime target for execution paths:
+  - `Waydroid` for the currently verified installed-package Linux launch flow
+  - or an attached ADB target for the generic `attached-adb` backend contract
+- a Linux desktop environment that supports `.desktop` launchers and shell scripts for host integration
+
+### Dependency Notes
+
+- The new `launch-package` core path is backend-neutral, but **native Linux execution is still not implemented**.
+- The current live proofs on GitHub are still **Waydroid-backed** for installed-package launch and matrix verification.
+- `attached-adb` is now part of the core contract, but it is still a transition backend, not the final goal.
+
+## What To Do Next
+
+These are the next five highest-value moves if the goal is to run Android apps directly on Linux without depending on Waydroid or any other external Android runtime:
+
+1. Build **runtime discovery and preflight** for attached targets.
+   This removes hidden assumptions, makes the generic backend path honest, and prepares Linuxoid to move away from Waydroid-specific control flow.
+
+2. Add **generic installed-package verification and matrix reporting** that no longer carries Waydroid-shaped names.
+   That gives us a clean transition harness before we start replacing runtime behavior.
+
+3. Implement a **native package launch spike** for one simple foreground app class.
+   The first target should be a small app with one activity, no background services, and no IME dependence.
+
+4. Build the first **Linuxoid-owned lifecycle and service shim**.
+   The smallest meaningful slice is activity launch, process state, and a minimal Binder/service bridge for one app shape.
+
+5. Build **native graphics, input, and window integration** for that simple app class.
+   This is the point where Linuxoid starts proving real no-runtime execution instead of only better orchestration around an external Android target.
+
 ## Build
 
 ```bash
@@ -100,6 +165,7 @@ ctest --test-dir build --output-on-failure
 ./build/compatctl load-apk /path/to/app.apk /tmp/wfa-load
 ./build/compatctl launch-activity emulator-5590 org.example.app/.SettingsActivity
 ./build/compatctl launch-package waydroid com.android.calculator2
+./build/compatctl launch-package attached-adb 192.168.240.112:5555 com.example.demo/.MainActivity
 ./build/compatctl launch-package native com.example.demo
 ./build/compatctl verify-apk-host-launch-auto emulator-5590 /path/to/app.apk /tmp/linuxoid-apk-verify /tmp/linuxoid-apk-applications /tmp/linuxoid-apk-launchers
 ./build/compatctl launch-waydroid-package com.android.calculator2
