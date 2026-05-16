@@ -374,3 +374,23 @@
   Action: Rebuilt Linuxoid, reran the test suite, confirmed the `88/100` status output, and reran `verify-waydroid-package` on live Waydroid for `com.android.calculator2`, `com.android.settings`, and `org.fdroid.fdroid`.
   Result: Linuxoid now has a repeatable, freshly re-verified direct Linux launch proof for three installed Android apps, with each app passing all three verification checks at `100/100`.
   Timestamp: 2026-05-16T11:13:49+05:30
+
+- Step: Linuxoid v0.1.9 release and publish
+  Action: Staged the direct-on-Linux verification slice, committed it as `feat: add Waydroid package verification flow`, tagged `v0.1.9`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
+  Result: The repeatable Waydroid package verification flow is now published and versioned on GitHub as `v0.1.9`.
+  Timestamp: 2026-05-16T11:18:54+05:30
+
+- Step: Compatibility-matrix verification implementation
+  Action: Added a Waydroid matrix verifier to the integration layer and CLI, expanded the test suite with success and fail-honest matrix cases, and updated the release docs for the next slice.
+  Result: Linuxoid can now verify several installed Android apps in one pass and report package-level launch readiness instead of relying on one-off per-app commands.
+  Timestamp: 2026-05-16T11:27:42+05:30
+
+- Step: Compatibility-matrix live failure capture
+  Action: Ran the new `verify-waydroid-matrix` command on live Waydroid after a green rebuild and test pass, then logged the exact failure output in a problem report before attempting a fix.
+  Result: The first live matrix run exposed a real integration bug: all three packages failed at `33/100` despite the single-package verifier already passing for the same apps.
+  Timestamp: 2026-05-16T11:32:18+05:30
+
+- Step: Compatibility-matrix failure analysis and resolution
+  Action: Evaluated multiple recovery approaches, restored the structured matrix verifier path, improved the per-package report, identified the sandboxed Waydroid D-Bus access failure, and reran the live matrix verification outside the sandbox.
+  Result: The real blocker was the top-level execution environment rather than the Linuxoid app-launch path, and the live matrix now passes at `3/3` with each package proving `direct=yes`, `launcher=yes`, and `generated=yes`.
+  Timestamp: 2026-05-16T11:53:07+05:30

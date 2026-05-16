@@ -5,6 +5,7 @@
 #include "wfa/runtime_bridge.hpp"
 
 #include <string>
+#include <vector>
 
 namespace wfa {
 
@@ -27,14 +28,34 @@ struct WaydroidPackageVerificationReport {
   WaydroidDesktopLaunchArtifacts artifacts;
 };
 
+struct WaydroidMatrixEntry {
+  std::string package_name;
+  bool verification_ok = false;
+  std::string error;
+  WaydroidPackageVerificationReport verification;
+};
+
+struct WaydroidMatrixReport {
+  std::string artifact_root;
+  std::vector<WaydroidMatrixEntry> entries;
+};
+
 WaydroidPackageVerificationReport VerifyWaydroidPackageWithRunners(
     const WaydroidPackageVerificationSpec& spec,
     const CommandRunner& runtime_runner,
     const CommandRunner& launcher_runner);
 WaydroidPackageVerificationReport VerifyWaydroidPackage(
     const WaydroidPackageVerificationSpec& spec);
+WaydroidMatrixReport VerifyWaydroidPackageMatrixWithRunners(
+    const std::vector<std::string>& packages, const std::string& compatctl_path,
+    const std::string& artifact_root, const CommandRunner& runtime_runner,
+    const CommandRunner& launcher_runner);
+WaydroidMatrixReport VerifyWaydroidPackageMatrix(
+    const std::vector<std::string>& packages, const std::string& compatctl_path,
+    const std::string& artifact_root);
 std::string RenderWaydroidPackageVerificationReport(
     const WaydroidPackageVerificationReport& report);
+std::string RenderWaydroidMatrixReport(const WaydroidMatrixReport& report);
 
 }  // namespace wfa
 

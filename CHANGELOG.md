@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.10 - 2026-05-16
+
+- Add `verify-waydroid-matrix` so Linuxoid can verify several installed Waydroid apps in one pass and report package-level pass/fail results.
+- Extend the Waydroid integration layer with matrix reporting that keeps running even when one app fails, so compatibility gaps surface honestly instead of aborting the whole batch.
+- Keep verified project loading at `88/100` while raising the repeatability of the direct-on-Linux verification workflow.
+
 ## v0.1.9 - 2026-05-16
 
 - Add `verify-waydroid-package` so Linuxoid can prove a direct Linux launch path for an installed Waydroid app through three checks: runtime launch, launcher generation, and generated launcher execution.

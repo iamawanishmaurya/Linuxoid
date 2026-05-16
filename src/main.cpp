@@ -13,6 +13,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -26,6 +27,7 @@ void PrintUsage() {
       << "  compatctl launch-activity <serial> <component>\n"
       << "  compatctl launch-waydroid-package <package>\n"
       << "  compatctl verify-waydroid-package <package> [desktop-entry-root] [launcher-root]\n"
+      << "  compatctl verify-waydroid-matrix <artifact-root> <package> [package...]\n"
       << "  compatctl adb-ime-status <serial> <package> <ime-id> [settings-component]\n"
       << "  compatctl provision-ime <serial> <apk-path> <package> <ime-id> [settings-component]\n"
       << "  compatctl desktopify-apk <serial> <apk-path> <component> [compat-root] [desktop-entry-root] [launcher-root]\n"
@@ -180,6 +182,29 @@ int main(int argc, char** argv) {
                      report.generated_launcher_ok
                  ? EXIT_SUCCESS
                  : EXIT_FAILURE;
+    }
+
+    if (command == "verify-waydroid-matrix") {
+      if (argc < 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      std::vector<std::string> packages;
+      packages.reserve(static_cast<std::size_t>(argc - 3));
+      for (int index = 3; index < argc; ++index) {
+        packages.push_back(argv[index]);
+      }
+
+      const auto report = wfa::VerifyWaydroidPackageMatrix(
+          packages, compatctl_path, argv[2]);
+      std::cout << wfa::RenderWaydroidMatrixReport(report);
+      for (const auto& entry : report.entries) {
+        if (!entry.verification_ok) {
+          return EXIT_FAILURE;
+        }
+      }
+      return EXIT_SUCCESS;
     }
 
     if (command == "provision-ime") {

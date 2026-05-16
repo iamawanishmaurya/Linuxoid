@@ -975,6 +975,100 @@ void TestWaydroidPackageVerificationSuccessPath() {
   fs::remove_all(root);
 }
 
+void TestWaydroidPackageMatrixSuccessPath() {
+  const auto runtime_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "waydroid app launch com.android.calculator2" ||
+        command == "waydroid app launch com.android.settings") {
+      return {0, ""};
+    }
+    return {1, "unexpected package"};
+  };
+
+  const auto launcher_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command.find("com.android.calculator2.sh") != std::string::npos ||
+        command.find("com.android.settings.sh") != std::string::npos) {
+      return {0, ""};
+    }
+    return {1, "unexpected launcher"};
+  };
+
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-waydroid-matrix";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path compatctl_path = root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  const auto report = wfa::VerifyWaydroidPackageMatrixWithRunners(
+      {"com.android.calculator2", "com.android.settings"},
+      compatctl_path.string(), root.string(), runtime_runner, launcher_runner);
+
+  Expect(report.entries.size() == 2, "expected two matrix entries");
+  Expect(report.entries[0].verification_ok,
+         "expected first matrix package to pass");
+  Expect(report.entries[1].verification_ok,
+         "expected second matrix package to pass");
+
+  const auto rendered = wfa::RenderWaydroidMatrixReport(report);
+  Expect(rendered.find("Matrix Loading: [##########] 100/100") !=
+             std::string::npos,
+         "expected full matrix loading");
+  Expect(rendered.find("Packages Passed: 2/2") != std::string::npos,
+         "expected package pass count");
+
+  fs::remove_all(root);
+}
+
+void TestWaydroidPackageMatrixCapturesFailure() {
+  const auto runtime_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "waydroid app launch com.android.calculator2") {
+      return {0, ""};
+    }
+    if (command == "waydroid app launch org.fdroid.fdroid") {
+      return {1, "launch failed"};
+    }
+    return {1, "unexpected package"};
+  };
+
+  const auto launcher_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command.find("com.android.calculator2.sh") != std::string::npos ||
+        command.find("org.fdroid.fdroid.sh") != std::string::npos) {
+      return {0, ""};
+    }
+    return {1, "unexpected launcher"};
+  };
+
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-waydroid-matrix-failure";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path compatctl_path = root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  const auto report = wfa::VerifyWaydroidPackageMatrixWithRunners(
+      {"com.android.calculator2", "org.fdroid.fdroid"},
+      compatctl_path.string(), root.string(), runtime_runner, launcher_runner);
+
+  Expect(report.entries.size() == 2, "expected two matrix entries");
+  Expect(report.entries[0].verification_ok,
+         "expected first matrix package to pass");
+  Expect(!report.entries[1].verification_ok,
+         "expected second matrix package to fail");
+
+  const auto rendered = wfa::RenderWaydroidMatrixReport(report);
+  Expect(rendered.find("Packages Passed: 1/2") != std::string::npos,
+         "expected partial package pass count");
+
+  fs::remove_all(root);
+}
+
 void TestImeProvisioningSuccessPath() {
   std::vector<std::string> commands;
 
@@ -1262,6 +1356,8 @@ int main() {
     TestWaydroidDesktopLaunchArtifacts();
     TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage();
     TestWaydroidPackageVerificationSuccessPath();
+    TestWaydroidPackageMatrixSuccessPath();
+    TestWaydroidPackageMatrixCapturesFailure();
     TestImeProvisioningSuccessPath();
     TestImeProvisioningNormalizesFullyQualifiedImeIdForWaydroidStyleMutation();
     TestImeProvisioningDetectsIncompleteActivation();

@@ -103,8 +103,8 @@ std::string DescribeMvpFoundation() {
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: container-first Android userspace integration\n";
-  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, and Linux desktop launch artifacts with repeatable APK-backed and installed-package Waydroid verification\n";
-  output << "Golden App Proof: the FUTO keyboard APK returns Ready for typing: yes through a Linuxoid-generated launcher on live Waydroid, and Calculator, Settings, and F-Droid now verify through the installed-package Linux launch path.\n";
+  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, and Linux desktop launch artifacts with repeatable per-app and matrix Waydroid verification\n";
+  output << "Golden App Proof: the FUTO keyboard APK returns Ready for typing: yes through a Linuxoid-generated launcher on live Waydroid, and Calculator, Settings, and F-Droid now verify through both the installed-package Linux launch path and the matrix runner.\n";
   output << "Why: this keeps the first executable slice aligned with the future core.\n";
   return output.str();
 }

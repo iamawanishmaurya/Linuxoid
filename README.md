@@ -23,6 +23,7 @@ Linuxoid currently contains the first executable MVP scaffold for an Android-on-
 - A `launch-waydroid-package` path that launches an already installed app through Waydroid without requiring an APK reinstall or a hardcoded ADB serial
 - A `desktopify-waydroid-package` path that generates a Linux launcher and `.desktop` entry for an installed Waydroid app
 - A `verify-waydroid-package` path that proves direct Linux launch for an installed Waydroid app by checking the runtime launch, the generated host launcher artifacts, and the generated launcher execution
+- A `verify-waydroid-matrix` path that runs the direct Linux verification loop across several installed Waydroid apps and reports pass/fail per package
 - A live Waydroid-backed proof that a Linuxoid-generated launcher can install the keyboard APK, enable it, set it as default, and return `Ready for typing: yes` from Linux
 - A live Waydroid-backed proof that a Linuxoid-generated launcher can open `com.android.calculator2` from Linux through the new installed-package path
 - A live Waydroid-backed mini-matrix that verifies direct Linux launch for `com.android.calculator2`, `com.android.settings`, and `org.fdroid.fdroid`
@@ -47,6 +48,7 @@ ctest --test-dir build --output-on-failure
 ./build/compatctl launch-activity emulator-5590 org.example.app/.SettingsActivity
 ./build/compatctl launch-waydroid-package com.android.calculator2
 ./build/compatctl verify-waydroid-package com.android.calculator2 /tmp/linuxoid-applications /tmp/linuxoid-launchers
+./build/compatctl verify-waydroid-matrix /tmp/linuxoid-matrix com.android.calculator2 com.android.settings org.fdroid.fdroid
 ./build/compatctl adb-ime-status emulator-5590 org.example.app org.example.app/.ImeService
 ./build/compatctl adb-ime-status emulator-5590 org.example.app org.example.app/.ImeService org.example.app/.SettingsActivity
 ./build/compatctl provision-ime emulator-5590 /path/to/app.apk org.example.app org.example.app/.ImeService org.example.app/.SettingsActivity
