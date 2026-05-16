@@ -25,6 +25,9 @@ struct RuntimeRecoveryAction {
   std::string action_name;
   std::string action_state;
   std::string action_reason;
+  int action_rank = 0;
+  int retry_budget = 0;
+  std::string recovery_scope;
   std::string artifact_path;
   std::string replay_trace_path;
 };

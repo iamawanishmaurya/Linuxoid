@@ -2696,6 +2696,15 @@ void TestRuntimeRecoveryPlanWritesStableArtifacts() {
   Expect(!dex_action->replay_trace_path.empty(),
          "expected deterministic replay trace path");
 
+  const std::string recovery_plan_json = ReadTextFile(report.recovery_plan_path);
+  Expect(recovery_plan_json.find("\"action_rank\": 50") != std::string::npos,
+         "expected deterministic action rank in recovery plan");
+  Expect(recovery_plan_json.find("\"retry_budget\": 0") != std::string::npos,
+         "expected deterministic retry budget in recovery plan");
+  Expect(recovery_plan_json.find("\"recovery_scope\": \"art_bridge\"") !=
+             std::string::npos,
+         "expected deterministic recovery scope in recovery plan");
+
   fs::remove_all(fixture.root);
 }
 
@@ -2737,6 +2746,39 @@ void TestRuntimeRecoveryPlanScenariosSelectDeterministicActions() {
   Expect(has_action(binder, "rebuild_service_registry_and_retry_lookup"),
          "expected registry rebuild action for failed service lookup");
 
+  const std::string missing_plan = ReadTextFile(missing.recovery_plan_path);
+  const std::string native_plan = ReadTextFile(native.recovery_plan_path);
+  const std::string display_plan = ReadTextFile(display.recovery_plan_path);
+  const std::string binder_plan = ReadTextFile(binder.recovery_plan_path);
+  Expect(missing_plan.find("\"action_rank\": 10") != std::string::npos,
+         "expected deterministic missing-artifact rank");
+  Expect(missing_plan.find("\"retry_budget\": 1") != std::string::npos,
+         "expected deterministic missing-artifact retry budget");
+  Expect(missing_plan.find("\"recovery_scope\": \"bundle\"") !=
+             std::string::npos,
+         "expected deterministic missing-artifact scope");
+  Expect(native_plan.find("\"action_rank\": 20") != std::string::npos,
+         "expected deterministic native-load rank");
+  Expect(native_plan.find("\"retry_budget\": 1") != std::string::npos,
+         "expected deterministic native-load retry budget");
+  Expect(native_plan.find("\"recovery_scope\": \"native_loader\"") !=
+             std::string::npos,
+         "expected deterministic native-load scope");
+  Expect(display_plan.find("\"action_rank\": 30") != std::string::npos,
+         "expected deterministic display rank");
+  Expect(display_plan.find("\"retry_budget\": 0") != std::string::npos,
+         "expected deterministic display retry budget");
+  Expect(display_plan.find("\"recovery_scope\": \"graphics_probe\"") !=
+             std::string::npos,
+         "expected deterministic display scope");
+  Expect(binder_plan.find("\"action_rank\": 40") != std::string::npos,
+         "expected deterministic binder rank");
+  Expect(binder_plan.find("\"retry_budget\": 1") != std::string::npos,
+         "expected deterministic binder retry budget");
+  Expect(binder_plan.find("\"recovery_scope\": \"service_registry\"") !=
+             std::string::npos,
+         "expected deterministic binder scope");
+
   fs::remove_all(missing_fixture.root);
   fs::remove_all(native_fixture.root);
   fs::remove_all(display_fixture.root);
@@ -2760,6 +2802,13 @@ void TestRuntimeRecoveryPlanCommandWritesStableJson() {
   Expect(output.find("\"action_name\": \"attempt_host_art_class_resolution\"") !=
              std::string::npos,
          "expected deterministic dex recovery action in json");
+  Expect(output.find("\"action_rank\": 50") != std::string::npos,
+         "expected deterministic action rank in recovery json");
+  Expect(output.find("\"retry_budget\": 0") != std::string::npos,
+         "expected deterministic retry budget in recovery json");
+  Expect(output.find("\"recovery_scope\": \"art_bridge\"") !=
+             std::string::npos,
+         "expected deterministic recovery scope in recovery json");
 
   fs::remove_all(fixture.root);
 }

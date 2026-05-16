@@ -34,6 +34,14 @@ struct RuntimeObservationContext {
   bool has_classes_dex = false;
 };
 
+struct RecoveryActionTemplate {
+  std::string action_name;
+  std::string action_reason;
+  int action_rank = 0;
+  int retry_budget = 0;
+  std::string recovery_scope;
+};
+
 void WriteTextFile(const fs::path& path, const std::string& contents) {
   std::ofstream output(path);
   if (!output) {
@@ -116,48 +124,62 @@ std::string BuildRecoveryActionId(const std::string& subsystem_name,
   return subsystem_name + "::" + action_name;
 }
 
-std::string BuildRecoveryActionName(const RuntimeHealthRecord& record) {
-  if (record.subsystem_name == "apk_staging") {
-    return "restage_apk_bundle";
+RecoveryActionTemplate BuildRecoveryActionTemplate(
+    const std::string& subsystem_name) {
+  if (subsystem_name == "apk_staging") {
+    return {.action_name = "restage_apk_bundle",
+            .action_reason =
+                "APK bundle or manifest artifact is missing, so Linuxoid must restage before any runtime bootstrap can continue.",
+            .action_rank = 10,
+            .retry_budget = 1,
+            .recovery_scope = "bundle"};
   }
-  if (record.subsystem_name == "native_loading") {
-    return "retry_native_load_after_bundle_refresh";
+  if (subsystem_name == "native_loading") {
+    return {.action_name = "retry_native_load_after_bundle_refresh",
+            .action_reason =
+                "Native libraries are unavailable or failed to load, so the runner should rebuild the ABI bundle before retrying.",
+            .action_rank = 20,
+            .retry_budget = 1,
+            .recovery_scope = "native_loader"};
   }
-  if (record.subsystem_name == "surface_readiness") {
-    return "fallback_to_headless_surface_probe";
+  if (subsystem_name == "surface_readiness") {
+    return {.action_name = "fallback_to_headless_surface_probe",
+            .action_reason =
+                "Display backing is unavailable, so Linuxoid should fall back to the headless probe path and keep diagnostics machine-readable.",
+            .action_rank = 30,
+            .retry_budget = 0,
+            .recovery_scope = "graphics_probe"};
   }
-  if (record.subsystem_name == "binder_service_readiness") {
-    return "rebuild_service_registry_and_retry_lookup";
+  if (subsystem_name == "binder_service_readiness") {
+    return {.action_name = "rebuild_service_registry_and_retry_lookup",
+            .action_reason =
+                "A service lookup failed, so the local Binder-shaped registry should be rebuilt before replaying the request.",
+            .action_rank = 40,
+            .retry_budget = 1,
+            .recovery_scope = "service_registry"};
   }
-  if (record.subsystem_name == "dex_classloader_readiness") {
-    return "attempt_host_art_class_resolution";
+  if (subsystem_name == "dex_classloader_readiness") {
+    return {.action_name = "attempt_host_art_class_resolution",
+            .action_reason =
+                "APK classes are now resolved offline from real DEX contents, so the next step is to attempt host-side ART or PathClassLoader class resolution against the staged bundle.",
+            .action_rank = 50,
+            .retry_budget = 0,
+            .recovery_scope = "art_bridge"};
   }
-  if (record.subsystem_name == "input_queue_readiness") {
-    return "recreate_input_queue_after_surface_ready";
+  if (subsystem_name == "input_queue_readiness") {
+    return {.action_name = "recreate_input_queue_after_surface_ready",
+            .action_reason =
+                "Input delivery depends on a live surface contract, so Linuxoid should recreate the input queue after surface readiness improves.",
+            .action_rank = 35,
+            .retry_budget = 1,
+            .recovery_scope = "input_queue"};
   }
-  return "no_recovery_action";
-}
-
-std::string BuildRecoveryReason(const RuntimeHealthRecord& record) {
-  if (record.subsystem_name == "apk_staging") {
-    return "APK bundle or manifest artifact is missing, so Linuxoid must restage before any runtime bootstrap can continue.";
-  }
-  if (record.subsystem_name == "native_loading") {
-    return "Native libraries are unavailable or failed to load, so the runner should rebuild the ABI bundle before retrying.";
-  }
-  if (record.subsystem_name == "surface_readiness") {
-    return "Display backing is unavailable, so Linuxoid should fall back to the headless probe path and keep diagnostics machine-readable.";
-  }
-  if (record.subsystem_name == "binder_service_readiness") {
-    return "A service lookup failed, so the local Binder-shaped registry should be rebuilt before replaying the request.";
-  }
-  if (record.subsystem_name == "dex_classloader_readiness") {
-    return "APK classes are now resolved offline from real DEX contents, so the next step is to attempt host-side ART or PathClassLoader class resolution against the staged bundle.";
-  }
-  if (record.subsystem_name == "input_queue_readiness") {
-    return "Input delivery depends on a live surface contract, so Linuxoid should recreate the input queue after surface readiness improves.";
-  }
-  return "No deterministic recovery action is defined for this subsystem.";
+  return {.action_name = "no_recovery_action",
+          .action_reason =
+              "No deterministic recovery action is defined for this subsystem.",
+          .action_rank = 999,
+          .retry_budget = 0,
+          .recovery_scope = "none"};
 }
 
 RuntimeHealthRecord MakeHealthRecord(const std::string& subsystem_name,
@@ -173,8 +195,9 @@ RuntimeHealthRecord MakeHealthRecord(const std::string& subsystem_name,
   record.failure_reason = failure_reason;
   record.evidence = evidence;
   if (!ready) {
-    record.selected_recovery_action = BuildRecoveryActionName(record);
-    record.recovery_reason = BuildRecoveryReason(record);
+    const auto recovery = BuildRecoveryActionTemplate(record.subsystem_name);
+    record.selected_recovery_action = recovery.action_name;
+    record.recovery_reason = recovery.action_reason;
   }
   return record;
 }
@@ -421,6 +444,10 @@ std::string BuildRecoveryActionsJsonl(const RuntimeHealthReport& report) {
            << "\", "
            << "\"action_reason\": \"" << EscapeJson(action.action_reason)
            << "\", "
+           << "\"action_rank\": " << action.action_rank << ", "
+           << "\"retry_budget\": " << action.retry_budget << ", "
+           << "\"recovery_scope\": \"" << EscapeJson(action.recovery_scope)
+           << "\", "
            << "\"artifact_path\": \"" << EscapeJson(action.artifact_path)
            << "\", "
            << "\"replay_trace_path\": \""
@@ -544,6 +571,7 @@ RuntimeHealthReport RunRuntimeHealthFixture(
       report.overall_ready = false;
       report.overall_state = "recovery_needed";
       if (!record.selected_recovery_action.empty()) {
+        const auto recovery = BuildRecoveryActionTemplate(record.subsystem_name);
         report.recovery_actions.push_back(
             {.action_id = BuildRecoveryActionId(record.subsystem_name,
                                                 record.selected_recovery_action),
@@ -551,6 +579,9 @@ RuntimeHealthReport RunRuntimeHealthFixture(
              .action_name = record.selected_recovery_action,
              .action_state = "planned",
              .action_reason = record.recovery_reason,
+             .action_rank = recovery.action_rank,
+             .retry_budget = recovery.retry_budget,
+             .recovery_scope = recovery.recovery_scope,
              .artifact_path = record.artifact_path,
              .replay_trace_path = report.trace_jsonl_path});
       }
@@ -560,6 +591,18 @@ RuntimeHealthReport RunRuntimeHealthFixture(
       }
     }
   }
+
+  std::sort(report.recovery_actions.begin(), report.recovery_actions.end(),
+            [](const RuntimeRecoveryAction& left,
+               const RuntimeRecoveryAction& right) {
+              if (left.action_rank != right.action_rank) {
+                return left.action_rank < right.action_rank;
+              }
+              if (left.subsystem_name != right.subsystem_name) {
+                return left.subsystem_name < right.subsystem_name;
+              }
+              return left.action_name < right.action_name;
+            });
 
   if (!report.overall_ready) {
     report.exit_reason = "runtime_recovery_plan_required";
@@ -652,6 +695,10 @@ std::string RenderRuntimeHealthReportJson(const RuntimeHealthReport& report) {
            << "\", "
            << "\"action_reason\": \"" << EscapeJson(action.action_reason)
            << "\", "
+           << "\"action_rank\": " << action.action_rank << ", "
+           << "\"retry_budget\": " << action.retry_budget << ", "
+           << "\"recovery_scope\": \"" << EscapeJson(action.recovery_scope)
+           << "\", "
            << "\"artifact_path\": \"" << EscapeJson(action.artifact_path)
            << "\", "
            << "\"replay_trace_path\": \""
@@ -696,6 +743,10 @@ std::string RenderRuntimeRecoveryPlanJson(const RuntimeHealthReport& report) {
            << "\"action_state\": \"" << EscapeJson(action.action_state)
            << "\", "
            << "\"action_reason\": \"" << EscapeJson(action.action_reason)
+           << "\", "
+           << "\"action_rank\": " << action.action_rank << ", "
+           << "\"retry_budget\": " << action.retry_budget << ", "
+           << "\"recovery_scope\": \"" << EscapeJson(action.recovery_scope)
            << "\", "
            << "\"artifact_path\": \"" << EscapeJson(action.artifact_path)
            << "\", "

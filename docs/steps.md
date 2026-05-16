@@ -1297,3 +1297,23 @@
   Action: Rebuilt Linuxoid, reran the full test suite, verified `native-art-runtime-smoke` against the staged Calculator bootstrap, and refreshed the status/docs/version metadata for the new runtime-smoke behavior.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the runtime-smoke JSON now exposes `resolved_target_class_name` and `resolved_target_class_descriptor`, and the host without ART still reports an honest `art_runtime_not_detected` fallback.
   Timestamp: 2026-05-17T23:34:00+05:30
+
+- Step: Deterministic recovery metadata red test
+  Action: Added failing recovery-plan assertions for explicit action rank, retry budget, and recovery scope metadata across the missing-artifact, failed-native-load, unavailable-display, failed-service-lookup, and pending-ART recovery cases.
+  Result: Linuxoid now has a red test that requires the self-healing runtime to expose deterministic bounded-recovery metadata instead of only stable action names.
+  Timestamp: 2026-05-17T23:52:00+05:30
+
+- Step: Deterministic recovery metadata failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the new recovery-plan assertions.
+  Result: `wfa_tests` failed with `expected deterministic action rank in recovery plan`, confirming that the current self-healing artifacts still omit explicit rank, retry budget, and scope metadata.
+  Timestamp: 2026-05-17T23:53:00+05:30
+
+- Step: Deterministic recovery metadata implementation
+  Action: Reworked runtime-health recovery actions into deterministic subsystem templates with explicit action rank, retry budget, and recovery scope metadata, then serialized those fields into the recovery-plan, action-trace, and health JSON outputs.
+  Result: Linuxoid now exposes a bounded machine-readable recovery policy instead of only stable action names, and the selected recovery actions are sorted deterministically before artifact emission.
+  Timestamp: 2026-05-17T23:57:00+05:30
+
+- Step: Deterministic recovery metadata verification
+  Action: Rebuilt Linuxoid, reran the full test suite, and refreshed the docs/version/status output for the stricter self-healing recovery contract.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the recovery JSON now carries explicit `action_rank`, `retry_budget`, and `recovery_scope` fields, and Linuxoid reports the tightened deterministic recovery policy honestly.
+  Timestamp: 2026-05-17T23:59:00+05:30

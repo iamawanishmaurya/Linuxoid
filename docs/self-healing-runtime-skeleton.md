@@ -17,6 +17,10 @@ What that means **today**:
   - unavailable display
   - failed service lookup
   - pending DEX/classloader bootstrap
+- Every selected recovery action now carries deterministic machine-facing metadata:
+  - `action_rank`
+  - `retry_budget`
+  - `recovery_scope`
 - Linuxoid can now materialize those actions into stable plan artifacts:
   - `runtime-recovery-plan.json`
   - `runtime-recovery-actions.jsonl`
@@ -63,7 +67,7 @@ Current meaning of “self-healing” in Linuxoid:
 
 1. Detect runtime readiness and failure shape deterministically.
 2. Classify the failure into a known subsystem bucket.
-3. Select a bounded recovery action.
+3. Select a bounded recovery action with explicit rank, retry budget, and scope.
 4. Persist the diagnosis and recovery plan in replayable artifacts.
 5. Merge the existing JSONL traces back into one diagnostic replay bundle.
 6. Refuse false success when a required dependency is still missing.

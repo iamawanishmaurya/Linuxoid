@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.47 - 2026-05-17
+
+- Formalize Linuxoid's deterministic runtime recovery contract so `native-runtime-recovery-plan` and `runtime-recovery-actions.jsonl` now emit explicit `action_rank`, `retry_budget`, and `recovery_scope` metadata for missing artifact, failed native load, unavailable display, failed service lookup, pending ART/classloader work, and surface-dependent input recovery.
+- Add regression coverage that proves those metadata fields stay stable across fixture reports, materialized recovery-plan artifacts, and command JSON output instead of only exposing stable action names.
+- Refresh the README, phased plan, self-healing runtime note, changelog, and status output so Linuxoid now reports bounded deterministic recovery policy honestly while still marking full ART bootstrap, Android framework behavior, compositor-backed rendering, and full IME/text composition as pending.
+
 ## v0.1.46 - 2026-05-17
 
 - Upgrade `native-art-runtime-smoke` from a generic ART availability probe into a real host-side class-resolution attempt seam: Linuxoid now selects a deterministic manifest-derived target class and prepares or runs `dalvikvm -cp <apk> <class>` when a safe local ART runtime exists.
