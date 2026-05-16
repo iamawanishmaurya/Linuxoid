@@ -409,3 +409,23 @@
   Action: Staged the README architecture refresh, committed it as `docs: add current Mermaid architecture to README`, tagged `v0.1.11`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
   Result: Linuxoid now publishes the current working Mermaid architecture directly in the GitHub README as part of `v0.1.11`.
   Timestamp: 2026-05-16T12:16:59+05:30
+
+- Step: APK-backed host verification phase selection
+  Action: Reviewed the current Linuxoid verification surface and selected the next implementation slice around direct Linux launch verification for a local APK, not only installed Waydroid packages.
+  Result: The next phase is now focused on proving the end-to-end APK-backed Linux launcher flow against a live Android runtime so Linuxoid can verify a real local app file from Linux.
+  Timestamp: 2026-05-16T12:25:34+05:30
+
+- Step: APK-backed host verifier implementation
+  Action: Added a dedicated APK-backed host verification module and CLI command, expanded the test suite for both IME and non-IME flows, then rebuilt Linuxoid and reran the tests.
+  Result: Linuxoid can now stage a local APK, auto-generate Linux launcher artifacts for it, and verify the generated launcher path in code for both provisioning and regular activity-launch flows.
+  Timestamp: 2026-05-16T12:36:18+05:30
+
+- Step: APK-backed live keyboard verification
+  Action: Ran the new `verify-apk-host-launch-auto` command against `/home/astra/Downloads/keyboard-0.1.28.apk` on the live Android target `192.168.240.112:5555`, using temporary compat, desktop-entry, and launcher roots.
+  Result: Linuxoid now has a verified end-to-end local-APK Linux launcher proof for the keyboard app, with `APK Load OK`, `Launcher Generation OK`, and `Generated Launcher OK` all green and the runtime returning `Ready for typing: yes`.
+  Timestamp: 2026-05-16T12:40:41+05:30
+
+- Step: APK-backed progress model refresh
+  Action: Updated the Linuxoid status model, README, changelog, and release version metadata to reflect the new APK-backed verifier and the live keyboard proof, then rebuilt the project and reran the tests plus `compatctl status`.
+  Result: The binary now reports `89/100` overall phase loading with `P5` at `72/100`, `P6` at `84/100`, and the repo-facing documentation matches the verified state.
+  Timestamp: 2026-05-16T12:47:55+05:30

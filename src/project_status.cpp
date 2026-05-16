@@ -15,10 +15,10 @@ std::vector<PhaseStatus> BuildDefaultPhases() {
        "APK layout and host storage mapping are encoded in code."},
       {"P4", "Runtime and service contract", 80,
        "The project can load an APK into a compat root, install it on a live target, and provision its IME service."},
-      {"P5", "Graphics and host integration", 70,
-       "Linux launcher artifacts now support automatic launcher inference, split host install roots, and verified host-side execution for APK-backed and multiple installed-package Waydroid launches."},
-      {"P6", "APK execution and validation", 80,
-       "A live Linux host launcher now proves the keyboard, Calculator, Settings, and F-Droid flows on Waydroid, including Ready-for-typing verification for the IME case."},
+      {"P5", "Graphics and host integration", 72,
+       "Linux launcher artifacts now support automatic launcher inference, split host install roots, and verified host-side execution for both local-APK and installed-package Linuxoid launches on Waydroid."},
+      {"P6", "APK execution and validation", 84,
+       "A live Linux host launcher now proves the local keyboard APK flow plus Calculator, Settings, and F-Droid launch flows on Waydroid, including Ready-for-typing verification for the IME case."},
   };
 }
 
@@ -103,8 +103,8 @@ std::string DescribeMvpFoundation() {
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: container-first Android userspace integration\n";
-  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, and Linux desktop launch artifacts with repeatable per-app and matrix Waydroid verification\n";
-  output << "Golden App Proof: the FUTO keyboard APK returns Ready for typing: yes through a Linuxoid-generated launcher on live Waydroid, and Calculator, Settings, and F-Droid now verify through both the installed-package Linux launch path and the matrix runner.\n";
+  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, and Linux desktop launch artifacts with repeatable per-app, matrix, and APK-backed Waydroid verification\n";
+  output << "Golden App Proof: the FUTO keyboard APK now returns Ready for typing: yes through both a Linuxoid-generated launcher and the new local-APK verifier on live Waydroid, while Calculator, Settings, and F-Droid verify through the installed-package Linux launch path and the matrix runner.\n";
   output << "Why: this keeps the first executable slice aligned with the future core.\n";
   return output.str();
 }

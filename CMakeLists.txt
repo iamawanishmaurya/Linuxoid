@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.11
+  VERSION 0.1.12
   LANGUAGES CXX
 )
 
@@ -14,6 +14,7 @@ include(CTest)
 
 add_library(
   wfa_core
+  src/apk_host_integration.cpp
   src/apk_loader.cpp
   src/checkpoint.cpp
   src/desktop_integration.cpp

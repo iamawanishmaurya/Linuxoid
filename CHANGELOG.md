@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.12 - 2026-05-16
+
+- Add `verify-apk-host-launch-auto` so Linuxoid can verify the full local-APK Linux launcher flow against a live Android runtime.
+- Verify the new APK-backed path live with `/home/astra/Downloads/keyboard-0.1.28.apk`, reaching `Ready for typing: yes` through the generated Linux launcher.
+- Raise verified project loading to `89/100` while checkpoint gates remain `70/100`.
+
 ## v0.1.11 - 2026-05-16
 
 - Add the current full working Mermaid architecture to the GitHub README so the live Linuxoid flow is visible at a glance.

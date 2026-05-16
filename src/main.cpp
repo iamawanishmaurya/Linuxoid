@@ -1,3 +1,4 @@
+#include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/manifest_assessment.hpp"
@@ -25,6 +26,7 @@ void PrintUsage() {
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl launch-activity <serial> <component>\n"
+      << "  compatctl verify-apk-host-launch-auto <serial> <apk-path> [compat-root] [desktop-entry-root] [launcher-root]\n"
       << "  compatctl launch-waydroid-package <package>\n"
       << "  compatctl verify-waydroid-package <package> [desktop-entry-root] [launcher-root]\n"
       << "  compatctl verify-waydroid-matrix <artifact-root> <package> [package...]\n"
@@ -75,6 +77,10 @@ std::string DefaultLauncherRoot() {
     return std::string(home) + "/.local/share/linuxoid/launchers";
   }
   return "/tmp/linuxoid-launchers";
+}
+
+std::string DefaultVerificationCompatRoot() {
+  return "/tmp/linuxoid-apk-verify";
 }
 
 }  // namespace
@@ -158,6 +164,32 @@ int main(int argc, char** argv) {
       const auto report = wfa::LaunchWaydroidApp(argv[2]);
       std::cout << wfa::RenderWaydroidAppLaunchReport(report);
       return report.launch_ok ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "verify-apk-host-launch-auto") {
+      if (argc < 4 || argc > 7) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string compat_root =
+          argc >= 5 ? argv[4] : DefaultVerificationCompatRoot();
+      const std::string desktop_root =
+          argc >= 6 ? argv[5] : DefaultDesktopEntryRoot();
+      const std::string launcher_root =
+          argc == 7 ? argv[6]
+                    : (argc >= 6 ? argv[5] : DefaultLauncherRoot());
+      const auto report = wfa::VerifyApkHostLaunchAuto(
+          argv[3], compat_root,
+          {.serial = argv[2],
+           .compatctl_path = compatctl_path,
+           .desktop_root = desktop_root,
+           .launcher_root = launcher_root});
+      std::cout << wfa::RenderApkHostVerificationReport(report);
+      return report.apk_load_ok && report.launcher_generation_ok &&
+                     report.generated_launcher_ok
+                 ? EXIT_SUCCESS
+                 : EXIT_FAILURE;
     }
 
     if (command == "verify-waydroid-package") {

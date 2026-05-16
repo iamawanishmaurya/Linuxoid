@@ -1,3 +1,4 @@
+#include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/checkpoint.hpp"
 #include "wfa/desktop_integration.hpp"
@@ -37,8 +38,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 88,
-         "expected average phase progress to equal 88");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 89,
+         "expected average phase progress to equal 89");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -85,7 +86,7 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("88/100") != std::string::npos,
+  Expect(report.find("89/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
@@ -1069,6 +1070,182 @@ void TestWaydroidPackageMatrixCapturesFailure() {
   fs::remove_all(root);
 }
 
+void TestApkHostVerificationImeSuccessPath() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-apk-host-ime";
+  fs::remove_all(root);
+  fs::create_directories(root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1");
+
+  const fs::path compatctl_path = root / "compatctl";
+  const fs::path staged_apk_path =
+      root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1/base.apk";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream staged_apk_output(staged_apk_path);
+    staged_apk_output << "staged apk\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/keyboard.apk",
+      .install_id = "vc1",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "keyboard.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 1,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "org.futo.inputmethod.latin",
+          .launcher_activity_name =
+              "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+          .input_method_service_name = "org.futo.inputmethod.latin/.LatinIME",
+          .declared_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity",
+               "org.futo.inputmethod.latin.LatinIME"},
+          .declared_activity_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity"},
+          .has_launcher_activity = true,
+          .has_input_method_service = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "org.futo.inputmethod.latin",
+          .app_profile = "input_method",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "POST_P6_IME",
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "org.futo.inputmethod.latin",
+           .install_id = "vc1",
+           .version_code = 1},
+          (root / "compat").string()),
+      .install_root =
+          (root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1")
+              .string(),
+  };
+
+  const auto launcher_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command.find("org.futo.inputmethod.latin.sh") != std::string::npos) {
+      return {0, "Ready for typing: yes\n"};
+    }
+    throw std::runtime_error(
+        "unexpected launcher command in apk host ime verification test");
+  };
+
+  const auto verification = wfa::VerifyLoadedApkHostLaunchAutoWithRunner(
+      report,
+      {.serial = "192.168.240.112:5555",
+       .compatctl_path = compatctl_path.string(),
+       .desktop_root = (root / "applications").string(),
+       .launcher_root = (root / "launchers").string()},
+      launcher_runner);
+
+  Expect(verification.apk_load_ok, "expected apk load fact to be set");
+  Expect(verification.launcher_generation_ok,
+         "expected launcher generation success");
+  Expect(verification.generated_launcher_ok,
+         "expected ime host verification success");
+  Expect(verification.artifacts.uses_provision_mode,
+         "expected ime flow to use provision mode");
+
+  const auto rendered = wfa::RenderApkHostVerificationReport(verification);
+  Expect(rendered.find("Verification Loading: [##########] 100/100") !=
+             std::string::npos,
+         "expected full apk host verification loading");
+  Expect(rendered.find("Launch Mode: provision-ime") != std::string::npos,
+         "expected provision-ime launch mode");
+
+  fs::remove_all(root);
+}
+
+void TestApkHostVerificationAppSuccessPath() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-apk-host-app";
+  fs::remove_all(root);
+  fs::create_directories(root / "compat/users/0/packages/com.example.demo/vc7");
+
+  const fs::path compatctl_path = root / "compatctl";
+  const fs::path staged_apk_path =
+      root / "compat/users/0/packages/com.example.demo/vc7/base.apk";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream staged_apk_output(staged_apk_path);
+    staged_apk_output << "staged apk\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/demo.apk",
+      .install_id = "vc7",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "demo.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 7,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.demo",
+          .launcher_activity_name = "com.example.demo.MainActivity",
+          .declared_components = {"com.example.demo.MainActivity"},
+          .declared_activity_components = {"com.example.demo.MainActivity"},
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.demo",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "com.example.demo",
+           .install_id = "vc7",
+           .version_code = 7},
+          (root / "compat").string()),
+      .install_root =
+          (root / "compat/users/0/packages/com.example.demo/vc7").string(),
+  };
+
+  const auto launcher_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command.find("com.example.demo.sh") != std::string::npos) {
+      return {0, "Launch OK: yes\n"};
+    }
+    throw std::runtime_error(
+        "unexpected launcher command in apk host app verification test");
+  };
+
+  const auto verification = wfa::VerifyLoadedApkHostLaunchAutoWithRunner(
+      report,
+      {.serial = "192.168.240.112:5555",
+       .compatctl_path = compatctl_path.string(),
+       .desktop_root = (root / "applications").string(),
+       .launcher_root = (root / "launchers").string()},
+      launcher_runner);
+
+  Expect(verification.apk_load_ok, "expected apk load fact to be set");
+  Expect(verification.launcher_generation_ok,
+         "expected launcher generation success");
+  Expect(verification.generated_launcher_ok,
+         "expected app host verification success");
+  Expect(!verification.artifacts.uses_provision_mode,
+         "expected non-ime flow to avoid provision mode");
+
+  const auto rendered = wfa::RenderApkHostVerificationReport(verification);
+  Expect(rendered.find("Launch Mode: launch-activity") != std::string::npos,
+         "expected launch-activity mode");
+  Expect(rendered.find("Generated Launcher OK: yes") != std::string::npos,
+         "expected generated launcher success line");
+
+  fs::remove_all(root);
+}
+
 void TestImeProvisioningSuccessPath() {
   std::vector<std::string> commands;
 
@@ -1358,6 +1535,8 @@ int main() {
     TestWaydroidPackageVerificationSuccessPath();
     TestWaydroidPackageMatrixSuccessPath();
     TestWaydroidPackageMatrixCapturesFailure();
+    TestApkHostVerificationImeSuccessPath();
+    TestApkHostVerificationAppSuccessPath();
     TestImeProvisioningSuccessPath();
     TestImeProvisioningNormalizesFullyQualifiedImeIdForWaydroidStyleMutation();
     TestImeProvisioningDetectsIncompleteActivation();
