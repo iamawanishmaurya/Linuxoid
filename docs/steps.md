@@ -759,3 +759,23 @@
   Action: Staged the lifecycle and service shim slice, confirmed the staged release set with `git status`, and created the feature commit `feat: add native lifecycle shim`.
   Result: Linuxoid now has a clean release candidate commit for the lifecycle/service shim slice, ready to be tagged and pushed as `v0.1.23`.
   Timestamp: 2026-05-16T16:06:53+05:30
+
+- Step: Self-healing browser research kickoff
+  Action: Reframed the next architecture track around a Linuxoid Android browser that should self-heal toward user intent, and prepared a focused multi-agent research wave for behavior design, Android/browser integration, MCP+harness compatibility, and safety/testing.
+  Result: The browser-agent work is now scoped as a concrete Linuxoid architecture problem instead of a vague future note.
+  Timestamp: 2026-05-16T16:08:29+05:30
+
+- Step: Self-healing browser research synthesis
+  Action: Collected the four-agent research wave plus supporting official docs on Hermes browser automation, Android WebView, and MCP structured tool contracts, then selected a Linuxoid-specific browser direction.
+  Result: Linuxoid now has a clear browser architecture direction: a Linuxoid-owned Android WebView browser shell with a bounded self-healing recovery loop, deterministic MCP/harness-friendly artifacts, and fail-closed safety rules.
+  Timestamp: 2026-05-16T16:13:28+05:30
+
+- Step: Self-healing browser architecture refresh
+  Action: Updated `README.md`, added `docs/browser-self-healing-architecture.md`, and bumped release metadata so the researched browser direction is now part of Linuxoid’s recorded architecture.
+  Result: The repository now includes a browser-specific Mermaid target slice, WebView-first browser guidance, MCP/harness-facing artifact rules, and browser-track next steps.
+  Timestamp: 2026-05-16T16:15:21+05:30
+
+- Step: Self-healing browser docs verification
+  Action: Rebuilt Linuxoid with `cmake --build build`, re-read the updated README sections, and reviewed the new browser architecture note before release.
+  Result: The browser-architecture documentation is visible, internally consistent, and ships without disturbing the existing build.
+  Timestamp: 2026-05-16T16:15:21+05:30

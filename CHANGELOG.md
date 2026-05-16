@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.24 - 2026-05-16
+
+- Add a researched self-healing Android browser architecture direction for Linuxoid based on an Android `WebView` browser shell, bounded recovery policy, and MCP/harness-friendly artifacts.
+- Update the README Mermaid architecture and browser roadmap so the repo now records the self-healing browser track as a first-class Linuxoid design constraint.
+- Add `docs/browser-self-healing-architecture.md` with the recommended browser foundation, recovery taxonomy, machine-facing contract, and next implementation steps.
+
 ## v0.1.23 - 2026-05-16
 
 - Add `native-lifecycle-shim` so Linuxoid can turn a native bootstrap manifest into deterministic session artifacts, activity-state tracking, and a first service registry for native candidates.

@@ -7,6 +7,7 @@ Linuxoid currently contains the first executable MVP scaffold for an Android-on-
 - Core language: `C++20`
 - Runtime strategy: backend-neutral attached Android targets on the path to a native Linux compatibility layer
 - Agent integration strategy: stable MCP- and harness-friendly control surfaces, artifact layouts, and verification commands
+- Browser strategy: Linuxoid-owned Android WebView browser shell with a bounded self-healing recovery loop
 - Current executable: `compatctl`
 
 ## Current Working Architecture
@@ -82,6 +83,8 @@ This diagram is the current working architecture and should stay in sync with th
 - Preserve stable artifact locations for staged APKs, bootstrap manifests, reports, and launch scripts so harnesses can discover and validate state deterministically.
 - Prefer backend-neutral commands and structured intermediate files over backend-specific ad hoc flows.
 - Treat Waydroid, attached ADB, and future native execution as pluggable backends behind the same agent-usable control surface where possible.
+- For browser-agent work, preserve user intent separately from selectors, page paths, or one-off recovery tactics so self-healing can retry safely without drifting scope.
+- Browser recovery must stay bounded and fail-closed: idempotent fixes may auto-heal, but scope expansion, destructive actions, security prompts, and ambiguous targets must stop.
 
 ## Mermaid Update Rule
 
@@ -118,6 +121,39 @@ flowchart TB
 ```
 
 This is the long-term goal state: run Android apps on Linux without depending on Waydroid, an emulator, or another external Android runtime.
+
+## Self-Healing Browser Target Slice
+
+```mermaid
+flowchart TB
+  User["User Goal"] --> Planner["Intent Planner"]
+  Planner --> Policy["Recovery Policy"]
+  Planner --> BrowserSession["Linuxoid BrowserSession"]
+  Agent["MCP Client / Harness / Agent"] --> Control["Machine-readable Browser Control Layer"]
+  Control --> Planner
+  Control --> Trace["Trace / Replay / Eval Artifacts"]
+
+  subgraph AndroidBrowser["Linuxoid Android Browser Slice"]
+    BrowserSession --> WebView["android.webkit.WebView Surface"]
+    BrowserSession --> DomBridge["DOM + JS Bridge"]
+    BrowserSession --> PermissionBroker["Permission Broker"]
+    BrowserSession --> DownloadBroker["Download Broker"]
+    BrowserSession --> Recovery["Recovery Supervisor"]
+    BrowserSession --> Profile["Cookies / Storage / Profile State"]
+    BrowserSession --> Lifecycle["Lifecycle / Session State"]
+  end
+
+  WebView --> Page["Web Content"]
+  DomBridge --> Observe["Observe / Act / Re-anchor"]
+  Recovery --> Policy
+  Recovery --> Lifecycle
+  PermissionBroker --> AndroidUI["Android Prompts / System UI"]
+  Policy --> Stop["Fail-closed Stop Conditions"]
+  Observe --> Trace
+  Recovery --> Trace
+```
+
+This is the researched browser target slice, not a shipped Linuxoid feature yet. The recommended foundation is a **Linuxoid-owned browser shell on the Android WebView API surface**, with the self-healing logic outside the page and the control surface kept MCP- and harness-friendly from day one.
 
 ## What Exists Today
 
@@ -186,6 +222,7 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 - The current live proofs on GitHub are still **runtime-backed**: Waydroid handles the installed-package Linux launch path, and `attached-adb` remains a transition backend plus regression oracle.
 - `attached-adb` is now part of the core contract with target-side launcher and metadata lookup, but it is still not the final goal.
 - Future native slices should preserve **MCP and harness compatibility** by keeping commands backend-neutral, outputs inspectable, and artifact paths deterministic for agent workflows.
+- The self-healing browser track should start from **Android WebView + Linuxoid BrowserSession**, not a full Chromium browser shell or `Chrome.apk` port.
 
 ## What To Do Next
 
@@ -210,6 +247,23 @@ For every step above, keep the interfaces **MCP- and harness-compatible**:
 - machine-readable outputs should remain stable
 - intermediate artifacts should stay discoverable
 - verification commands should stay composable in agent workflows
+
+## Browser Track Next
+
+These are the next five highest-value moves for the self-healing Android browser track inside Linuxoid:
+
+1. Build a **BrowserSession skeleton** over the Android WebView surface with a machine-readable session journal.
+2. Add a **bounded self-healing recovery policy** with failure classes, retry budgets, and fail-closed stop conditions.
+3. Add a **DOM/message bridge** plus Android accessibility fallback so the browser can re-anchor when page structure changes.
+4. Add **trace, replay, and eval artifacts** for MCP clients and harnesses: request, result, events, snapshots, replay, and eval outputs.
+5. Add **permission, download, and prompt brokers** so recovery can handle browser/system interruptions without widening scope.
+
+Keep this browser track aligned with the broader Linuxoid goal:
+- build on `android.webkit.WebView` first
+- keep self-healing policy separate from browser rendering
+- preserve stable machine-facing contracts for agents and harnesses
+
+Detailed architecture note: [docs/browser-self-healing-architecture.md](/home/astra/codex/wine-for-android/docs/browser-self-healing-architecture.md)
 
 ## Build
 
