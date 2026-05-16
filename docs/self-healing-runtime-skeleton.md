@@ -21,6 +21,11 @@ What that means **today**:
   - `action_rank`
   - `retry_budget`
   - `recovery_scope`
+- Every health report now also carries a deterministic summary that callers can trust directly:
+  - `dependency_blocked`
+  - `failing_subsystem_count`
+  - `recovery_actions_selected`
+  - `failing_subsystems`
 - Linuxoid can now materialize those actions into stable plan artifacts:
   - `runtime-recovery-plan.json`
   - `runtime-recovery-actions.jsonl`
@@ -53,6 +58,13 @@ What that means **today**:
 
 In plain terms, Linuxoid can now **detect, classify, explain, and replay** failure states on the native path. It can tell us why bootstrap is blocked, choose the next bounded recovery action, and preserve that decision in a machine-readable way for later diagnosis.
 
+That summary is now explicit in the health JSON. A harness no longer has to scan every raw record to answer basic questions like:
+
+- Is the runtime blocked on a real dependency?
+- How many subsystems are failing right now?
+- Which bounded recovery actions were selected?
+- Which failing subsystems caused those actions?
+
 What it **does not** mean yet:
 
 - Linuxoid does **not** yet self-heal by automatically making the app run after a failure.
@@ -73,6 +85,7 @@ Current meaning of “self-healing” in Linuxoid:
 4. Persist the diagnosis and recovery plan in replayable artifacts.
 5. Merge the existing JSONL traces back into one diagnostic replay bundle.
 6. Refuse false success when a required dependency is still missing.
+7. Expose the self-healing summary directly so repeated runs produce stable machine-facing answers.
 
 ## Remaining Gaps Before Full Android App Execution
 

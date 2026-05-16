@@ -2461,6 +2461,38 @@ void TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess()
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeHealthSummaryFieldsStayDeterministic() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-summary", true, false);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+
+  Expect(report.dependency_blocked,
+         "expected missing native dependency to mark the runtime as dependency blocked");
+  Expect(report.failing_subsystem_count == 2,
+         "expected native and dex subsystems to be counted as failing");
+  Expect(report.recovery_actions_selected == 2,
+         "expected two bounded recovery actions in summary fields");
+  Expect(report.failing_subsystems.size() == 2,
+         "expected stable failing subsystem list size");
+  Expect(report.failing_subsystems[0] == "dex_classloader_readiness",
+         "expected deterministic sorted failing subsystem order");
+  Expect(report.failing_subsystems[1] == "native_loading",
+         "expected deterministic sorted failing subsystem order");
+
+  const auto rendered = wfa::RenderRuntimeHealthReportJson(report);
+  Expect(rendered.find("\"dependency_blocked\": true") != std::string::npos,
+         "expected dependency_blocked in runtime health json");
+  Expect(rendered.find("\"failing_subsystem_count\": 2") != std::string::npos,
+         "expected failing subsystem count in runtime health json");
+  Expect(rendered.find("\"recovery_actions_selected\": 2") != std::string::npos,
+         "expected recovery action count in runtime health json");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeHealthReplaySummarizesTrace() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -2668,6 +2700,31 @@ void TestRuntimeHealthCommandWritesStableJson() {
          "expected scenario name in runtime health json");
   Expect(output.find("\"self_healing_ready\": true") != std::string::npos,
          "expected self-healing ready flag in runtime health json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeHealthCommandOutputIsStableAcrossRepeatedRuns() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-command-stability", true, false);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int first_exit_code = 0;
+  const std::string first_output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &first_exit_code);
+  int second_exit_code = 0;
+  const std::string second_output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &second_exit_code);
+
+  Expect(first_exit_code == 0 && second_exit_code == 0,
+         "expected repeated runtime-health command success");
+  Expect(first_output == second_output,
+         "expected stable repeated runtime-health JSON output");
 
   fs::remove_all(fixture.root);
 }
@@ -4957,6 +5014,7 @@ int main() {
     TestRuntimeHealthFixtureSelectsUnavailableDisplayRecovery();
     TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
     TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess();
+    TestRuntimeHealthSummaryFieldsStayDeterministic();
     TestRuntimeHealthReplaySummarizesTrace();
     TestNativeArtRuntimeSmokeWritesTraceJsonl();
     TestRuntimeDiagnosticReplayWritesStableArtifacts();
@@ -4965,6 +5023,7 @@ int main() {
     TestRuntimeDiagnosticReplayCommandWritesStableJson();
     TestRuntimeDiagnosticFixtureCommandWritesStableJson();
     TestRuntimeHealthCommandWritesStableJson();
+    TestRuntimeHealthCommandOutputIsStableAcrossRepeatedRuns();
     TestRuntimeHealthCommandReportsMissingNativeDependencyHonestly();
     TestRuntimeRecoveryPlanWritesStableArtifacts();
     TestRuntimeRecoveryPlanScenariosSelectDeterministicActions();

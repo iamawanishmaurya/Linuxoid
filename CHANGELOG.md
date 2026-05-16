@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.49 - 2026-05-18
+
+- Add explicit self-healing summary fields to `runtime-health.json` and CLI output so Linuxoid now reports `dependency_blocked`, `failing_subsystem_count`, `recovery_actions_selected`, and a deterministic `failing_subsystems` list directly instead of forcing harnesses to derive them from raw records.
+- Add regression coverage that proves health classification, recovery decision selection, repeated command JSON stability, and no-false-success behavior when a required dependency is missing.
+- Refresh the README, phased plan, self-healing runtime note, changelog, and status text so the repo explains what self-healing means now and what still remains before full native Android app execution.
+
 ## v0.1.48 - 2026-05-18
 
 - Add a deterministic diagnostic trace index for the Self-Healing Android Device runtime so replay bundles now carry per-source fingerprints plus first and last event-type boundaries in `runtime-diagnostic-trace-index.json`.

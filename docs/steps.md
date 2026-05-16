@@ -1337,3 +1337,23 @@
   Action: Rebuilt Linuxoid, reran the full test suite, exercised `native-runtime-diagnostic-fixture` against the staged Calculator bootstrap, refreshed the README Mermaid artifact path, and updated the docs/version/status metadata.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the new diagnostic fixture JSON exposes `trace_index_json_path`, and Linuxoid now writes per-source fingerprints plus event boundaries without claiming false execution success.
   Timestamp: 2026-05-18T00:20:00+05:30
+
+- Step: Self-healing summary-field red test
+  Action: Added failing regression assertions for explicit self-healing summary fields, including dependency-blocked state, failing-subsystem count, bounded recovery-action count, and repeated command JSON stability for a missing-native baseline.
+  Result: Linuxoid now has a red test that requires the health report to expose the summary directly instead of making harnesses derive it from raw records.
+  Timestamp: 2026-05-18T00:29:00+05:30
+
+- Step: Self-healing summary-field failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the summary-field assertions.
+  Result: The build failed because `RuntimeHealthReport` does not yet expose `dependency_blocked`, `failing_subsystem_count`, `recovery_actions_selected`, or `failing_subsystems`, confirming that the self-healing summary still lives only in implicit record scans.
+  Timestamp: 2026-05-18T00:31:00+05:30
+
+- Step: Self-healing summary-field implementation
+  Action: Extended the runtime-health report and rendered JSON with explicit summary fields for dependency blockage, failing-subsystem count, selected recovery-action count, and a deterministic failing-subsystem list.
+  Result: Linuxoid now exposes a direct machine-readable self-healing summary instead of making harnesses derive it from the raw subsystem records.
+  Timestamp: 2026-05-18T00:36:00+05:30
+
+- Step: Self-healing summary-field verification
+  Action: Rebuilt Linuxoid, reran the full test suite, exercised `native-runtime-health-fixture` against the staged Calculator bootstrap, and refreshed the docs/version/status metadata for the stronger self-healing summary contract.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the runtime-health JSON now includes `dependency_blocked`, `failing_subsystem_count`, `recovery_actions_selected`, and `failing_subsystems`, and repeated command output remains stable.
+  Timestamp: 2026-05-18T00:39:00+05:30

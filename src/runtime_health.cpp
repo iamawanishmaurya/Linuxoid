@@ -637,11 +637,14 @@ RuntimeHealthReport RunRuntimeHealthFixture(
   report.self_healing_ready = true;
   report.overall_state = "ready";
   report.exit_reason = "runtime_health_ready";
+  report.dependency_blocked = false;
 
   for (const auto& record : report.records) {
     if (!record.ready) {
       report.overall_ready = false;
+      report.dependency_blocked = true;
       report.overall_state = "recovery_needed";
+      report.failing_subsystems.push_back(record.subsystem_name);
       if (!record.selected_recovery_action.empty()) {
         const auto recovery = BuildRecoveryActionTemplate(record.subsystem_name);
         report.recovery_actions.push_back(
@@ -664,6 +667,10 @@ RuntimeHealthReport RunRuntimeHealthFixture(
     }
   }
 
+  std::sort(report.failing_subsystems.begin(), report.failing_subsystems.end());
+  report.failing_subsystem_count =
+      static_cast<int>(report.failing_subsystems.size());
+
   std::sort(report.recovery_actions.begin(), report.recovery_actions.end(),
             [](const RuntimeRecoveryAction& left,
                const RuntimeRecoveryAction& right) {
@@ -675,6 +682,8 @@ RuntimeHealthReport RunRuntimeHealthFixture(
               }
               return left.action_name < right.action_name;
             });
+  report.recovery_actions_selected =
+      static_cast<int>(report.recovery_actions.size());
 
   if (!report.overall_ready) {
     report.exit_reason = "runtime_recovery_plan_required";
@@ -726,9 +735,17 @@ std::string RenderRuntimeHealthReportJson(const RuntimeHealthReport& report) {
          << (report.self_healing_ready ? "true" : "false") << ",\n"
          << "  \"overall_ready\": " << (report.overall_ready ? "true" : "false")
          << ",\n"
+         << "  \"dependency_blocked\": "
+         << (report.dependency_blocked ? "true" : "false") << ",\n"
          << "  \"overall_state\": \"" << EscapeJson(report.overall_state)
          << "\",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason) << "\",\n"
+         << "  \"failing_subsystem_count\": " << report.failing_subsystem_count
+         << ",\n"
+         << "  \"recovery_actions_selected\": "
+         << report.recovery_actions_selected << ",\n"
+         << "  \"failing_subsystems\": "
+         << RenderJsonArray(report.failing_subsystems) << ",\n"
          << "  \"records\": [\n";
   for (std::size_t index = 0; index < report.records.size(); ++index) {
     const auto& record = report.records[index];
@@ -798,9 +815,17 @@ std::string RenderRuntimeRecoveryPlanJson(const RuntimeHealthReport& report) {
          << EscapeJson(report.recovery_actions_jsonl_path) << "\",\n"
          << "  \"scenario_name\": \"" << EscapeJson(report.scenario_name)
          << "\",\n"
+         << "  \"dependency_blocked\": "
+         << (report.dependency_blocked ? "true" : "false") << ",\n"
          << "  \"overall_state\": \"" << EscapeJson(report.overall_state)
          << "\",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason) << "\",\n"
+         << "  \"failing_subsystem_count\": " << report.failing_subsystem_count
+         << ",\n"
+         << "  \"recovery_actions_selected\": "
+         << report.recovery_actions_selected << ",\n"
+         << "  \"failing_subsystems\": "
+         << RenderJsonArray(report.failing_subsystems) << ",\n"
          << "  \"recovery_actions\": [\n";
   for (std::size_t index = 0; index < report.recovery_actions.size(); ++index) {
     const auto& action = report.recovery_actions[index];

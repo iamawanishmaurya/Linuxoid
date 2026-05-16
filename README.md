@@ -182,6 +182,11 @@ Today, **self-healing** in Linuxoid means:
   - stable `action_rank`
   - bounded `retry_budget`
   - stable `recovery_scope`
+- Linuxoid now also exposes direct summary fields so callers do not need to re-derive the runtime state from raw records:
+  - `dependency_blocked`
+  - `failing_subsystem_count`
+  - `recovery_actions_selected`
+  - `failing_subsystems`
 - Linuxoid can persist those decisions into stable artifacts for agents, harnesses, and replay tooling:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -193,6 +198,11 @@ Today, **self-healing** in Linuxoid means:
 - Linuxoid can replay and merge those traces later without rerunning the full UI path.
 - Linuxoid can now fingerprint each trace source and record first/last event types so failures can be compared offline across runs.
 - Linuxoid refuses false success when a critical dependency is missing. A missing native library payload or missing ART runtime still leaves the runtime in `recovery_needed`, not `ready`.
+- Linuxoid now has regression coverage that checks this both structurally and behaviorally:
+  - health classification stays stable
+  - recovery decision selection stays deterministic
+  - repeated command JSON stays stable
+  - missing dependencies do not flip the runtime into false success
 
 This is **observability and bounded recovery planning**, not autonomous app repair or full Android execution.
 
