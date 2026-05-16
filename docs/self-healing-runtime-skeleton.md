@@ -45,9 +45,11 @@ What that means **today**:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
   - `runtime-health-replay.json`
+  - `runtime-diagnostic-trace-index.json`
   - `runtime-diagnostic-events.jsonl`
   - `runtime-diagnostic-replay.json`
 - The traces can now be replayed and merged without rerunning the full UI path.
+- Linuxoid now also records per-source fingerprints plus first and last event types so replay bundles can be compared offline without reopening the UI path.
 
 In plain terms, Linuxoid can now **detect, classify, explain, and replay** failure states on the native path. It can tell us why bootstrap is blocked, choose the next bounded recovery action, and preserve that decision in a machine-readable way for later diagnosis.
 
@@ -91,6 +93,7 @@ Current commands:
 ./build/compatctl native-runtime-recovery-plan <bootstrap-manifest> [scenario]
 ./build/compatctl native-runtime-health-replay <trace-jsonl-path>
 ./build/compatctl native-runtime-diagnostic-replay <bootstrap-manifest>
+./build/compatctl native-runtime-diagnostic-fixture <bootstrap-manifest> [scenario]
 ./build/compatctl native-art-classloader-fixture <bootstrap-manifest>
 ./build/compatctl native-art-class-resolution-fixture <bootstrap-manifest>
 ./build/compatctl native-art-runtime-smoke <bootstrap-manifest>

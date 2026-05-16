@@ -85,7 +85,7 @@ flowchart TB
     NativeArtRuntime --> NativeArtRuntimeArtifact["art/runtime-smoke-result.json / invocation-plan.json / invocation.log / trace.jsonl"]
     RuntimeHealth --> RuntimeHealthArtifact["health/runtime-health.json / trace.jsonl / replay.json / diagnostic-replay.json"]
     RuntimeRecovery --> RuntimeRecoveryArtifact["health/runtime-recovery-plan.json / runtime-recovery-actions.jsonl"]
-    RuntimeDiagnostic --> RuntimeDiagnosticArtifact["health/runtime-diagnostic-events.jsonl / runtime-diagnostic-replay.json"]
+    RuntimeDiagnostic --> RuntimeDiagnosticArtifact["health/runtime-diagnostic-trace-index.json / runtime-diagnostic-events.jsonl / runtime-diagnostic-replay.json"]
     NativeResources --> NativeResourceArtifact["inspect-apk-resources JSON / staged asset roots"]
     NativeBinder --> NativeBinderTransportArtifact["binder/transport-messages.jsonl"]
     NativeLifecycle --> NativeStubRunner["Linuxoid-owned Native Entrypoint Stub"]
@@ -164,7 +164,7 @@ This diagram is the current working architecture and should stay in sync with th
 
 Linuxoid now treats the phased execution plan as the repo-facing source of truth for the direct-runtime push:
 
-- Current state: scaffold `96/100`, execution `94/100`
+- Current state: scaffold `96/100`, execution `95/100`
 - Current focus: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Critical path: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Browser work is frozen until `P5`
@@ -187,9 +187,11 @@ Today, **self-healing** in Linuxoid means:
   - `runtime-health-trace.jsonl`
   - `runtime-recovery-plan.json`
   - `runtime-recovery-actions.jsonl`
+  - `runtime-diagnostic-trace-index.json`
   - `runtime-diagnostic-events.jsonl`
   - `runtime-diagnostic-replay.json`
 - Linuxoid can replay and merge those traces later without rerunning the full UI path.
+- Linuxoid can now fingerprint each trace source and record first/last event types so failures can be compared offline across runs.
 - Linuxoid refuses false success when a critical dependency is missing. A missing native library payload or missing ART runtime still leaves the runtime in `recovery_needed`, not `ready`.
 
 This is **observability and bounded recovery planning**, not autonomous app repair or full Android execution.
@@ -323,6 +325,7 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
 - A `native-runtime-recovery-plan <bootstrap-manifest> [scenario]` path that materializes the bounded recovery actions into a stable recovery-plan JSON plus per-action JSONL artifact stream for harness replay and diagnosis
 - A `native-runtime-health-replay <trace-jsonl-path>` path that replays the health trace into a stable summary without rerunning the full UI path
 - A `native-runtime-diagnostic-replay <bootstrap-manifest>` path that merges health, recovery, ART/classloader, class-resolution, and runtime-smoke JSONL traces into one replayable diagnostic bundle without rerunning the UI path
+- A `native-runtime-diagnostic-fixture <bootstrap-manifest> [scenario]` path that materializes the runtime-health traces first, then emits a replayable diagnostic bundle plus trace index in one deterministic non-UI step
 - Minimal `P1` runtime surfaces for a future direct runner:
   - JNI stub
   - asset-manager stub
@@ -370,6 +373,7 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
   - deterministic recovery-plan and action-trace artifacts for MCP and harness replay
   - explicit action rank, retry-budget, and recovery-scope metadata so replay tooling can make the same bounded choice every time
   - JSONL trace plus replayable fixture artifacts for diagnosis without rerunning the full UI path
+  - a deterministic trace index with per-source fingerprints and event boundaries for offline diffing
 - A `launch-waydroid-package` compatibility alias that still launches an already installed app through the Waydroid adapter without requiring an APK reinstall or a hardcoded ADB serial
 - A `desktopify-waydroid-package` path that generates a Linux launcher and `.desktop` entry for an installed Waydroid app
 - A generic `verify-package` path that proves direct Linux launch for an installed package by checking runtime launch, generated host-launch artifacts, and generated launcher execution across backend contracts
@@ -405,7 +409,7 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
 - A local test-backed proof that `native-art-runtime-smoke` can reuse the classpath plan plus offline class-resolution result, write stable invocation artifacts, and report ART runtime availability honestly without claiming false class execution
 - A local test-backed proof that `native-runtime-health-fixture` and `native-runtime-health-replay` classify runtime readiness, select deterministic recovery actions, and emit stable replayable health artifacts without claiming false success
 - A local test-backed proof that `native-runtime-recovery-plan` materializes stable recovery-plan artifacts and deterministic action metadata for missing artifact, failed native load, unavailable display, and failed service lookup scenarios
-- A local test-backed proof that `native-runtime-diagnostic-replay` merges the existing JSONL traces into a stable replay bundle, reports missing trace sources honestly, and diagnoses recovery-needed states without rerunning the UI path
+- A local test-backed proof that `native-runtime-diagnostic-replay` merges the existing JSONL traces into a stable replay bundle, writes a deterministic trace index with per-source fingerprints, reports missing trace sources honestly, and diagnoses recovery-needed states without rerunning the UI path
 - A local test-backed proof that missing native dependencies keep `overall_ready: false`, preserve `recovery_needed` state, and surface `retry_native_load_after_bundle_refresh` consistently across fixture, command, and replay outputs
 - A generated native bootstrap entrypoint that now calls `native-execute-stub <bootstrap-manifest>` instead of routing through a text-only parent shim
 - A local test suite that verifies the first scaffold behavior
@@ -430,7 +434,7 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 
 - The new `launch-package` core path is backend-neutral, but **native Linux execution is still not implemented**.
 - The new `plan-native-spike` core path materializes Linuxoid-owned native launch assets, but **those assets are not executing Android bytecode on Linux yet**.
-- The new `bootstrap-native-spike` and `native-execute-stub` paths now prove Linuxoid can own the local bootstrap surface, `execve` a real child runner, persist truthful session state, stage host-ABI native libraries plus extracted assets/resources, and emit structured JNI/library results, the new `inspect-apk-resources` path proves Linuxoid can inspect plain APK/ZIP manifest metadata plus normalized asset/resource readiness before ART exists, the `native-art-classloader-fixture` path proves Linuxoid can turn staged APK dex entries plus manifest targets into deterministic classpath artifacts for the next host-ART gate, the `native-art-class-resolution-fixture` path proves Linuxoid can resolve manifest-target descriptors from real staged DEX contents and emit deterministic resolution-map artifacts without pretending ART already executed them, the `native-art-runtime-smoke` path proves Linuxoid can turn that classpath plus resolution evidence into deterministic invocation-plan, runtime-log, and trace artifacts, select a real manifest-derived class target, and attempt a real host-side ART class-resolution command when a safe local `dalvikvm` surface is available, the `native-runtime-health-fixture` plus `native-runtime-health-replay` paths prove Linuxoid can classify runtime readiness, select bounded recovery actions, and emit replayable JSONL diagnostics for a self-healing Android Device skeleton, the `native-runtime-recovery-plan` path proves Linuxoid can materialize those bounded actions into stable recovery-plan and action-trace artifacts for harness workflows, the new `native-runtime-diagnostic-replay` path proves Linuxoid can merge those traces back into one replayable failure bundle without rerunning the UI path, the `native-first-pixel-fixture` plus `native-window-callback-fixture` prove headless host-surface and callback-marker paths, the `native-wayland-surface-fixture` proves a real optional `wl_display` plus `wl_surface` path, the `native-egl-smoke-fixture` proves a real optional EGL context plus pbuffer path, the `native-window-bridge-fixture` proves a minimal `ANativeWindow` bridge contract over those seams, the `native-input-queue-fixture` proves focused pointer/key injection plus stable event artifacts, and the `native-service-manager-fixture` proves local Binder-shaped registration, lookup, package/activity-manager transactions, and a socketpair-backed local transport seam, but **running real Android framework code through ART, binding EGL to the real Wayland surface for actual Android drawing, compositor-backed activity callbacks, full IME/text composition, full Parcel semantics, and full Android resource-table loading are still pending**.
+- The new `bootstrap-native-spike` and `native-execute-stub` paths now prove Linuxoid can own the local bootstrap surface, `execve` a real child runner, persist truthful session state, stage host-ABI native libraries plus extracted assets/resources, and emit structured JNI/library results, the new `inspect-apk-resources` path proves Linuxoid can inspect plain APK/ZIP manifest metadata plus normalized asset/resource readiness before ART exists, the `native-art-classloader-fixture` path proves Linuxoid can turn staged APK dex entries plus manifest targets into deterministic classpath artifacts for the next host-ART gate, the `native-art-class-resolution-fixture` path proves Linuxoid can resolve manifest-target descriptors from real staged DEX contents and emit deterministic resolution-map artifacts without pretending ART already executed them, the `native-art-runtime-smoke` path proves Linuxoid can turn that classpath plus resolution evidence into deterministic invocation-plan, runtime-log, and trace artifacts, select a real manifest-derived class target, and attempt a real host-side ART class-resolution command when a safe local `dalvikvm` surface is available, the `native-runtime-health-fixture` plus `native-runtime-health-replay` paths prove Linuxoid can classify runtime readiness, select bounded recovery actions, and emit replayable JSONL diagnostics for a self-healing Android Device skeleton, the `native-runtime-recovery-plan` path proves Linuxoid can materialize those bounded actions into stable recovery-plan and action-trace artifacts for harness workflows, the new `native-runtime-diagnostic-fixture` plus `native-runtime-diagnostic-replay` paths prove Linuxoid can generate, fingerprint, index, and merge those traces back into one replayable failure bundle without rerunning the UI path, the `native-first-pixel-fixture` plus `native-window-callback-fixture` prove headless host-surface and callback-marker paths, the `native-wayland-surface-fixture` proves a real optional `wl_display` plus `wl_surface` path, the `native-egl-smoke-fixture` proves a real optional EGL context plus pbuffer path, the `native-window-bridge-fixture` proves a minimal `ANativeWindow` bridge contract over those seams, the `native-input-queue-fixture` proves focused pointer/key injection plus stable event artifacts, and the `native-service-manager-fixture` proves local Binder-shaped registration, lookup, package/activity-manager transactions, and a socketpair-backed local transport seam, but **running real Android framework code through ART, binding EGL to the real Wayland surface for actual Android drawing, compositor-backed activity callbacks, full IME/text composition, full Parcel semantics, and full Android resource-table loading are still pending**.
 - The new `native-lifecycle-shim` path proves Linuxoid can own lifecycle/session handoff and service binding artifacts locally, but **it is still a pre-DEX, pre-real-Binder, pre-graphics scaffold seam**.
 - The current local `com.android.calculator2` APK staged for Linuxoid is **dex-only** and contains no `lib/*.so`, so it currently serves as a negative oracle rather than the literal `P1` gate app.
 - The current live proofs on GitHub are still **runtime-backed**: Waydroid handles the installed-package Linux launch path, and `attached-adb` remains a transition backend plus regression oracle.
@@ -476,7 +480,7 @@ What stays frozen until then:
 
 Why the freeze exists:
 
-- Linuxoid still has only `execution 94/100` on the native path.
+- Linuxoid still has only `execution 95/100` on the native path.
 - `P1 -> P2` is the real blocker for the whole project.
 - Browser work only makes sense after Linuxoid can already host Android UI and app code directly.
 
@@ -545,7 +549,7 @@ ctest --test-dir build --output-on-failure
 ## Current Progress
 
 - Phase loading: `96/100`
-- Native execution readiness: `94/100`
+- Native execution readiness: `95/100`
 - Runtime checkpoint gates: `70/100`
 
 These values are generated by the code, not written by hand.

@@ -2558,6 +2558,8 @@ void TestRuntimeDiagnosticReplayWritesStableArtifacts() {
          "expected diagnostic replay json artifact");
   Expect(fs::exists(replay.merged_trace_jsonl_path),
          "expected merged diagnostic trace artifact");
+  Expect(fs::exists(replay.trace_index_json_path),
+         "expected diagnostic trace index artifact");
   Expect(replay.total_events_read >= replay.trace_sources_found,
          "expected trace events across diagnostic sources");
   Expect(std::find(replay.selected_actions.begin(),
@@ -2565,6 +2567,14 @@ void TestRuntimeDiagnosticReplayWritesStableArtifacts() {
                    "attempt_host_art_class_resolution") !=
              replay.selected_actions.end(),
          "expected dex recovery action in diagnostic replay");
+  const std::string trace_index = ReadTextFile(replay.trace_index_json_path);
+  Expect(trace_index.find("\"source_name\": \"runtime_health_trace\"") !=
+             std::string::npos,
+         "expected runtime health trace in diagnostic index");
+  Expect(trace_index.find("\"source_fingerprint\": ") != std::string::npos,
+         "expected source fingerprint in diagnostic index");
+  Expect(trace_index.find("\"first_event_type\": ") != std::string::npos,
+         "expected first event type in diagnostic index");
 
   fs::remove_all(fixture.root);
 }
@@ -2614,6 +2624,30 @@ void TestRuntimeDiagnosticReplayCommandWritesStableJson() {
          "expected replay readiness in diagnostic replay json");
   Expect(output.find("\"merged_trace_jsonl_path\": ") != std::string::npos,
          "expected merged trace path in diagnostic replay json");
+  Expect(output.find("\"trace_index_json_path\": ") != std::string::npos,
+         "expected trace index path in diagnostic replay json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeDiagnosticFixtureCommandWritesStableJson() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-diagnostic-fixture-command", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-diagnostic-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &exit_code);
+  Expect(exit_code == 0, "expected native-runtime-diagnostic-fixture success");
+  Expect(output.find("\"scenario_name\": \"baseline\"") != std::string::npos,
+         "expected scenario name in diagnostic fixture json");
+  Expect(output.find("\"trace_index_json_path\": ") != std::string::npos,
+         "expected trace index path in diagnostic fixture json");
+  Expect(output.find("\"replay_ready\": true") != std::string::npos,
+         "expected replay readiness in diagnostic fixture json");
 
   fs::remove_all(fixture.root);
 }
@@ -4929,6 +4963,7 @@ int main() {
     TestRuntimeDiagnosticReplayHandlesMissingTraceHonestly();
     TestRuntimeDiagnosticReplayReportsMissingNativeDependencyHonestly();
     TestRuntimeDiagnosticReplayCommandWritesStableJson();
+    TestRuntimeDiagnosticFixtureCommandWritesStableJson();
     TestRuntimeHealthCommandWritesStableJson();
     TestRuntimeHealthCommandReportsMissingNativeDependencyHonestly();
     TestRuntimeRecoveryPlanWritesStableArtifacts();

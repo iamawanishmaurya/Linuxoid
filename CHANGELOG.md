@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.48 - 2026-05-18
+
+- Add a deterministic diagnostic trace index for the Self-Healing Android Device runtime so replay bundles now carry per-source fingerprints plus first and last event-type boundaries in `runtime-diagnostic-trace-index.json`.
+- Add `native-runtime-diagnostic-fixture <bootstrap-manifest> [scenario]`, a one-shot non-UI seam that materializes runtime-health traces first and then emits the replayable diagnostic bundle without requiring a full UI rerun.
+- Add regression coverage that proves the trace-index artifact and fixture command stay stable, and refresh the README, phased plan, self-healing note, changelog, and status output so Linuxoid reports the stronger offline diagnosis contract honestly.
+
 ## v0.1.47 - 2026-05-17
 
 - Formalize Linuxoid's deterministic runtime recovery contract so `native-runtime-recovery-plan` and `runtime-recovery-actions.jsonl` now emit explicit `action_rank`, `retry_budget`, and `recovery_scope` metadata for missing artifact, failed native load, unavailable display, failed service lookup, pending ART/classloader work, and surface-dependent input recovery.

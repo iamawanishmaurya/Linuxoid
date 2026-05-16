@@ -9,8 +9,10 @@
 #include "wfa/native_window_surface.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -80,6 +82,27 @@ std::string EscapeJson(const std::string& value) {
     }
   }
   return escaped;
+}
+
+std::string ComputeDeterministicFingerprint(
+    const std::vector<std::string>& lines) {
+  std::uint64_t hash = 1469598103934665603ull;
+  const auto mix_byte = [&](unsigned char byte) {
+    hash ^= static_cast<std::uint64_t>(byte);
+    hash *= 1099511628211ull;
+  };
+
+  for (const auto& line : lines) {
+    for (const unsigned char byte : line) {
+      mix_byte(byte);
+    }
+    mix_byte(static_cast<unsigned char>('\n'));
+  }
+
+  std::ostringstream output;
+  output << "fnv1a64:";
+  output << std::hex << std::setfill('0') << std::setw(16) << hash;
+  return output.str();
 }
 
 bool FileExists(const std::string& path) {
@@ -512,6 +535,55 @@ std::string BuildDiagnosticMergedEventJson(int sequence,
   return output.str();
 }
 
+std::string RenderRuntimeDiagnosticTraceIndexJson(
+    const RuntimeDiagnosticReplayReport& report) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"package_name\": \"" << EscapeJson(report.package_name)
+         << "\",\n"
+         << "  \"install_id\": \"" << EscapeJson(report.install_id)
+         << "\",\n"
+         << "  \"bootstrap_manifest_path\": \""
+         << EscapeJson(report.bootstrap_manifest_path) << "\",\n"
+         << "  \"artifact_root\": \"" << EscapeJson(report.artifact_root)
+         << "\",\n"
+         << "  \"trace_index_json_path\": \""
+         << EscapeJson(report.trace_index_json_path) << "\",\n"
+         << "  \"merged_trace_jsonl_path\": \""
+         << EscapeJson(report.merged_trace_jsonl_path) << "\",\n"
+         << "  \"scenario_name\": \"" << EscapeJson(report.scenario_name)
+         << "\",\n"
+         << "  \"trace_sources_found\": " << report.trace_sources_found
+         << ",\n"
+         << "  \"missing_trace_sources\": "
+         << RenderJsonArray(report.missing_trace_sources) << ",\n"
+         << "  \"trace_sources\": [\n";
+  for (std::size_t index = 0; index < report.trace_sources.size(); ++index) {
+    const auto& source = report.trace_sources[index];
+    if (index != 0) {
+      output << ",\n";
+    }
+    output << "    {"
+           << "\"source_name\": \"" << EscapeJson(source.source_name)
+           << "\", "
+           << "\"trace_path\": \"" << EscapeJson(source.trace_path) << "\", "
+           << "\"present\": " << (source.present ? "true" : "false") << ", "
+           << "\"events_read\": " << source.events_read << ", "
+           << "\"first_event_type\": \""
+           << EscapeJson(source.first_event_type) << "\", "
+           << "\"last_event_type\": \""
+           << EscapeJson(source.last_event_type) << "\", "
+           << "\"source_fingerprint\": \""
+           << EscapeJson(source.source_fingerprint) << "\", "
+           << "\"failure_reason\": \""
+           << EscapeJson(source.failure_reason) << "\""
+           << "}";
+  }
+  output << "\n  ]\n"
+         << "}\n";
+  return output.str();
+}
+
 }  // namespace
 
 RuntimeHealthReport RunRuntimeHealthFixture(
@@ -796,7 +868,8 @@ std::string RenderRuntimeHealthReplayJson(
 }
 
 RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
-    const std::string& bootstrap_manifest_path) {
+    const std::string& bootstrap_manifest_path,
+    const std::string& scenario_name) {
   const NativeLifecycleShim lifecycle =
       BuildNativeLifecycleShimFromManifest(bootstrap_manifest_path);
 
@@ -806,12 +879,16 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
   report.bootstrap_manifest_path = bootstrap_manifest_path;
   report.session_root = lifecycle.session_root;
   report.artifact_root = (fs::path(lifecycle.session_root) / "health").string();
+  report.trace_index_json_path =
+      (fs::path(report.artifact_root) / "runtime-diagnostic-trace-index.json")
+          .string();
   report.merged_trace_jsonl_path =
       (fs::path(report.artifact_root) / "runtime-diagnostic-events.jsonl")
           .string();
   report.result_json_path =
       (fs::path(report.artifact_root) / "runtime-diagnostic-replay.json")
           .string();
+  report.scenario_name = scenario_name;
 
   const std::vector<std::pair<std::string, std::string>> source_specs = {
       {"runtime_health_trace",
@@ -853,6 +930,7 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
 
     ++report.trace_sources_found;
     report.total_events_read += source.events_read;
+    source.source_fingerprint = ComputeDeterministicFingerprint(lines);
     int source_line_number = 1;
     for (const auto& line : lines) {
       std::string event_type = ExtractJsonStringField(line, "event_type");
@@ -861,6 +939,10 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
                          ? "recovery_action"
                          : "trace_event";
       }
+      if (source.first_event_type.empty()) {
+        source.first_event_type = event_type;
+      }
+      source.last_event_type = event_type;
 
       if (source_name == "runtime_health_trace") {
         bool ready_present = false;
@@ -943,6 +1025,8 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
 
   fs::create_directories(report.artifact_root);
   WriteTextFile(report.merged_trace_jsonl_path, merged_trace.str());
+  WriteTextFile(report.trace_index_json_path,
+                RenderRuntimeDiagnosticTraceIndexJson(report));
   WriteTextFile(report.result_json_path,
                 RenderRuntimeDiagnosticReplayJson(report));
   return report;
@@ -962,9 +1046,13 @@ std::string RenderRuntimeDiagnosticReplayJson(
          << "\",\n"
          << "  \"artifact_root\": \"" << EscapeJson(report.artifact_root)
          << "\",\n"
+         << "  \"trace_index_json_path\": \""
+         << EscapeJson(report.trace_index_json_path) << "\",\n"
          << "  \"merged_trace_jsonl_path\": \""
          << EscapeJson(report.merged_trace_jsonl_path) << "\",\n"
          << "  \"result_json_path\": \"" << EscapeJson(report.result_json_path)
+         << "\",\n"
+         << "  \"scenario_name\": \"" << EscapeJson(report.scenario_name)
          << "\",\n"
          << "  \"replay_ready\": "
          << (report.replay_ready ? "true" : "false") << ",\n"
@@ -999,6 +1087,12 @@ std::string RenderRuntimeDiagnosticReplayJson(
            << "\"trace_path\": \"" << EscapeJson(source.trace_path) << "\", "
            << "\"present\": " << (source.present ? "true" : "false") << ", "
            << "\"events_read\": " << source.events_read << ", "
+           << "\"first_event_type\": \""
+           << EscapeJson(source.first_event_type) << "\", "
+           << "\"last_event_type\": \""
+           << EscapeJson(source.last_event_type) << "\", "
+           << "\"source_fingerprint\": \""
+           << EscapeJson(source.source_fingerprint) << "\", "
            << "\"failure_reason\": \""
            << EscapeJson(source.failure_reason) << "\""
            << "}";

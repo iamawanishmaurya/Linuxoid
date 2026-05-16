@@ -1317,3 +1317,23 @@
   Action: Rebuilt Linuxoid, reran the full test suite, and refreshed the docs/version/status output for the stricter self-healing recovery contract.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the recovery JSON now carries explicit `action_rank`, `retry_budget`, and `recovery_scope` fields, and Linuxoid reports the tightened deterministic recovery policy honestly.
   Timestamp: 2026-05-17T23:59:00+05:30
+
+- Step: Diagnostic trace-index red test
+  Action: Added failing replay-fixture assertions for a deterministic diagnostic trace index artifact, per-source fingerprints and event-type metadata, and a dedicated `native-runtime-diagnostic-fixture` command that generates replayable trace bundles without rerunning a UI path.
+  Result: Linuxoid now has a red test that requires richer JSONL trace indexing and a one-shot replayable diagnostic fixture contract.
+  Timestamp: 2026-05-18T00:09:00+05:30
+
+- Step: Diagnostic trace-index compile failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the new diagnostic replay assertions.
+  Result: The build failed because `RuntimeDiagnosticReplayReport` does not yet expose `trace_index_json_path`, confirming that the replay contract still lacks the new trace-index surface and fixture command shape.
+  Timestamp: 2026-05-18T00:10:00+05:30
+
+- Step: Diagnostic trace-index implementation
+  Action: Extended the replay bundle contract with a deterministic trace-index artifact, per-source fingerprints plus first/last event boundaries, and a `native-runtime-diagnostic-fixture` command that materializes replayable traces before bundle generation.
+  Result: Linuxoid can now generate a one-shot non-UI diagnostic fixture and compare replay sources offline through stable trace-index metadata.
+  Timestamp: 2026-05-18T00:17:00+05:30
+
+- Step: Diagnostic trace-index verification
+  Action: Rebuilt Linuxoid, reran the full test suite, exercised `native-runtime-diagnostic-fixture` against the staged Calculator bootstrap, refreshed the README Mermaid artifact path, and updated the docs/version/status metadata.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the new diagnostic fixture JSON exposes `trace_index_json_path`, and Linuxoid now writes per-source fingerprints plus event boundaries without claiming false execution success.
+  Timestamp: 2026-05-18T00:20:00+05:30

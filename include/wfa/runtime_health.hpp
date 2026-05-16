@@ -68,6 +68,9 @@ struct RuntimeDiagnosticTraceSource {
   std::string trace_path;
   bool present = false;
   int events_read = 0;
+  std::string first_event_type;
+  std::string last_event_type;
+  std::string source_fingerprint;
   std::string failure_reason;
 };
 
@@ -77,8 +80,10 @@ struct RuntimeDiagnosticReplayReport {
   std::string bootstrap_manifest_path;
   std::string session_root;
   std::string artifact_root;
+  std::string trace_index_json_path;
   std::string merged_trace_jsonl_path;
   std::string result_json_path;
+  std::string scenario_name;
   bool replay_ready = false;
   std::string overall_state;
   std::string exit_reason;
@@ -105,7 +110,8 @@ std::string RenderRuntimeHealthReplayJson(
     const RuntimeHealthReplayReport& report);
 
 RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
-    const std::string& bootstrap_manifest_path);
+    const std::string& bootstrap_manifest_path,
+    const std::string& scenario_name = "replay_only");
 std::string RenderRuntimeDiagnosticReplayJson(
     const RuntimeDiagnosticReplayReport& report);
 
