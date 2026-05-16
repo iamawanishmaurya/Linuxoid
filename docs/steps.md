@@ -354,3 +354,8 @@
   Action: Added Linuxoid commands for `launch-waydroid-package` and `desktopify-waydroid-package`, rebuilt the project, reran the tests, verified live Waydroid launch for `com.android.calculator2`, inspected the generated Linux launcher artifacts, and executed the generated launcher from Linux.
   Result: Linuxoid now has a verified non-IME installed-package launch path on live Waydroid, and the project status advanced to `87/100` overall with checkpoint gates at `70/100`.
   Timestamp: 2026-05-16T10:36:56+05:30
+
+- Step: Linuxoid v0.1.8 release and publish
+  Action: Staged the Waydroid-native installed-package launcher slice, committed it as `feat: add Waydroid package launch path`, tagged `v0.1.8`, and pushed both `main` and the new tag to the Linuxoid GitHub remote.
+  Result: The new non-IME Waydroid launch capability is now published and versioned on GitHub as `v0.1.8`.
+  Timestamp: 2026-05-16T10:38:05+05:30
