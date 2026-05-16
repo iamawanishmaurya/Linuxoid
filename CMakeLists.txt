@@ -14,10 +14,12 @@ include(CTest)
 
 add_library(
   wfa_core
+  src/apk_loader.cpp
   src/checkpoint.cpp
   src/manifest_assessment.cpp
   src/package_layout.cpp
   src/project_status.cpp
+  src/runtime_bridge.cpp
 )
 
 target_include_directories(wfa_core PUBLIC include)

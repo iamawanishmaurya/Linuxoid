@@ -1,7 +1,9 @@
+#include "wfa/apk_loader.hpp"
 #include "wfa/checkpoint.hpp"
 #include "wfa/manifest_assessment.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
+#include "wfa/runtime_bridge.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -20,8 +22,8 @@ void TestWeightedCheckpointProgress() {
   const auto checkpoints = wfa::BuildDefaultCheckpoints();
 
   Expect(checkpoints.size() == 5, "expected five runtime checkpoints");
-  Expect(wfa::CalculateWeightedCheckpointProgress(checkpoints) == 18,
-         "expected weighted checkpoint progress to round to 18");
+  Expect(wfa::CalculateWeightedCheckpointProgress(checkpoints) == 28,
+         "expected weighted checkpoint progress to round to 28");
   Expect(wfa::CountCompletedCheckpoints(checkpoints) == 0,
          "expected zero completed runtime checkpoints");
 }
@@ -30,8 +32,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 58,
-         "expected average phase progress to equal 58");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 65,
+         "expected average phase progress to equal 65");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -78,9 +80,9 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("58/100") != std::string::npos,
+  Expect(report.find("65/100") != std::string::npos,
          "expected average phase progress in report");
-  Expect(report.find("18/100") != std::string::npos,
+  Expect(report.find("28/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
 }
 
@@ -233,6 +235,108 @@ void TestInvalidManifestRejected() {
   Expect(threw, "expected missing package manifests to be rejected");
 }
 
+void TestApktoolMetadataParsing() {
+  const std::string yaml = R"(
+apkFileName: keyboard-0.1.28.apk
+sdkInfo:
+  minSdkVersion: 24
+  targetSdkVersion: 35
+versionInfo:
+  versionCode: 11654
+  versionName: 0.1.28
+)";
+
+  const auto metadata = wfa::ParseApktoolMetadata(yaml);
+
+  Expect(metadata.apk_file_name == "keyboard-0.1.28.apk",
+         "expected apk file name");
+  Expect(metadata.min_sdk == 24, "expected min sdk");
+  Expect(metadata.target_sdk == 35, "expected target sdk");
+  Expect(metadata.version_code == 11654, "expected version code");
+  Expect(metadata.version_name == "0.1.28", "expected version name");
+  Expect(wfa::BuildInstallId(metadata) == "vc11654-0.1.28",
+         "expected install id");
+
+  const auto sanitized = wfa::BuildInstallId(wfa::ApktoolMetadata{
+      .apk_file_name = "demo.apk",
+      .min_sdk = 24,
+      .target_sdk = 35,
+      .version_code = 7,
+      .version_name = "1.0 beta+1",
+  });
+  Expect(sanitized == "vc7-1.0_beta_1",
+         "expected version name sanitization in install id");
+}
+
+void TestLoadedApkReportRendering() {
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/demo.apk",
+      .install_id = "vc42-1.0.0",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "demo.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 42,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.demo",
+          .launcher_activity_name = "com.example.demo.MainActivity",
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.demo",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "com.example.demo", .install_id = "vc42-1.0.0", .version_code = 42},
+          "/tmp/wfa"),
+      .install_root = "/tmp/wfa/users/0/packages/com.example.demo/vc42-1.0.0",
+  };
+
+  const auto rendered = wfa::RenderLoadedApkReport(report);
+  Expect(rendered.find("Package: com.example.demo") != std::string::npos,
+         "expected loaded apk report package");
+  Expect(rendered.find("Install ID: vc42-1.0.0") != std::string::npos,
+         "expected loaded apk report install id");
+}
+
+void TestRuntimeBridgeOutputParsers() {
+  Expect(wfa::OutputContainsInstalledPackage("package:org.futo.inputmethod.latin\n",
+                                             "org.futo.inputmethod.latin"),
+         "expected installed package parser");
+  Expect(!wfa::OutputContainsInstalledPackage(
+             "package:org.futo.inputmethod.latin.debug\n",
+             "org.futo.inputmethod.latin"),
+         "expected exact package matching");
+  Expect(wfa::OutputContainsImeId("org.futo.inputmethod.latin/.LatinIME\n",
+                                  "org.futo.inputmethod.latin/.LatinIME"),
+         "expected ime parser");
+  Expect(!wfa::OutputContainsImeId(
+             "org.futo.inputmethod.latin/.LatinIMEBeta:\n",
+             "org.futo.inputmethod.latin/.LatinIME"),
+         "expected exact ime matching");
+  Expect(wfa::LaunchOutputLooksSuccessful("Status: ok\nComplete\n"),
+         "expected launch parser");
+
+  const auto report = wfa::RenderAdbImeStatusReport(wfa::AdbImeStatus{
+      .serial = "emulator-5590",
+      .package_name = "org.futo.inputmethod.latin",
+      .ime_id = "org.futo.inputmethod.latin/.LatinIME",
+      .settings_component = "",
+      .package_installed = true,
+      .ime_registered = true,
+      .is_default_ime = true,
+      .settings_launch_ok = false,
+      .default_input_method = "org.futo.inputmethod.latin/.LatinIME",
+  });
+  Expect(report.find("Settings launch OK: not checked") != std::string::npos,
+         "expected not-checked launch status");
+}
+
 }  // namespace
 
 int main() {
@@ -247,6 +351,9 @@ int main() {
     TestActivityAliasLauncherAssessment();
     TestAdvancedRuntimeBlockersPushFullUsePastP6();
     TestInvalidManifestRejected();
+    TestApktoolMetadataParsing();
+    TestLoadedApkReportRendering();
+    TestRuntimeBridgeOutputParsers();
   } catch (const std::exception& error) {
     std::cerr << "Test failure: " << error.what() << '\n';
     return EXIT_FAILURE;

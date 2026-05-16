@@ -64,9 +64,9 @@ Each phase is shown as a completion value from `0` to `100`.
 | P1 | Research and architecture lock | 100 |
 | P2 | Build and tooling scaffold | 100 |
 | P3 | Package and storage contract | 100 |
-| P4 | Runtime and service contract | 45 |
+| P4 | Runtime and service contract | 70 |
 | P5 | Graphics and host integration | 0 |
-| P6 | APK execution and validation | 0 |
+| P6 | APK execution and validation | 20 |
 
 ## Evidence Checkpoints
 
@@ -75,7 +75,7 @@ The runtime checkpoints remain stricter than the implementation phases.
 | Checkpoint | Weight | Current expected state after this slice |
 |---|---:|---:|
 | C1 Environment Reproducibility | 15 | 50 |
-| C2 Golden App Launch | 20 | 0 |
+| C2 Golden App Launch | 20 | 50 |
 | C3 Representative Compatibility Set | 25 | 0 |
 | C4 Host Integration | 20 | 0 |
 | C5 Repeatability and Regression Guard | 20 | 50 |

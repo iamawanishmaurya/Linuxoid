@@ -13,12 +13,12 @@ std::vector<PhaseStatus> BuildDefaultPhases() {
        "CMake, CLI entrypoint, and local test target exist."},
       {"P3", "Package and storage contract", 100,
        "APK layout and host storage mapping are encoded in code."},
-      {"P4", "Runtime and service contract", 45,
-       "Decoded manifests can now be assessed for runtime requirements."},
+      {"P4", "Runtime and service contract", 70,
+       "The project can load an APK into a compat root and assess its runtime needs."},
       {"P5", "Graphics and host integration", 0,
        "No host window or compositor work has started yet."},
-      {"P6", "APK execution and validation", 0,
-       "No Android app has been installed or launched yet."},
+      {"P6", "APK execution and validation", 20,
+       "A live Android target has been queried and the keyboard settings UI launch is verified."},
   };
 }
 
@@ -27,8 +27,8 @@ std::vector<Checkpoint> BuildDefaultCheckpoints() {
       {"C1", "Environment Reproducibility", 15,
        CompletionState::kInValidation,
        "Build instructions and the local scaffold exist; clean-room proof is pending."},
-      {"C2", "Golden App Launch", 20, CompletionState::kNotStarted,
-       "No APK launch evidence exists yet."},
+      {"C2", "Golden App Launch", 20, CompletionState::kInValidation,
+       "Keyboard APK load and live settings launch exist, but the full golden-app gate is not complete."},
       {"C3", "Representative Compatibility Set", 25,
        CompletionState::kNotStarted,
        "No compatibility matrix exists yet."},
@@ -101,7 +101,7 @@ std::string DescribeMvpFoundation() {
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: container-first Android userspace integration\n";
-  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, and status CLI\n";
+  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, APK loader, runtime bridge, and status CLI\n";
   output << "Why: this keeps the first executable slice aligned with the future core.\n";
   return output.str();
 }

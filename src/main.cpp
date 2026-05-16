@@ -1,6 +1,8 @@
+#include "wfa/apk_loader.hpp"
 #include "wfa/manifest_assessment.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
+#include "wfa/runtime_bridge.hpp"
 
 #include <cstdlib>
 #include <fstream>
@@ -17,6 +19,8 @@ void PrintUsage() {
       << "  compatctl status\n"
       << "  compatctl foundation\n"
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
+      << "  compatctl load-apk <apk-path> [compat-root]\n"
+      << "  compatctl adb-ime-status <serial> <package> <ime-id> [settings-component]\n"
       << "  compatctl layout <package> <install-id> <version-code> [compat-root]\n";
 }
 
@@ -61,6 +65,32 @@ int main(int argc, char** argv) {
       const auto profile = wfa::ParseDecodedManifest(ReadFile(argv[2]));
       const auto assessment = wfa::AssessRuntimeRequirements(profile);
       std::cout << wfa::RenderManifestAssessmentReport(assessment);
+      return EXIT_SUCCESS;
+    }
+
+    if (command == "load-apk") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string compat_root =
+          argc == 4 ? argv[3] : "/var/lib/wfa";
+      const auto report = wfa::LoadApkToCompatRoot(argv[2], compat_root);
+      std::cout << wfa::RenderLoadedApkReport(report);
+      return EXIT_SUCCESS;
+    }
+
+    if (command == "adb-ime-status") {
+      if (argc != 5 && argc != 6) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string settings_component = argc == 6 ? argv[5] : "";
+      const auto status =
+          wfa::QueryAdbImeStatus(argv[2], argv[3], argv[4], settings_component);
+      std::cout << wfa::RenderAdbImeStatusReport(status);
       return EXIT_SUCCESS;
     }
 

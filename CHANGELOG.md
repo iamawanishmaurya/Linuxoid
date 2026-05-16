@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.3 - 2026-05-16
+
+- Add a real `load-apk` path that stages APKs into a compat root using decoded manifest and `apktool.yml` metadata.
+- Add an `adb-ime-status` runtime bridge that verifies install state, IME registration, default IME selection, and settings launch on a live Android target.
+- Harden the loader/runtime slice with install-key sanitization, exact ADB matching, optional launch verification, and unique cleaned temp decode directories.
+- Raise verified project loading to `65/100` and runtime checkpoint gates to `28/100`.
+
 ## v0.1.2 - 2026-05-16
 
 - Add a Phase 4 decoded-manifest assessor for runtime and service requirements.

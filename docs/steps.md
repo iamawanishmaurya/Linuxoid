@@ -104,3 +104,38 @@
   Action: Staged and committed the full Phase 4 manifest-assessment slice, including the keyboard readiness tooling, review-driven fixes, and supporting documentation.
   Result: The repository now has a dedicated feature commit for the new `compatctl assess-manifest` capability.
   Timestamp: 2026-05-16T01:29:47+05:30
+
+- Step: Runtime probe against live Android targets
+  Action: Probed the host for Android runtime tools and queried the connected emulator plus Waydroid session for keyboard-app state.
+  Result: Confirmed that `waydroid` exists, a live `adb` target `emulator-5590` is connected, the package `org.futo.inputmethod.latin` is installed there, it is the default IME, and its `SettingsActivity` launches successfully.
+  Timestamp: 2026-05-16T07:36:39+05:30
+
+- Step: Loader and runtime-bridge red phase
+  Action: Added the first APK-load and runtime-bridge library slice with unit coverage for APK metadata parsing, loaded-report rendering, and ADB output parsing, then ran the build and tests.
+  Result: The new code compiled, but the tests failed because the `apktool.yml` parser did not handle indented nested keys like `versionCode` and `versionName`.
+  Timestamp: 2026-05-16T07:39:24+05:30
+
+- Step: APK load and runtime-bridge verification
+  Action: Rebuilt the loader/runtime slice, ran the tests, loaded the keyboard APK into `/tmp/wfa-load`, and queried the live emulator through the new `adb-ime-status` CLI command.
+  Result: The project now loads `keyboard-0.1.28.apk` into a compat root, and the CLI verified that the connected Android target has the package installed, the IME registered, the IME set as default, and the settings UI launch succeeding.
+  Timestamp: 2026-05-16T07:41:12+05:30
+
+- Step: Progress model refresh after runtime proof
+  Action: Updated the phase and checkpoint model to reflect the new verified APK load path and live runtime evidence, then reran the tests and the `status` CLI.
+  Result: The verified project loading is now `65/100`, with `P4` at `70/100`, `P6` at `20/100`, and runtime checkpoint gates at `28/100`.
+  Timestamp: 2026-05-16T07:42:17+05:30
+
+- Step: Review findings intake for loader/runtime slice
+  Action: Collected and verified reviewer findings on install-key safety, ADB exact matching, status-query behavior, and temp decode directory safety.
+  Result: Confirmed four follow-up fixes are needed before finalizing the APK loader and runtime-bridge slice.
+  Timestamp: 2026-05-16T07:44:38+05:30
+
+- Step: Review-driven loader/runtime fixes
+  Action: Applied reviewer-driven fixes for install-key sanitization, exact ADB token matching, optional settings launch verification, and unique cleaned-up decode directories, then reran the load and ADB status paths.
+  Result: The keyboard APK still loads into `/tmp/wfa-load`, the launched verification path still succeeds, and the new read-only ADB status path returns the IME facts without requiring an activity launch.
+  Timestamp: 2026-05-16T07:48:06+05:30
+
+- Step: Final loader/runtime rerun
+  Action: Re-ran the build, tests, keyboard APK load, launched runtime verification, and read-only runtime verification after the last report wording fix.
+  Result: The full loader/runtime slice stayed green, and the read-only ADB report now correctly says `Settings launch OK: not checked` when launch verification is skipped.
+  Timestamp: 2026-05-16T07:49:37+05:30
