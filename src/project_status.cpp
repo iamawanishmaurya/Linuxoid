@@ -15,10 +15,10 @@ std::vector<PhaseStatus> BuildDefaultPhases() {
        "APK layout and host storage mapping are encoded in code."},
       {"P4", "Runtime and service contract", 80,
        "The project can load an APK into a compat root, install it on a live target, and provision its IME service."},
-      {"P5", "Graphics and host integration", 0,
-       "No host window or compositor work has started yet."},
-      {"P6", "APK execution and validation", 45,
-       "A live Android target now proves install, IME enablement, default selection, and keyboard settings launch for the golden app."},
+      {"P5", "Graphics and host integration", 55,
+       "Linux launcher artifacts now support automatic launcher inference, split host install roots, and verified host-side execution against a live Waydroid runtime."},
+      {"P6", "APK execution and validation", 70,
+       "A live Linux host launcher now proves install, IME enablement, default selection, keyboard settings launch, and ready-for-typing verification on Waydroid for the golden app."},
   };
 }
 
@@ -32,8 +32,8 @@ std::vector<Checkpoint> BuildDefaultCheckpoints() {
       {"C3", "Representative Compatibility Set", 25,
        CompletionState::kNotStarted,
        "No compatibility matrix exists yet."},
-      {"C4", "Host Integration", 20, CompletionState::kNotStarted,
-       "Graphics, input, network, and file handoff still need executable proof."},
+      {"C4", "Host Integration", 20, CompletionState::kInValidation,
+       "A Linux wrapper and `.desktop` entry can launch the golden app from the host, but compositor, clipboard, and input handoff still need proof."},
       {"C5", "Repeatability and Regression Guard", 20,
        CompletionState::kComplete,
        "The build, tests, and live keyboard provisioning flow all passed again without code changes."},
@@ -63,6 +63,7 @@ std::string RenderProjectStatusReport() {
   const int completed_checkpoints = CountCompletedCheckpoints(checkpoints);
 
   std::ostringstream output;
+  output << "Project: Linuxoid\n";
   output << "Language: C++\n";
   output << "Runtime Strategy: container-first Android userspace integration\n";
   output << "Phase Loading: " << RenderLoadingBar(phase_progress) << "\n";
@@ -98,11 +99,12 @@ std::string RenderPackageLayoutReport(const PackageLayout& layout) {
 
 std::string DescribeMvpFoundation() {
   std::ostringstream output;
+  output << "Project: Linuxoid\n";
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: container-first Android userspace integration\n";
-  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, APK loader, runtime bridge, and status CLI\n";
-  output << "Golden App Proof: the FUTO keyboard APK now provisions successfully on the connected Android target.\n";
+  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, APK loader, runtime bridge, and Linux desktop launch artifacts with automatic launcher inference and live Waydroid execution proof\n";
+  output << "Golden App Proof: the FUTO keyboard APK now provisions successfully through a Linuxoid-generated launcher on a live Waydroid runtime and returns Ready for typing: yes.\n";
   output << "Why: this keeps the first executable slice aligned with the future core.\n";
   return output.str();
 }

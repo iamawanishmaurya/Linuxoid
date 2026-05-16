@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.1.7 - 2026-05-16
+
+- Normalize fully qualified IME identifiers to the short `package/.Class` form before Linuxoid sends `ime enable` and `ime set`, fixing the Waydroid mutation failure for the keyboard app.
+- Verify the Linuxoid-generated host launcher against a live Waydroid runtime and reach `Ready for typing: yes` for the FUTO keyboard APK from Linux.
+- Raise verified project loading to `84/100` while runtime checkpoint gates remain `58/100`.
+
+## v0.1.6 - 2026-05-16
+
+- Rename the project-facing identity to `Linuxoid` and point the local Git remote at `https://github.com/iamawanishmaurya/Linuxoid`.
+- Add `desktopify-apk-auto`, which infers the launcher activity from the APK manifest instead of requiring a caller-supplied component.
+- Split desktop-entry and launcher-script roots so Linuxoid can target host-discoverable application directories without forcing the wrapper script to live beside the `.desktop` file.
+- Raise verified project loading to `78/100` while keeping runtime checkpoint gates at `58/100`.
+
+## v0.1.5 - 2026-05-16
+
+- Add a generic `launch-activity` bridge for explicit Android component launches from Linux.
+- Add a `desktopify-apk` path that generates a Linux wrapper script and `.desktop` entry for a caller-selected Android component.
+- Harden component matching so the runtime treats short and fully qualified Android component forms as equivalent.
+- Raise verified project loading to `76/100` and runtime checkpoint gates to `58/100`, with host integration now in active validation.
+
 ## v0.1.4 - 2026-05-16
 
 - Add a real `provision-ime` path that installs a keyboard APK on a live Android target, enables the IME, sets it as default, and re-verifies the resulting runtime state.

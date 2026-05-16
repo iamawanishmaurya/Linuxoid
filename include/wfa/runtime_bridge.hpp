@@ -47,6 +47,13 @@ struct AdbProvisioningReport {
   AdbImeStatus final_status;
 };
 
+struct AdbActivityLaunchReport {
+  std::string serial;
+  std::string component;
+  bool launch_ok = false;
+  std::string output;
+};
+
 bool OutputContainsInstalledPackage(const std::string& output,
                                     const std::string& package_name);
 bool OutputContainsImeId(const std::string& output, const std::string& ime_id);
@@ -54,8 +61,19 @@ bool EnabledInputMethodsContainIme(const std::string& output,
                                    const std::string& ime_id);
 bool InstallOutputLooksSuccessful(const std::string& output);
 bool LaunchOutputLooksSuccessful(const std::string& output);
+bool LaunchOutputMentionsComponent(const std::string& output,
+                                   const std::string& component);
+bool LaunchOutputConfirmsComponent(const std::string& output,
+                                   const std::string& component);
+std::string RenderAdbActivityLaunchReport(
+    const AdbActivityLaunchReport& report);
 std::string RenderAdbImeStatusReport(const AdbImeStatus& status);
 std::string RenderAdbProvisioningReport(const AdbProvisioningReport& report);
+AdbActivityLaunchReport LaunchAdbActivityWithRunner(
+    const std::string& serial, const std::string& component,
+    const CommandRunner& runner);
+AdbActivityLaunchReport LaunchAdbActivity(const std::string& serial,
+                                          const std::string& component);
 AdbImeStatus QueryAdbImeStatusWithRunner(const std::string& serial,
                                          const std::string& package_name,
                                          const std::string& ime_id,

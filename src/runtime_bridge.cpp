@@ -84,6 +84,42 @@ std::vector<std::string> SplitLines(const std::string& output) {
   return lines;
 }
 
+std::string CanonicalizeAndroidComponent(const std::string& component) {
+  const auto slash = component.find('/');
+  if (slash == std::string::npos) {
+    return component;
+  }
+
+  const std::string package_name = component.substr(0, slash);
+  std::string class_name = component.substr(slash + 1);
+  if (!class_name.empty() && class_name.front() == '.') {
+    class_name = package_name + class_name;
+  }
+  return package_name + "/" + class_name;
+}
+
+std::string ShortenAndroidComponent(const std::string& component) {
+  const std::string canonical = CanonicalizeAndroidComponent(component);
+  const auto slash = canonical.find('/');
+  if (slash == std::string::npos) {
+    return canonical;
+  }
+
+  const std::string package_name = canonical.substr(0, slash);
+  const std::string class_name = canonical.substr(slash + 1);
+  if (class_name.rfind(package_name + ".", 0) == 0) {
+    return package_name + "/." + class_name.substr(package_name.size() + 1);
+  }
+
+  return canonical;
+}
+
+bool AndroidComponentsEquivalent(const std::string& left,
+                                 const std::string& right) {
+  return CanonicalizeAndroidComponent(left) ==
+         CanonicalizeAndroidComponent(right);
+}
+
 int CalculateProvisioningProgress(const AdbProvisioningReport& report) {
   int total = 9;
   int satisfied = 0;
@@ -176,7 +212,7 @@ StatusQueryAttempt TryQueryAdbImeStatusWithRunner(
     attempt.status.default_input_method.pop_back();
   }
   attempt.status.is_default_ime =
-      attempt.status.default_input_method == ime_id;
+      AndroidComponentsEquivalent(attempt.status.default_input_method, ime_id);
 
   if (!settings_component.empty()) {
     const auto launch_result =
@@ -205,7 +241,11 @@ bool OutputContainsInstalledPackage(const std::string& output,
 
 bool OutputContainsImeId(const std::string& output, const std::string& ime_id) {
   for (const auto& line : SplitLines(output)) {
-    if (line.rfind(ime_id + ":", 0) == 0 || line == ime_id) {
+    std::string candidate = line;
+    if (!candidate.empty() && candidate.back() == ':') {
+      candidate.pop_back();
+    }
+    if (AndroidComponentsEquivalent(candidate, ime_id)) {
       return true;
     }
   }
@@ -223,7 +263,7 @@ bool EnabledInputMethodsContainIme(const std::string& output,
     if (!segment.empty() && segment.back() == '\n') {
       segment.pop_back();
     }
-    if (segment == ime_id) {
+    if (AndroidComponentsEquivalent(segment, ime_id)) {
       return true;
     }
   }
@@ -237,6 +277,75 @@ bool InstallOutputLooksSuccessful(const std::string& output) {
 bool LaunchOutputLooksSuccessful(const std::string& output) {
   return output.find("Status: ok") != std::string::npos &&
          output.find("Complete") != std::string::npos;
+}
+
+bool LaunchOutputMentionsComponent(const std::string& output,
+                                   const std::string& component) {
+  if (output.find("cmp=" + component) != std::string::npos ||
+      output.find(component) != std::string::npos) {
+    return true;
+  }
+
+  const std::string canonical = CanonicalizeAndroidComponent(component);
+  if (canonical != component &&
+      (output.find("cmp=" + canonical) != std::string::npos ||
+       output.find(canonical) != std::string::npos)) {
+    return true;
+  }
+
+  const auto slash = canonical.find('/');
+  if (slash == std::string::npos) {
+    return false;
+  }
+
+  const std::string package_name = canonical.substr(0, slash);
+  const std::string class_name = canonical.substr(slash + 1);
+  if (class_name.rfind(package_name + ".", 0) == 0) {
+    const std::string short_form =
+        package_name + "/." + class_name.substr(package_name.size() + 1);
+    return output.find("cmp=" + short_form) != std::string::npos ||
+           output.find(short_form) != std::string::npos;
+  }
+
+  return false;
+}
+
+bool LaunchOutputConfirmsComponent(const std::string& output,
+                                   const std::string& component) {
+  return LaunchOutputLooksSuccessful(output) &&
+         LaunchOutputMentionsComponent(output, component);
+}
+
+std::string RenderAdbActivityLaunchReport(
+    const AdbActivityLaunchReport& report) {
+  std::ostringstream output;
+  output << "ADB Serial: " << report.serial << '\n';
+  output << "Component: " << report.component << '\n';
+  output << "Launch OK: " << (report.launch_ok ? "yes" : "no") << '\n';
+  output << "Launch Output:\n" << report.output;
+  return output.str();
+}
+
+AdbActivityLaunchReport LaunchAdbActivityWithRunner(
+    const std::string& serial, const std::string& component,
+    const CommandRunner& runner) {
+  const std::string prefix = BuildAdbPrefix(serial);
+  const auto result =
+      runner(prefix + " shell am start -W -n " + QuoteForShell(component));
+
+  AdbActivityLaunchReport report;
+  report.serial = serial;
+  report.component = component;
+  report.output = result.output;
+  report.launch_ok =
+      result.exit_code == 0 &&
+      LaunchOutputConfirmsComponent(result.output, component);
+  return report;
+}
+
+AdbActivityLaunchReport LaunchAdbActivity(const std::string& serial,
+                                          const std::string& component) {
+  return LaunchAdbActivityWithRunner(serial, component, MakeShellRunner());
 }
 
 std::string RenderAdbImeStatusReport(const AdbImeStatus& status) {
@@ -330,6 +439,7 @@ AdbProvisioningReport ProvisionAdbImeWithRunner(
     const std::string& settings_component, const CommandRunner& runner,
     const std::string& apk_declared_package_name) {
   const std::string prefix = BuildAdbPrefix(serial);
+  const std::string shell_ime_id = ShortenAndroidComponent(ime_id);
 
   AdbProvisioningReport report;
   report.serial = serial;
@@ -356,12 +466,12 @@ AdbProvisioningReport ProvisionAdbImeWithRunner(
       InstallOutputLooksSuccessful(install_result.output);
 
   const auto enable_result =
-      runner(prefix + " shell ime enable " + QuoteForShell(ime_id));
+      runner(prefix + " shell ime enable " + QuoteForShell(shell_ime_id));
   report.enable_output = enable_result.output;
   report.enable_ok = enable_result.exit_code == 0;
 
   const auto set_result =
-      runner(prefix + " shell ime set " + QuoteForShell(ime_id));
+      runner(prefix + " shell ime set " + QuoteForShell(shell_ime_id));
   report.set_output = set_result.output;
   report.set_ok = set_result.exit_code == 0;
 

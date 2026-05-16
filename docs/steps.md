@@ -209,3 +209,128 @@
   Action: Staged the hardened provisioning slice, committed it on `main`, confirmed a clean working tree, created the missing local `v0.1.3` tag on the earlier APK-loader release commit, created the local `v0.1.4` tag on the current release commit, and confirmed that no Git remote is configured yet.
   Result: The repository now has the feature commit `a48a694`, local tags through `v0.1.4`, and a known remote-publish blocker that still needs an `origin` configuration before any push can succeed.
   Timestamp: 2026-05-16T08:53:42+05:30
+
+- Step: P5 host-integration kickoff
+  Action: Re-entered execution to move from runtime proof into the next phase, with the goal of giving Android apps a real Linux-side launch surface instead of only CLI/runtime control.
+  Result: Locked the next slice to host desktop launch artifacts plus a generic live activity-launch bridge, using the keyboard app as the first verified target.
+  Timestamp: 2026-05-16T09:02:21+05:30
+
+- Step: P5 red phase
+  Action: Added failing tests for generic activity launching and Linux desktop-launch artifact generation, then rebuilt the project.
+  Result: The build failed as expected because the new desktop-integration module does not exist yet.
+  Timestamp: 2026-05-16T09:06:14+05:30
+
+- Step: P5 first green-pass failure
+  Action: Implemented the first host-launch slice, rebuilt the project, and ran the full test suite.
+  Result: The build succeeded, but the tests failed because the new explicit-component launch bridge now requires launch output to mention the requested component and the existing fixture did not include that evidence.
+  Timestamp: 2026-05-16T09:11:34+05:30
+
+- Step: P5 live wrapper failure
+  Action: Verified the live `launch-activity` bridge, generated Linux desktop-launch artifacts for the keyboard APK, and executed the generated wrapper script.
+  Result: The raw bridge and artifact generation succeeded, but the wrapper-driven provisioning path failed because the generated IME component used a fully qualified form while the live runtime reported the same IME in short component form.
+  Timestamp: 2026-05-16T09:15:42+05:30
+
+- Step: P5 progress-model verification failure
+  Action: Rebuilt the project after moving P5 and host-integration progress forward, then reran the full verification chain.
+  Result: The live commands succeeded, but the unit test failed because floating-point drift in the weighted checkpoint calculation rendered `57/100` instead of the mathematically expected `58/100`.
+  Timestamp: 2026-05-16T09:23:14+05:30
+
+- Step: Reviewer thread-limit recovery
+  Action: Attempted to spawn a fresh reviewer for the P5 closeout, hit the thread-limit error again, evaluated recovery options, and switched to reusing an existing reviewer thread instead of retrying a fresh spawn.
+  Result: The review workflow stayed intact without repeating the same failing spawn pattern.
+  Timestamp: 2026-05-16T09:29:08+05:30
+
+- Step: P5 review findings intake
+  Action: Collected reviewer findings on desktopify self-containment, executable-path resolution, and IME launcher side-effect clarity.
+  Result: Confirmed two high-confidence false-success paths and one documentation/scope issue to fix before packaging the P5 slice.
+  Timestamp: 2026-05-16T09:33:41+05:30
+
+- Step: P5 host-launch hardening
+  Action: Switched desktopified IME launchers to the staged `base.apk`, resolved the running `compatctl` path from `/proc/self/exe`, made launcher readiness depend on those durable files, and clarified IME launcher side effects in the report and documentation.
+  Result: A PATH-invoked desktopify run now generates a self-contained launcher that points at the real binary and staged APK copy, and the generated wrapper still verifies `Ready for typing: yes`.
+  Timestamp: 2026-05-16T09:39:58+05:30
+
+- Step: P5 second review findings intake
+  Action: Sent the hardened host-launch diff through a second review pass and collected the remaining findings.
+  Result: Confirmed two more fail-closed fixes were still needed: `.desktop` Exec quoting for space-containing paths and package/component consistency for caller-selected launch targets.
+  Timestamp: 2026-05-16T09:43:27+05:30
+
+- Step: P5 final host-launch hardening
+  Action: Quoted `.desktop` Exec paths, rejected cross-package launch components, rebuilt the project, reran the tests, regenerated a PATH-invoked launcher under a space-containing desktop root, inspected the generated artifacts, and confirmed the cross-package path now fails closed.
+  Result: The host-launch artifact path now stays honest for space-containing launcher roots, and desktopify no longer generates ready artifacts for mismatched package/component pairs.
+  Timestamp: 2026-05-16T09:49:54+05:30
+
+- Step: P5 final review finding intake
+  Action: Collected the final remaining reviewer finding after the latest host-launch hardening pass.
+  Result: Confirmed one last readiness gap: same-package component typos still need manifest-level validation before desktopify can claim a launcher is ready.
+  Timestamp: 2026-05-16T09:56:18+05:30
+
+- Step: P5 manifest-validation first pass failure
+  Action: Added the manifest-backed component guard, rebuilt the project, reran the tests, and exercised both a valid component path and a typo path through `desktopify-apk`.
+  Result: The typo path failed correctly, but the valid keyboard settings component also failed because the new validator still compared equivalent short and fully qualified component forms too literally.
+  Timestamp: 2026-05-16T10:02:07+05:30
+
+- Step: P5 manifest-validation hardening
+  Action: Canonicalized manifest-backed component comparison, rebuilt the project, reran the tests, reran the valid desktopify path, reran the unknown-component path, and reran the generated wrapper.
+  Result: The valid keyboard settings launcher is green again, the same-package typo path now fails closed, and the generated wrapper still verifies `Ready for typing: yes`.
+  Timestamp: 2026-05-16T10:08:54+05:30
+
+- Step: P5 final type-scope finding intake
+  Action: Collected the last remaining reviewer finding after the manifest-backed validation pass.
+  Result: Confirmed that the launch-target validator still needs to narrow from “any declared component” to “declared activity-like component” so service declarations cannot be marked ready for activity launch.
+  Timestamp: 2026-05-16T10:12:37+05:30
+
+- Step: P5 launcher-inference decision
+  Action: Reviewed the first host-launch slice and compared two next-step options: keep explicit component-only desktopification with icon polish, or remove manual component selection and move desktop artifacts into host-discoverable locations.
+  Result: Chose automatic launcher inference plus real host install-path defaults because it reduces user friction more directly and is easier to verify end to end with the keyboard app.
+  Timestamp: 2026-05-16T09:27:31+05:30
+
+- Step: P5 auto-desktopify red phase
+  Action: Added failing tests for automatic launcher inference and split host install roots, then rebuilt the project.
+  Result: The build failed as expected because the desktop integration layer does not yet expose an auto-desktopification entry point.
+  Timestamp: 2026-05-16T09:29:41+05:30
+
+- Step: Linuxoid remote wiring attempt
+  Action: Tried to attach the repository to the user-provided GitHub remote `https://github.com/iamawanishmaurya/Linuxoid`.
+  Result: The attempt failed because the sandbox blocked writes to `.git/config`, so remote setup now needs an escalated Git command.
+  Timestamp: 2026-05-16T09:40:21+05:30
+
+- Step: Linuxoid wrapper verification environment failure
+  Action: Re-verified the new auto host-launch wrapper by executing the generated Linux-side launcher against `emulator-5590`.
+  Result: The wrapper logic reached the provisioning path, but the verification shell could not auto-start the `adb` daemon because the sandbox blocked the daemon listener bind.
+  Timestamp: 2026-05-16T09:44:59+05:30
+
+- Step: Linuxoid wrapper verification recovery decision
+  Action: Evaluated four recovery options after the same ADB-daemon startup failure appeared twice during Linux-side launcher verification.
+  Result: Chose to verify the generated launcher outside the sandbox because that matches the real host-launch environment and avoids a false negative caused by the verifier shell.
+  Timestamp: 2026-05-16T09:47:32+05:30
+
+- Step: Linuxoid host-launch target failure
+  Action: Re-ran the generated Linuxoid launcher outside the sandbox after clearing the ADB-daemon startup restriction.
+  Result: The launcher reached the real host environment, but direct verification still failed because the expected Android target `emulator-5590` is not currently attached to ADB.
+  Timestamp: 2026-05-16T09:48:32+05:30
+
+- Step: Waydroid runtime startup attempt
+  Action: Inspected local runtime options after the detached-emulator failure and tried to start the installed Waydroid session.
+  Result: Waydroid is present on the host, but the sandboxed shell cannot start its session because D-Bus access to `/run/user/1000/bus` is blocked.
+  Timestamp: 2026-05-16T09:50:25+05:30
+
+- Step: Waydroid container startup attempt
+  Action: Escalated to the host runtime path and tried to start the Waydroid container directly after the session-only path left the runtime stopped.
+  Result: The container startup still failed because the host denied access to `/var/lib/waydroid/waydroid.log`, which indicates a privileged service boundary outside Linuxoid itself.
+  Timestamp: 2026-05-16T09:53:11+05:30
+
+- Step: Waydroid IME mutation diagnosis
+  Action: Reached a live Waydroid-backed Linuxoid host-launch path, then captured the raw `ime enable`, `ime set`, and `ime list -a` responses when the keyboard app still failed to become the active input method.
+  Result: Confirmed a Linuxoid bug: the project sends the fully qualified IME identifier into mutating commands, while Waydroid accepts only the short `package/.Class` form it reports in the IME registry.
+  Timestamp: 2026-05-16T10:02:14+05:30
+
+- Step: Linuxoid auto desktopify closeout
+  Action: Implemented automatic launcher inference, split desktop-entry and launcher-script roots, rebuilt the project, reran the tests, and regenerated host launch artifacts through both the explicit and auto desktopify paths.
+  Result: Linuxoid can now generate ready Linux launchers from an APK without requiring a caller-supplied launcher component, and the project-facing identity is aligned to the Linuxoid name and GitHub remote.
+  Timestamp: 2026-05-16T10:06:05+05:30
+
+- Step: Linuxoid live Waydroid launcher success
+  Action: Connected Linuxoid to the live Waydroid runtime, regenerated the keyboard-app launcher against the active Waydroid serial, normalized the IME mutation path to the short component form, rebuilt the project, reran the tests, and executed the generated launcher from Linux.
+  Result: The Linuxoid-generated host launcher now returns `Ready for typing: yes` on a live Waydroid target, proving install, IME enablement, default selection, and settings launch from Linux for the golden app.
+  Timestamp: 2026-05-16T10:06:05+05:30

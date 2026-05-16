@@ -11,6 +11,8 @@ struct ManifestProfile {
   std::string package_name;
   std::string launcher_activity_name;
   std::string input_method_service_name;
+  std::vector<std::string> declared_components;
+  std::vector<std::string> declared_activity_components;
   bool has_launcher_activity = false;
   bool has_input_method_service = false;
   bool requests_record_audio = false;

@@ -108,6 +108,32 @@ bool Contains(std::string_view text, std::string_view token) {
   return text.find(token) != std::string_view::npos;
 }
 
+void RecordDeclaredComponent(ManifestProfile& profile,
+                             const std::string& component_name) {
+  if (component_name.empty()) {
+    return;
+  }
+  for (const auto& existing : profile.declared_components) {
+    if (existing == component_name) {
+      return;
+    }
+  }
+  profile.declared_components.push_back(component_name);
+}
+
+void RecordDeclaredActivityComponent(ManifestProfile& profile,
+                                     const std::string& component_name) {
+  if (component_name.empty()) {
+    return;
+  }
+  for (const auto& existing : profile.declared_activity_components) {
+    if (existing == component_name) {
+      return;
+    }
+  }
+  profile.declared_activity_components.push_back(component_name);
+}
+
 }  // namespace
 
 ManifestProfile ParseDecodedManifest(std::string_view xml) {
@@ -139,6 +165,8 @@ ManifestProfile ParseDecodedManifest(std::string_view xml) {
   for (const auto& activity : ExtractTagBlocks(xml, "activity")) {
     const std::string activity_name =
         ExtractAttribute(activity.attributes, "android:name");
+    RecordDeclaredComponent(profile, activity_name);
+    RecordDeclaredActivityComponent(profile, activity_name);
     const bool launcher =
         Contains(activity.body, "android.intent.action.MAIN") &&
         Contains(activity.body, "android.intent.category.LAUNCHER");
@@ -156,6 +184,10 @@ ManifestProfile ParseDecodedManifest(std::string_view xml) {
         ExtractAttribute(alias.attributes, "android:name");
     const std::string target_activity =
         ExtractAttribute(alias.attributes, "android:targetActivity");
+    RecordDeclaredComponent(profile, alias_name);
+    RecordDeclaredActivityComponent(profile,
+                                    !alias_name.empty() ? alias_name
+                                                        : target_activity);
     const bool launcher =
         Contains(alias.body, "android.intent.action.MAIN") &&
         Contains(alias.body, "android.intent.category.LAUNCHER");
@@ -172,6 +204,7 @@ ManifestProfile ParseDecodedManifest(std::string_view xml) {
   for (const auto& service : ExtractTagBlocks(xml, "service")) {
     const std::string service_name =
         ExtractAttribute(service.attributes, "android:name");
+    RecordDeclaredComponent(profile, service_name);
     const std::string service_permission =
         ExtractAttribute(service.attributes, "android:permission");
     const bool is_input_method_service =
@@ -192,6 +225,8 @@ ManifestProfile ParseDecodedManifest(std::string_view xml) {
   }
 
   for (const auto& receiver : ExtractTagBlocks(xml, "receiver")) {
+    RecordDeclaredComponent(profile,
+                            ExtractAttribute(receiver.attributes, "android:name"));
     if (Contains(receiver.body, "android.intent.action.BOOT_COMPLETED")) {
       profile.requests_boot_completed = true;
     }
@@ -201,6 +236,8 @@ ManifestProfile ParseDecodedManifest(std::string_view xml) {
   }
 
   for (const auto& provider : ExtractTagBlocks(xml, "provider")) {
+    RecordDeclaredComponent(profile,
+                            ExtractAttribute(provider.attributes, "android:name"));
     if (!ExtractAttribute(provider.attributes, "android:process").empty()) {
       profile.uses_secondary_processes = true;
     }

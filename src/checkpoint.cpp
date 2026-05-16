@@ -19,18 +19,18 @@ int ToPercent(CompletionState state) {
 
 int CalculateWeightedCheckpointProgress(std::span<const Checkpoint> checkpoints) {
   int weight_total = 0;
-  double weighted_total = 0.0;
+  int weighted_total = 0;
 
   for (const auto& checkpoint : checkpoints) {
     weight_total += checkpoint.weight;
-    weighted_total += checkpoint.weight * (ToPercent(checkpoint.state) / 100.0);
+    weighted_total += checkpoint.weight * ToPercent(checkpoint.state);
   }
 
   if (weight_total == 0) {
     return 0;
   }
 
-  return static_cast<int>(std::lround((weighted_total / weight_total) * 100.0));
+  return (weighted_total + (weight_total / 2)) / weight_total;
 }
 
 int CountCompletedCheckpoints(std::span<const Checkpoint> checkpoints) {

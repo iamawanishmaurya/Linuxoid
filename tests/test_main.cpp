@@ -1,11 +1,14 @@
 #include "wfa/apk_loader.hpp"
 #include "wfa/checkpoint.hpp"
+#include "wfa/desktop_integration.hpp"
 #include "wfa/manifest_assessment.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
 
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -23,8 +26,8 @@ void TestWeightedCheckpointProgress() {
   const auto checkpoints = wfa::BuildDefaultCheckpoints();
 
   Expect(checkpoints.size() == 5, "expected five runtime checkpoints");
-  Expect(wfa::CalculateWeightedCheckpointProgress(checkpoints) == 48,
-         "expected weighted checkpoint progress to round to 48");
+  Expect(wfa::CalculateWeightedCheckpointProgress(checkpoints) == 58,
+         "expected weighted checkpoint progress to round to 58");
   Expect(wfa::CountCompletedCheckpoints(checkpoints) == 2,
          "expected two completed runtime checkpoints");
 }
@@ -33,8 +36,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 71,
-         "expected average phase progress to equal 71");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 84,
+         "expected average phase progress to equal 84");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -81,9 +84,9 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("71/100") != std::string::npos,
+  Expect(report.find("84/100") != std::string::npos,
          "expected average phase progress in report");
-  Expect(report.find("48/100") != std::string::npos,
+  Expect(report.find("58/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
 }
 
@@ -316,6 +319,10 @@ void TestRuntimeBridgeOutputParsers() {
   Expect(wfa::OutputContainsImeId("org.futo.inputmethod.latin/.LatinIME\n",
                                   "org.futo.inputmethod.latin/.LatinIME"),
          "expected ime parser");
+  Expect(wfa::OutputContainsImeId(
+             "org.futo.inputmethod.latin/.LatinIME:\n",
+             "org.futo.inputmethod.latin/org.futo.inputmethod.latin.LatinIME"),
+         "expected equivalent ime component forms");
   Expect(!wfa::OutputContainsImeId(
              "org.futo.inputmethod.latin/.LatinIMEBeta:\n",
              "org.futo.inputmethod.latin/.LatinIME"),
@@ -349,6 +356,488 @@ void TestRuntimeBridgeOutputParsers() {
          "expected enabled ime in status report");
   Expect(report.find("Settings launch OK: not checked") != std::string::npos,
          "expected not-checked launch status");
+}
+
+void TestActivityLaunchReportRendering() {
+  const std::string component =
+      "org.futo.inputmethod.latin/.uix.settings.SettingsActivity";
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command.find(" shell am start -W -n ") != std::string::npos) {
+      return {0,
+              "Starting: Intent { cmp=org.futo.inputmethod.latin/.uix.settings.SettingsActivity }\nStatus: ok\nComplete\n"};
+    }
+    throw std::runtime_error("unexpected command in launch-activity test");
+  };
+
+  const auto report = wfa::LaunchAdbActivityWithRunner(
+      "emulator-5590", component, runner);
+  Expect(report.launch_ok, "expected successful activity launch");
+
+  const auto rendered = wfa::RenderAdbActivityLaunchReport(report);
+  Expect(rendered.find("Launch OK: yes") != std::string::npos,
+         "expected launch success line");
+}
+
+void TestDesktopLaunchArtifactsForImeApp() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "wfa desktop test";
+  fs::remove_all(root);
+  fs::create_directories(root);
+
+  const fs::path compatctl_path = root / "compatctl";
+  const fs::path apk_path = root / "keyboard.apk";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream apk_output(apk_path);
+    apk_output << "placeholder apk\n";
+  }
+
+  const wfa::DesktopLaunchSpec spec{
+      .app_name = "FUTO Keyboard",
+      .serial = "emulator-5590",
+      .apk_path = apk_path.string(),
+      .package_name = "org.futo.inputmethod.latin",
+      .launcher_component =
+          "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+      .ime_component = "org.futo.inputmethod.latin/.LatinIME",
+      .compatctl_path = compatctl_path.string(),
+      .desktop_root = root.string(),
+  };
+
+  const auto artifacts = wfa::CreateDesktopLaunchArtifacts(spec);
+
+  Expect(artifacts.uses_provision_mode,
+         "expected IME apps to use provision mode");
+  Expect(artifacts.host_launch_ready,
+         "expected desktop artifacts to be ready");
+  Expect(fs::exists(artifacts.desktop_file_path),
+         "expected desktop file to exist");
+  Expect(fs::exists(artifacts.script_path),
+         "expected launcher script to exist");
+
+  std::ifstream script_input(artifacts.script_path);
+  std::string script((std::istreambuf_iterator<char>(script_input)),
+                     std::istreambuf_iterator<char>());
+  Expect(script.find("provision-ime") != std::string::npos,
+         "expected script to use provision-ime");
+  Expect(script.find("org.futo.inputmethod.latin/.LatinIME") !=
+             std::string::npos,
+         "expected script to include ime component");
+
+  std::ifstream desktop_input(artifacts.desktop_file_path);
+  std::string desktop_entry((std::istreambuf_iterator<char>(desktop_input)),
+                            std::istreambuf_iterator<char>());
+  Expect(desktop_entry.find("Name=FUTO Keyboard (Android)") !=
+             std::string::npos,
+         "expected desktop entry name");
+  Expect(desktop_entry.find("Exec=\"" + artifacts.script_path + "\"") !=
+             std::string::npos,
+         "expected quoted desktop entry exec path");
+
+  fs::remove_all(root);
+}
+
+void TestDesktopLaunchArtifactsForLoadedApkUseStagedPath() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "wfa-desktop-loaded-test";
+  fs::remove_all(root);
+  fs::create_directories(root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1");
+
+  const fs::path compatctl_path = root / "compatctl";
+  const fs::path staged_apk_path =
+      root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1/base.apk";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream staged_apk_output(staged_apk_path);
+    staged_apk_output << "staged apk\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/original.apk",
+      .install_id = "vc1",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "keyboard.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 1,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "org.futo.inputmethod.latin",
+          .launcher_activity_name =
+              "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+          .input_method_service_name = "org.futo.inputmethod.latin/.LatinIME",
+          .declared_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity",
+               "org.futo.inputmethod.latin.LatinIME"},
+          .declared_activity_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity"},
+          .has_launcher_activity = true,
+          .has_input_method_service = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "org.futo.inputmethod.latin",
+          .app_profile = "input_method",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "POST_P6_IME",
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "org.futo.inputmethod.latin",
+           .install_id = "vc1",
+           .version_code = 1},
+          (root / "compat").string()),
+      .install_root =
+          (root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1")
+              .string(),
+  };
+
+  const auto artifacts = wfa::CreateDesktopLaunchArtifactsForLoadedApk(
+      report, "emulator-5590",
+      "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+      compatctl_path.string(), root.string());
+
+  std::ifstream script_input(artifacts.script_path);
+  std::string script((std::istreambuf_iterator<char>(script_input)),
+                     std::istreambuf_iterator<char>());
+  Expect(script.find(staged_apk_path.string()) != std::string::npos,
+         "expected staged apk path in generated script");
+  Expect(script.find("/tmp/original.apk") == std::string::npos,
+         "did not expect original apk path in generated script");
+
+  fs::remove_all(root);
+}
+
+void TestDesktopLaunchArtifactsRejectCrossPackageComponent() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "wfa-cross-package-test";
+  fs::remove_all(root);
+  fs::create_directories(root);
+
+  const fs::path compatctl_path = root / "compatctl";
+  const fs::path apk_path = root / "keyboard.apk";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream apk_output(apk_path);
+    apk_output << "placeholder apk\n";
+  }
+
+  bool threw = false;
+  try {
+    (void)wfa::CreateDesktopLaunchArtifacts(wfa::DesktopLaunchSpec{
+        .app_name = "FUTO Keyboard",
+        .serial = "emulator-5590",
+        .apk_path = apk_path.string(),
+        .package_name = "org.futo.inputmethod.latin",
+        .launcher_component = "com.example.other/.SettingsActivity",
+        .ime_component = "org.futo.inputmethod.latin/.LatinIME",
+        .compatctl_path = compatctl_path.string(),
+        .desktop_root = root.string(),
+    });
+  } catch (const std::invalid_argument&) {
+    threw = true;
+  }
+
+  Expect(threw, "expected cross-package launcher component rejection");
+  fs::remove_all(root);
+}
+
+void TestDesktopLaunchArtifactsRejectUnknownDeclaredComponent() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "wfa-unknown-component-test";
+  fs::remove_all(root);
+  fs::create_directories(root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1");
+
+  const fs::path compatctl_path = root / "compatctl";
+  const fs::path staged_apk_path =
+      root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1/base.apk";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream staged_apk_output(staged_apk_path);
+    staged_apk_output << "staged apk\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/original.apk",
+      .install_id = "vc1",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "keyboard.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 1,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "org.futo.inputmethod.latin",
+          .launcher_activity_name =
+              "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+          .input_method_service_name = "org.futo.inputmethod.latin/.LatinIME",
+          .declared_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity",
+               "org.futo.inputmethod.latin.LatinIME"},
+          .declared_activity_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity"},
+          .has_launcher_activity = true,
+          .has_input_method_service = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "org.futo.inputmethod.latin",
+          .app_profile = "input_method",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "POST_P6_IME",
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "org.futo.inputmethod.latin",
+           .install_id = "vc1",
+           .version_code = 1},
+          (root / "compat").string()),
+      .install_root =
+          (root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1")
+              .string(),
+  };
+
+  bool threw = false;
+  try {
+    (void)wfa::CreateDesktopLaunchArtifactsForLoadedApk(
+        report, "emulator-5590", "org.futo.inputmethod.latin/.DoesNotExist",
+        compatctl_path.string(), root.string());
+  } catch (const std::invalid_argument&) {
+    threw = true;
+  }
+
+  Expect(threw, "expected unknown same-package component rejection");
+  fs::remove_all(root);
+}
+
+void TestDesktopLaunchArtifactsRejectServiceLaunchTarget() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "wfa-service-target-test";
+  fs::remove_all(root);
+  fs::create_directories(root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1");
+
+  const fs::path compatctl_path = root / "compatctl";
+  const fs::path staged_apk_path =
+      root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1/base.apk";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream staged_apk_output(staged_apk_path);
+    staged_apk_output << "staged apk\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/original.apk",
+      .install_id = "vc1",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "keyboard.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 1,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "org.futo.inputmethod.latin",
+          .launcher_activity_name =
+              "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+          .input_method_service_name = "org.futo.inputmethod.latin/.LatinIME",
+          .declared_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity",
+               "org.futo.inputmethod.latin.SyncService"},
+          .declared_activity_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity"},
+          .has_launcher_activity = true,
+          .has_input_method_service = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "org.futo.inputmethod.latin",
+          .app_profile = "input_method",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "POST_P6_IME",
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "org.futo.inputmethod.latin",
+           .install_id = "vc1",
+           .version_code = 1},
+          (root / "compat").string()),
+      .install_root =
+          (root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1")
+              .string(),
+  };
+
+  bool threw = false;
+  try {
+    (void)wfa::CreateDesktopLaunchArtifactsForLoadedApk(
+        report, "emulator-5590", "org.futo.inputmethod.latin/.SyncService",
+        compatctl_path.string(), root.string());
+  } catch (const std::invalid_argument&) {
+    threw = true;
+  }
+
+  Expect(threw, "expected service launch target rejection");
+  fs::remove_all(root);
+}
+
+void TestAutoDesktopLaunchArtifactsInferLauncherAndSplitRoots() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "wfa-auto-desktop-test";
+  const fs::path desktop_root = root / "applications";
+  const fs::path launcher_root = root / "launchers";
+  fs::remove_all(root);
+  fs::create_directories(root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1");
+
+  const fs::path compatctl_path = root / "compatctl";
+  const fs::path staged_apk_path =
+      root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1/base.apk";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream staged_apk_output(staged_apk_path);
+    staged_apk_output << "staged apk\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/original.apk",
+      .install_id = "vc1",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "keyboard.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 1,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "org.futo.inputmethod.latin",
+          .launcher_activity_name =
+              "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+          .input_method_service_name = "org.futo.inputmethod.latin/.LatinIME",
+          .declared_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity",
+               "org.futo.inputmethod.latin.LatinIME"},
+          .declared_activity_components =
+              {"org.futo.inputmethod.latin.uix.settings.SettingsActivity"},
+          .has_launcher_activity = true,
+          .has_input_method_service = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "org.futo.inputmethod.latin",
+          .app_profile = "input_method",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "POST_P6_IME",
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "org.futo.inputmethod.latin",
+           .install_id = "vc1",
+           .version_code = 1},
+          (root / "compat").string()),
+      .install_root =
+          (root / "compat/users/0/packages/org.futo.inputmethod.latin/vc1")
+              .string(),
+  };
+
+  const auto artifacts = wfa::CreateDesktopLaunchArtifactsForLoadedApkAuto(
+      report, "emulator-5590", compatctl_path.string(), desktop_root.string(),
+      launcher_root.string());
+
+  Expect(artifacts.launcher_component ==
+             "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+         "expected inferred launcher activity");
+  Expect(fs::exists(artifacts.desktop_file_path),
+         "expected auto desktop file to exist");
+  Expect(fs::exists(artifacts.script_path),
+         "expected auto launcher script to exist");
+  Expect(artifacts.desktop_file_path.find(desktop_root.string()) == 0,
+         "expected desktop file under desktop-entry root");
+  Expect(artifacts.script_path.find(launcher_root.string()) == 0,
+         "expected launcher script under launcher root");
+
+  std::ifstream desktop_input(artifacts.desktop_file_path);
+  std::string desktop_entry((std::istreambuf_iterator<char>(desktop_input)),
+                            std::istreambuf_iterator<char>());
+  Expect(desktop_entry.find("Exec=\"" + artifacts.script_path + "\"") !=
+             std::string::npos,
+         "expected desktop entry to point at split-root launcher");
+
+  fs::remove_all(root);
+}
+
+void TestAutoDesktopLaunchArtifactsRejectHeadlessApp() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "wfa-headless-auto-test";
+  fs::remove_all(root);
+  fs::create_directories(root / "compat/users/0/packages/com.example.headless/vc1");
+
+  const fs::path compatctl_path = root / "compatctl";
+  const fs::path staged_apk_path =
+      root / "compat/users/0/packages/com.example.headless/vc1/base.apk";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream staged_apk_output(staged_apk_path);
+    staged_apk_output << "staged apk\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/headless.apk",
+      .install_id = "vc1",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "headless.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 1,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.headless",
+          .declared_components = {"com.example.headless.SyncService"},
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.headless",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6_EXPLICIT_COMPONENT",
+          .earliest_full_use_phase = "POST_P6_ADVANCED_RUNTIME",
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "com.example.headless",
+           .install_id = "vc1",
+           .version_code = 1},
+          (root / "compat").string()),
+      .install_root =
+          (root / "compat/users/0/packages/com.example.headless/vc1").string(),
+  };
+
+  bool threw = false;
+  try {
+    (void)wfa::CreateDesktopLaunchArtifactsForLoadedApkAuto(
+        report, "emulator-5590", compatctl_path.string(), root.string(),
+        (root / "launchers").string());
+  } catch (const std::invalid_argument&) {
+    threw = true;
+  }
+
+  Expect(threw, "expected headless apps to reject automatic launcher inference");
+  fs::remove_all(root);
 }
 
 void TestImeProvisioningSuccessPath() {
@@ -390,7 +879,7 @@ void TestImeProvisioningSuccessPath() {
 
   const auto report = wfa::ProvisionAdbImeWithRunner(
       "emulator-5590", "/tmp/keyboard.apk", "org.futo.inputmethod.latin",
-      "org.futo.inputmethod.latin/.LatinIME",
+      "org.futo.inputmethod.latin/org.futo.inputmethod.latin.LatinIME",
       "org.futo.inputmethod.latin/.uix.settings.SettingsActivity", runner);
 
   Expect(report.install_ok, "expected install success");
@@ -406,10 +895,77 @@ void TestImeProvisioningSuccessPath() {
   Expect(report.final_status.is_default_ime,
          "expected default ime after provisioning");
   Expect(commands.size() == 8, "expected eight adb commands in provisioning flow");
+  Expect(commands[1].find("org.futo.inputmethod.latin/.LatinIME") !=
+             std::string::npos,
+         "expected ime enable to use short component form");
+  Expect(commands[1].find(
+             "org.futo.inputmethod.latin/org.futo.inputmethod.latin.LatinIME") ==
+             std::string::npos,
+         "did not expect ime enable to use fully qualified component form");
+  Expect(commands[2].find("org.futo.inputmethod.latin/.LatinIME") !=
+             std::string::npos,
+         "expected ime set to use short component form");
 
   const auto rendered = wfa::RenderAdbProvisioningReport(report);
   Expect(rendered.find("Ready for typing: yes") != std::string::npos,
          "expected ready-for-typing line");
+}
+
+void TestImeProvisioningNormalizesFullyQualifiedImeIdForWaydroidStyleMutation() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command.find(" install -r ") != std::string::npos) {
+      return {0, "Success\n"};
+    }
+    if (command.find(" shell ime enable ") != std::string::npos) {
+      if (command.find("org.futo.inputmethod.latin/.LatinIME") !=
+          std::string::npos) {
+        return {0,
+                "Input method org.futo.inputmethod.latin/.LatinIME: now enabled\n"};
+      }
+      return {255,
+              "Unknown input method org.futo.inputmethod.latin/org.futo.inputmethod.latin.LatinIME cannot be enabled for user #0\n"};
+    }
+    if (command.find(" shell ime set ") != std::string::npos) {
+      if (command.find("org.futo.inputmethod.latin/.LatinIME") !=
+          std::string::npos) {
+        return {0, "Input method org.futo.inputmethod.latin/.LatinIME selected\n"};
+      }
+      return {255,
+              "Unknown input method org.futo.inputmethod.latin/org.futo.inputmethod.latin.LatinIME cannot be selected for user #0\n"};
+    }
+    if (command.find(" shell pm list packages") != std::string::npos) {
+      return {0, "package:org.futo.inputmethod.latin\n"};
+    }
+    if (command.find(" shell ime list -a") != std::string::npos) {
+      return {0, "org.futo.inputmethod.latin/.LatinIME:\n"};
+    }
+    if (command.find(" settings get secure default_input_method") !=
+        std::string::npos) {
+      return {0, "org.futo.inputmethod.latin/.LatinIME\n"};
+    }
+    if (command.find(" settings get secure enabled_input_methods") !=
+        std::string::npos) {
+      return {0, "org.futo.inputmethod.latin/.LatinIME\n"};
+    }
+    if (command.find(" shell am start -W -n ") != std::string::npos) {
+      return {0, "Status: ok\nComplete\n"};
+    }
+
+    throw std::runtime_error(
+        "unexpected command in waydroid-style provisioning path");
+  };
+
+  const auto report = wfa::ProvisionAdbImeWithRunner(
+      "192.168.240.112:5555", "/tmp/keyboard.apk",
+      "org.futo.inputmethod.latin",
+      "org.futo.inputmethod.latin/org.futo.inputmethod.latin.LatinIME",
+      "org.futo.inputmethod.latin/.uix.settings.SettingsActivity", runner);
+
+  Expect(report.install_ok, "expected install success in waydroid-style flow");
+  Expect(report.enable_ok, "expected enable success in waydroid-style flow");
+  Expect(report.set_ok, "expected set success in waydroid-style flow");
+  Expect(report.ready_for_typing,
+         "expected readiness success after IME normalization");
 }
 
 void TestImeProvisioningDetectsIncompleteActivation() {
@@ -559,7 +1115,16 @@ int main() {
     TestApktoolMetadataParsing();
     TestLoadedApkReportRendering();
     TestRuntimeBridgeOutputParsers();
+    TestActivityLaunchReportRendering();
+    TestDesktopLaunchArtifactsForImeApp();
+    TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();
+    TestDesktopLaunchArtifactsRejectCrossPackageComponent();
+    TestDesktopLaunchArtifactsRejectUnknownDeclaredComponent();
+    TestDesktopLaunchArtifactsRejectServiceLaunchTarget();
+    TestAutoDesktopLaunchArtifactsInferLauncherAndSplitRoots();
+    TestAutoDesktopLaunchArtifactsRejectHeadlessApp();
     TestImeProvisioningSuccessPath();
+    TestImeProvisioningNormalizesFullyQualifiedImeIdForWaydroidStyleMutation();
     TestImeProvisioningDetectsIncompleteActivation();
     TestImeProvisioningRejectsWrongApkPackagePairing();
     TestImeProvisioningKeepsPartialEvidenceOnReadbackFailure();
