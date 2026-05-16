@@ -709,3 +709,8 @@
   Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, reran `./build/compatctl foundation`, reran `./build/compatctl bootstrap-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, and reran the generated local stub script.
   Result: The build and tests are green, status still reports `95/100`, Linuxoid now emits a verified local bootstrap surface for Calculator, and the stub path proves local ownership while still failing honestly with exit code `2` until the execution engine lands.
   Timestamp: 2026-05-16T15:56:32+05:30
+
+- Step: Native bootstrap release preparation
+  Action: Staged the native bootstrap slice, confirmed the staged release set with `git status`, and created the feature commit `feat: add native bootstrap stub`.
+  Result: Linuxoid now has a clean release candidate commit for the native bootstrap slice, ready to be tagged and pushed as `v0.1.21`.
+  Timestamp: 2026-05-16T15:57:13+05:30
