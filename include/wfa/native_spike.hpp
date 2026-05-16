@@ -39,6 +39,18 @@ struct NativeLaunchPlan {
   bool plan_written = false;
 };
 
+struct NativeActivityBootstrap {
+  NativeLaunchPlan plan;
+  std::string compatctl_path;
+  std::string bootstrap_manifest_path;
+  std::string env_script_path;
+  std::string entrypoint_script_path;
+  std::string report_path;
+  std::string command_line;
+  bool bootstrap_ready = false;
+  bool execution_engine_ready = false;
+};
+
 NativeSpikeAssessment AssessNativeSpikeCandidate(
     const LoadedApkReport& report);
 NativeLaunchPlan BuildNativeLaunchPlan(const LoadedApkReport& report,
@@ -46,7 +58,14 @@ NativeLaunchPlan BuildNativeLaunchPlan(const LoadedApkReport& report,
 NativeLaunchPlan PlanNativeLaunchSpike(const std::string& apk_path,
                                        const std::string& compat_root,
                                        const std::string& native_root);
+NativeActivityBootstrap BuildNativeActivityBootstrap(
+    const NativeLaunchPlan& plan, const std::string& compatctl_path);
+NativeActivityBootstrap BootstrapNativeLaunchSpike(
+    const std::string& apk_path, const std::string& compat_root,
+    const std::string& native_root, const std::string& compatctl_path);
 std::string RenderNativeLaunchPlanReport(const NativeLaunchPlan& plan);
+std::string RenderNativeActivityBootstrapReport(
+    const NativeActivityBootstrap& bootstrap);
 
 }  // namespace wfa
 

@@ -27,6 +27,8 @@ void PrintUsage() {
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
+      << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
+      << "  compatctl native-execute-stub <package> <launcher-component> <bundle-apk> <sandbox-root> <dex-cache-root> <resource-root> <library-root> <bootstrap-manifest>\n"
       << "  compatctl discover-runtime <backend>\n"
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
       << "  compatctl inspect-package <backend> <serial-or-dash> <package>\n"
@@ -193,6 +195,56 @@ int main(int argc, char** argv) {
           wfa::PlanNativeLaunchSpike(argv[2], compat_root, native_root);
       std::cout << wfa::RenderNativeLaunchPlanReport(plan);
       return plan.plan_written ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "bootstrap-native-spike") {
+      if (argc < 3 || argc > 5) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string compat_root =
+          argc >= 4 ? argv[3] : DefaultNativeSpikeCompatRoot();
+      const std::string native_root =
+          argc == 5 ? argv[4] : DefaultNativeSpikeRoot();
+      const auto bootstrap = wfa::BootstrapNativeLaunchSpike(
+          argv[2], compat_root, native_root, compatctl_path);
+      std::cout << wfa::RenderNativeActivityBootstrapReport(bootstrap);
+      return bootstrap.bootstrap_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-execute-stub") {
+      if (argc != 10) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      namespace fs = std::filesystem;
+      const std::string package_name = argv[2];
+      const std::string launcher_component = argv[3];
+      const std::string bundle_apk = argv[4];
+      const std::string sandbox_root = argv[5];
+      const std::string dex_cache_root = argv[6];
+      const std::string resource_root = argv[7];
+      const std::string library_root = argv[8];
+      const std::string bootstrap_manifest = argv[9];
+
+      std::cout << "Package: " << package_name << '\n';
+      std::cout << "Launcher Component: " << launcher_component << '\n';
+      std::cout << "Bundle APK: " << bundle_apk << '\n';
+      std::cout << "Sandbox Root: " << sandbox_root << '\n';
+      std::cout << "DEX Cache Root: " << dex_cache_root << '\n';
+      std::cout << "Resource Root: " << resource_root << '\n';
+      std::cout << "Library Root: " << library_root << '\n';
+      std::cout << "Bootstrap Manifest: " << bootstrap_manifest << '\n';
+      std::cout << "Bundle Present: "
+                << (fs::exists(bundle_apk) ? "yes" : "no") << '\n';
+      std::cout << "Bootstrap Manifest Present: "
+                << (fs::exists(bootstrap_manifest) ? "yes" : "no") << '\n';
+      std::cout << "Execution Engine Ready: no\n";
+      std::cout
+          << "Result: Linuxoid owns the native bootstrap path here, but DEX/class execution is not implemented yet.\n";
+      return 2;
     }
 
     if (command == "discover-runtime") {

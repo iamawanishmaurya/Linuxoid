@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.21 - 2026-05-16
+
+- Add `bootstrap-native-spike` so Linuxoid can turn a native spike candidate into a Linuxoid-owned bootstrap manifest, env script, entrypoint stub, and bootstrap report.
+- Add `native-execute-stub` so the generated native bootstrap path can run locally on Linux and report its still-missing execution engine honestly instead of pretending app code already runs.
+- Refresh the README Mermaid architecture, dependency notes, verification commands, and next-step roadmap so GitHub now shows the native bootstrap surface and the next path toward real direct Linux execution.
+
 ## v0.1.20 - 2026-05-16
 
 - Add a README Mermaid maintenance rule so the current and target Linuxoid architecture graphs are updated in the same commit as meaningful architecture changes.

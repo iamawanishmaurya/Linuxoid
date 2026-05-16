@@ -57,6 +57,29 @@ void WriteTextFile(const fs::path& path, const std::string& contents) {
   output << contents;
 }
 
+std::string QuoteForShell(const std::string& value) {
+  std::string quoted = "'";
+  for (const char character : value) {
+    if (character == '\'') {
+      quoted += "'\\''";
+    } else {
+      quoted.push_back(character);
+    }
+  }
+  quoted.push_back('\'');
+  return quoted;
+}
+
+void WriteExecutableFile(const fs::path& path, const std::string& contents) {
+  WriteTextFile(path, contents);
+  fs::permissions(path,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+}
+
 std::string NormalizeAndroidComponent(const std::string& package_name,
                                       const std::string& component) {
   if (package_name.empty() || component.empty()) {
@@ -290,6 +313,120 @@ NativeLaunchPlan PlanNativeLaunchSpike(const std::string& apk_path,
   return BuildNativeLaunchPlan(report, native_root);
 }
 
+NativeActivityBootstrap BuildNativeActivityBootstrap(
+    const NativeLaunchPlan& plan, const std::string& compatctl_path) {
+  if (compatctl_path.empty()) {
+    throw std::invalid_argument("compatctl_path must not be empty");
+  }
+  if (!plan.plan_written) {
+    throw std::invalid_argument(
+        "native activity bootstrap requires a written native launch plan");
+  }
+  if (!plan.assessment.native_spike_candidate) {
+    throw std::invalid_argument(
+        "native activity bootstrap requires a native spike candidate");
+  }
+
+  NativeActivityBootstrap bootstrap;
+  bootstrap.plan = plan;
+  bootstrap.compatctl_path = compatctl_path;
+  bootstrap.bootstrap_manifest_path =
+      (fs::path(plan.bootstrap_root) / "activity-bootstrap.json").string();
+  bootstrap.env_script_path =
+      (fs::path(plan.bootstrap_root) / "native-env.sh").string();
+  bootstrap.entrypoint_script_path =
+      (fs::path(plan.bootstrap_root) / "launch-native-activity.sh").string();
+  bootstrap.report_path =
+      (fs::path(plan.bootstrap_root) / "bootstrap-report.txt").string();
+  bootstrap.execution_engine_ready = false;
+
+  std::ostringstream command;
+  command << QuoteForShell(compatctl_path) << " native-execute-stub "
+          << QuoteForShell(plan.assessment.package_name) << ' '
+          << QuoteForShell(plan.assessment.launcher_component) << ' '
+          << QuoteForShell(plan.bundle_apk_path) << ' '
+          << QuoteForShell(plan.sandbox_root) << ' '
+          << QuoteForShell(plan.dex_cache_root) << ' '
+          << QuoteForShell(plan.resource_root) << ' '
+          << QuoteForShell(plan.library_root) << ' '
+          << QuoteForShell(bootstrap.bootstrap_manifest_path);
+  bootstrap.command_line = command.str();
+
+  std::ostringstream manifest;
+  manifest << "{\n"
+           << "  \"package_name\": \""
+           << EscapeJson(plan.assessment.package_name) << "\",\n"
+           << "  \"install_id\": \"" << EscapeJson(plan.assessment.install_id)
+           << "\",\n"
+           << "  \"launcher_component\": \""
+           << EscapeJson(plan.assessment.launcher_component) << "\",\n"
+           << "  \"bundle_apk_path\": \"" << EscapeJson(plan.bundle_apk_path)
+           << "\",\n"
+           << "  \"sandbox_root\": \"" << EscapeJson(plan.sandbox_root)
+           << "\",\n"
+           << "  \"dex_cache_root\": \"" << EscapeJson(plan.dex_cache_root)
+           << "\",\n"
+           << "  \"resource_root\": \"" << EscapeJson(plan.resource_root)
+           << "\",\n"
+           << "  \"library_root\": \"" << EscapeJson(plan.library_root)
+           << "\",\n"
+           << "  \"bootstrap_spec_path\": \""
+           << EscapeJson(plan.bootstrap_spec_path) << "\",\n"
+           << "  \"command_line\": \""
+           << EscapeJson(bootstrap.command_line) << "\",\n"
+           << "  \"execution_engine_ready\": false\n"
+           << "}\n";
+  WriteTextFile(bootstrap.bootstrap_manifest_path, manifest.str());
+
+  std::ostringstream env_script;
+  env_script << "#!/bin/sh\n";
+  env_script << "export LINUXOID_PACKAGE_NAME="
+             << QuoteForShell(plan.assessment.package_name) << "\n";
+  env_script << "export LINUXOID_INSTALL_ID="
+             << QuoteForShell(plan.assessment.install_id) << "\n";
+  env_script << "export LINUXOID_LAUNCHER_COMPONENT="
+             << QuoteForShell(plan.assessment.launcher_component) << "\n";
+  env_script << "export LINUXOID_BUNDLE_APK="
+             << QuoteForShell(plan.bundle_apk_path) << "\n";
+  env_script << "export LINUXOID_SANDBOX_ROOT="
+             << QuoteForShell(plan.sandbox_root) << "\n";
+  env_script << "export LINUXOID_DEX_CACHE_ROOT="
+             << QuoteForShell(plan.dex_cache_root) << "\n";
+  env_script << "export LINUXOID_RESOURCE_ROOT="
+             << QuoteForShell(plan.resource_root) << "\n";
+  env_script << "export LINUXOID_LIBRARY_ROOT="
+             << QuoteForShell(plan.library_root) << "\n";
+  env_script << "export LINUXOID_BOOTSTRAP_MANIFEST="
+             << QuoteForShell(bootstrap.bootstrap_manifest_path) << "\n";
+  WriteExecutableFile(bootstrap.env_script_path, env_script.str());
+
+  std::ostringstream entrypoint;
+  entrypoint << "#!/bin/sh\n";
+  entrypoint << "set -eu\n";
+  entrypoint << ". " << QuoteForShell(bootstrap.env_script_path) << "\n";
+  entrypoint << "exec " << bootstrap.command_line << "\n";
+  WriteExecutableFile(bootstrap.entrypoint_script_path, entrypoint.str());
+
+  bootstrap.bootstrap_ready =
+      fs::exists(bootstrap.bootstrap_manifest_path) &&
+      fs::exists(bootstrap.env_script_path) &&
+      fs::exists(bootstrap.entrypoint_script_path) &&
+      fs::exists(plan.bundle_apk_path) && fs::exists(compatctl_path);
+
+  WriteTextFile(bootstrap.report_path,
+                RenderNativeActivityBootstrapReport(bootstrap));
+  bootstrap.bootstrap_ready =
+      bootstrap.bootstrap_ready && fs::exists(bootstrap.report_path);
+  return bootstrap;
+}
+
+NativeActivityBootstrap BootstrapNativeLaunchSpike(
+    const std::string& apk_path, const std::string& compat_root,
+    const std::string& native_root, const std::string& compatctl_path) {
+  const auto plan = PlanNativeLaunchSpike(apk_path, compat_root, native_root);
+  return BuildNativeActivityBootstrap(plan, compatctl_path);
+}
+
 std::string RenderNativeLaunchPlanReport(const NativeLaunchPlan& plan) {
   std::ostringstream output;
   output << "Package: " << plan.assessment.package_name << '\n';
@@ -324,6 +461,30 @@ std::string RenderNativeLaunchPlanReport(const NativeLaunchPlan& plan) {
     output << "  - " << step << '\n';
   }
 
+  return output.str();
+}
+
+std::string RenderNativeActivityBootstrapReport(
+    const NativeActivityBootstrap& bootstrap) {
+  std::ostringstream output;
+  output << "Package: " << bootstrap.plan.assessment.package_name << '\n';
+  output << "Install ID: " << bootstrap.plan.assessment.install_id << '\n';
+  output << "Launcher Component: "
+         << bootstrap.plan.assessment.launcher_component << '\n';
+  output << "Bootstrap Manifest: " << bootstrap.bootstrap_manifest_path
+         << '\n';
+  output << "Environment Script: " << bootstrap.env_script_path << '\n';
+  output << "Entrypoint Script: " << bootstrap.entrypoint_script_path << '\n';
+  output << "Command Line: " << bootstrap.command_line << '\n';
+  output << "Bootstrap Ready: "
+         << (bootstrap.bootstrap_ready ? "yes" : "no") << '\n';
+  output << "Execution Engine Ready: "
+         << (bootstrap.execution_engine_ready ? "yes" : "no") << '\n';
+  output << "Bootstrap Report: " << bootstrap.report_path << '\n';
+  output << "Next Steps:\n";
+  output << "  - Build the first Linuxoid-owned lifecycle and service shim.\n";
+  output << "  - Attach DEX/class loading to the native entrypoint.\n";
+  output << "  - Replace the stub with real Linux execution.\n";
   return output.str();
 }
 

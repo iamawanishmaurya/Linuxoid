@@ -674,3 +674,38 @@
   Action: Rebuilt Linuxoid with `cmake --build build`, re-read the README Mermaid section, and reviewed the resulting diff before release.
   Result: The new Mermaid maintenance rule is visible in the GitHub-facing README, and the documentation-only release leaves the build green.
   Timestamp: 2026-05-16T15:47:12+05:30
+
+- Step: Native bootstrap slice kickoff
+  Action: Re-read the README roadmap and compared two next-step options: a fake native runner versus a Linuxoid-owned bootstrap surface that prepares native launch artifacts honestly without claiming bytecode execution yet.
+  Result: Chose the Linuxoid-owned bootstrap path as the next implementation slice because it advances the real no-runtime architecture, keeps validation honest, and sets up the later lifecycle and DEX work cleanly.
+  Timestamp: 2026-05-16T15:48:41+05:30
+
+- Step: Native bootstrap test setup
+  Action: Added header declarations and unit coverage for a Linuxoid-owned native activity bootstrap that should emit a bootstrap manifest, environment script, entrypoint stub, and readiness report for simple native spike candidates.
+  Result: Linuxoid now has a red-bar target for the next native bootstrap slice instead of only a roadmap sentence.
+  Timestamp: 2026-05-16T15:50:48+05:30
+
+- Step: Native bootstrap red verification
+  Action: Ran `cmake --build build` after adding the new native bootstrap tests and declarations to capture the first missing-implementation failure before writing production code.
+  Result: The build failed at link time because `BuildNativeActivityBootstrap` and `RenderNativeActivityBootstrapReport` are declared but not implemented yet; the exact error is logged in `docs/problems/2026-05-16-native-bootstrap-surface-missing.md`.
+  Timestamp: 2026-05-16T15:51:15+05:30
+
+- Step: Native bootstrap build integration
+  Action: Implemented the native activity bootstrap surface, added the `bootstrap-native-spike` and `native-execute-stub` CLI commands, and rebuilt Linuxoid with `cmake --build build`.
+  Result: The native bootstrap slice now compiles cleanly into both `compatctl` and `wfa_tests`, so it is ready for test and live verification.
+  Timestamp: 2026-05-16T15:53:12+05:30
+
+- Step: Native bootstrap live verification
+  Action: Ran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl bootstrap-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, and executed the generated `launch-native-activity.sh` stub locally.
+  Result: The tests are green, Calculator now gets a Linuxoid-owned bootstrap manifest, env script, and entrypoint stub, and the local stub exits honestly with `Execution Engine Ready: no` and exit code `2` instead of pretending native bytecode execution already exists.
+  Timestamp: 2026-05-16T15:54:04+05:30
+
+- Step: Native bootstrap documentation refresh
+  Action: Updated `README.md`, `src/project_status.cpp`, `CHANGELOG.md`, `CMakeLists.txt`, and the solution log so GitHub, CLI status output, and release metadata all reflect the new native bootstrap slice and its next-step roadmap.
+  Result: The repository now shows the native bootstrap manifest and local entrypoint stub in the Mermaid architecture, describes the new commands and dependency notes, and points the next implementation step at the lifecycle and service shim behind the stub.
+  Timestamp: 2026-05-16T15:56:32+05:30
+
+- Step: Native bootstrap final verification
+  Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, reran `./build/compatctl foundation`, reran `./build/compatctl bootstrap-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, and reran the generated local stub script.
+  Result: The build and tests are green, status still reports `95/100`, Linuxoid now emits a verified local bootstrap surface for Calculator, and the stub path proves local ownership while still failing honestly with exit code `2` until the execution engine lands.
+  Timestamp: 2026-05-16T15:56:32+05:30
