@@ -13,6 +13,7 @@
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
+#include "wfa/runtime_health.hpp"
 #include "wfa/wayland_surface_fixture.hpp"
 #include "wfa/waydroid_integration.hpp"
 
@@ -63,6 +64,132 @@ std::filesystem::path ResolveBuildDirFromTestBinary() {
     throw std::runtime_error("unable to resolve test binary path");
   }
   return self.parent_path();
+}
+
+std::uint32_t ComputeCrc32(const std::string& contents);
+void WriteLe16(std::ofstream& output, std::uint16_t value);
+void WriteLe32(std::ofstream& output, std::uint32_t value);
+void WriteStoredZipFixture(
+    const std::filesystem::path& zip_path,
+    const std::vector<std::pair<std::string, std::string>>& entries);
+
+struct RuntimeHealthBootstrapFixture {
+  std::filesystem::path root;
+  wfa::NativeActivityBootstrap bootstrap;
+};
+
+RuntimeHealthBootstrapFixture CreateRuntimeHealthBootstrapFixture(
+    const std::string& fixture_name, bool include_classes_dex,
+    bool include_native_library) {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / fixture_name;
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path compat_root = root / "compat";
+  const fs::path native_root = root / "native";
+  const fs::path compatctl_path = root / "compatctl";
+
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  const auto layout = wfa::BuildPackageLayout(
+      {.package_name = "com.example.runtimehealth",
+       .install_id = "vc8-1.2.3",
+       .version_code = 8},
+      compat_root.string());
+  fs::create_directories(layout.host_package_root);
+  fs::create_directories(fs::path(layout.host_package_root) / "assets" /
+                         "config");
+  fs::create_directories(fs::path(layout.host_package_root) / "res" / "raw");
+  if (include_native_library) {
+    fs::create_directories(fs::path(layout.host_package_root) / "lib" /
+                           "x86_64");
+  }
+
+  std::vector<std::pair<std::string, std::string>> archive_entries = {
+      {"AndroidManifest.xml",
+       R"(<manifest package="com.example.runtimehealth">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.runtimehealth.App">
+    <activity android:name="com.example.runtimehealth.MainActivity"/>
+  </application>
+</manifest>
+)"},
+      {"assets/config/hello.txt", "hello runtime health\n"},
+      {"resources.arsc", "arsc"},
+  };
+  if (include_classes_dex) {
+    archive_entries.push_back({"classes.dex", "dex payload\n"});
+  }
+  WriteStoredZipFixture(fs::path(layout.host_package_root) / "base.apk",
+                        archive_entries);
+
+  {
+    std::ofstream manifest(fs::path(layout.host_package_root) /
+                           "AndroidManifest.xml");
+    manifest << R"(<manifest package="com.example.runtimehealth">
+  <application android:name="com.example.runtimehealth.App">
+    <activity android:name="com.example.runtimehealth.MainActivity"/>
+  </application>
+</manifest>
+)";
+  }
+  {
+    std::ofstream assessment(fs::path(layout.host_package_root) /
+                             "assessment.txt");
+    assessment << "runtime health fixture\n";
+  }
+  {
+    std::ofstream asset(fs::path(layout.host_package_root) / "assets" /
+                        "config" / "hello.txt");
+    asset << "hello runtime health\n";
+  }
+  {
+    std::ofstream res(fs::path(layout.host_package_root) / "res" / "raw" /
+                      "note.txt");
+    res << "note\n";
+  }
+  if (include_native_library) {
+    std::ofstream library(fs::path(layout.host_package_root) / "lib" / "x86_64" /
+                          "libcalculator.so");
+    library << "runtime health native lib\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = (fs::path(layout.host_package_root) / "base.apk").string(),
+      .install_id = "vc8-1.2.3",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "runtimehealth.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 8,
+          .version_name = "1.2.3",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.runtimehealth",
+          .launcher_activity_name = "com.example.runtimehealth.MainActivity",
+          .declared_components = {"com.example.runtimehealth.MainActivity"},
+          .declared_activity_components = {"com.example.runtimehealth.MainActivity"},
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.runtimehealth",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+          .has_launcher_activity = true,
+      },
+      .layout = layout,
+      .install_root = layout.host_package_root,
+  };
+
+  const auto plan = wfa::BuildNativeLaunchPlan(report, native_root.string());
+  return {.root = root,
+          .bootstrap =
+              wfa::BuildNativeActivityBootstrap(plan, compatctl_path.string())};
 }
 
 std::uint32_t ComputeCrc32(const std::string& contents) {
@@ -1763,6 +1890,176 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
          "expected binder transport log path in json");
 
   fs::remove_all(root);
+}
+
+void TestRuntimeHealthFixtureWritesStableArtifacts() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-test", true, true);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+
+  Expect(report.self_healing_ready,
+         "expected runtime health skeleton to be ready");
+  Expect(!report.overall_ready,
+         "expected dex/classloader gap to prevent false overall success");
+  Expect(report.overall_state == "recovery_needed",
+         "expected recovery-needed overall state");
+  Expect(report.records.size() == 6, "expected six subsystem health records");
+  Expect(fs::exists(report.health_json_path), "expected health json artifact");
+  Expect(fs::exists(report.trace_jsonl_path), "expected trace jsonl artifact");
+  Expect(fs::exists(report.replay_json_path), "expected replay json artifact");
+
+  const auto dex_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "dex_classloader_readiness";
+      });
+  Expect(dex_record != report.records.end(),
+         "expected dex/classloader health record");
+  Expect(dex_record->state == "pending",
+         "expected dex/classloader to remain pending");
+  Expect(!dex_record->ready, "expected pending dex/classloader readiness");
+  Expect(dex_record->selected_recovery_action == "prepare_art_sidecar_classpath",
+         "expected deterministic dex recovery action");
+
+  const auto native_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "native_loading";
+      });
+  Expect(native_record != report.records.end() && native_record->ready,
+         "expected native loading record to be ready with staged lib");
+
+  const auto rendered = wfa::RenderRuntimeHealthReportJson(report);
+  Expect(rendered.find("\"trace_jsonl_path\": \"" + report.trace_jsonl_path +
+                           "\"") != std::string::npos,
+         "expected trace path in runtime health json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeHealthFixtureSelectsMissingArtifactRecovery() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-missing-artifact", true, true);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "missing_artifact");
+
+  const auto apk_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "apk_staging";
+      });
+  Expect(apk_record != report.records.end(), "expected apk staging record");
+  Expect(apk_record->state == "missing",
+         "expected missing-artifact staging classification");
+  Expect(!apk_record->ready, "expected missing staging to stay unready");
+  Expect(apk_record->selected_recovery_action == "restage_apk_bundle",
+         "expected restage recovery action");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeHealthFixtureSelectsUnavailableDisplayRecovery() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-unavailable-display", true, true);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "unavailable_display");
+
+  const auto surface_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "surface_readiness";
+      });
+  Expect(surface_record != report.records.end(),
+         "expected surface readiness record");
+  Expect(surface_record->state == "degraded",
+         "expected unavailable display degradation");
+  Expect(surface_record->selected_recovery_action ==
+             "fallback_to_headless_surface_probe",
+         "expected fallback display recovery action");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-service-lookup", true, true);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "failed_service_lookup");
+
+  const auto binder_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "binder_service_readiness";
+      });
+  Expect(binder_record != report.records.end(),
+         "expected binder readiness record");
+  Expect(!binder_record->ready,
+         "expected forced service lookup failure to stay unready");
+  Expect(binder_record->selected_recovery_action ==
+             "rebuild_service_registry_and_retry_lookup",
+         "expected binder recovery action");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeHealthReplaySummarizesTrace() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-replay", true, true);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+  const auto replay = wfa::ReplayRuntimeHealthTrace(report.trace_jsonl_path);
+
+  Expect(replay.events_read >= 6, "expected runtime health trace events");
+  Expect(replay.subsystems_observed == 6,
+         "expected six subsystems in replay");
+  Expect(std::find(replay.failing_subsystems.begin(),
+                   replay.failing_subsystems.end(),
+                   "dex_classloader_readiness") !=
+             replay.failing_subsystems.end(),
+         "expected dex classloader replay failure");
+  Expect(std::find(replay.selected_actions.begin(),
+                   replay.selected_actions.end(),
+                   "prepare_art_sidecar_classpath") !=
+             replay.selected_actions.end(),
+         "expected dex recovery action in replay");
+
+  const auto rendered = wfa::RenderRuntimeHealthReplayJson(replay);
+  Expect(rendered.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected replay overall state in json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeHealthCommandWritesStableJson() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-command", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &exit_code);
+  Expect(exit_code == 0, "expected native-runtime-health-fixture success");
+  Expect(output.find("\"scenario_name\": \"baseline\"") != std::string::npos,
+         "expected scenario name in runtime health json");
+  Expect(output.find("\"self_healing_ready\": true") != std::string::npos,
+         "expected self-healing ready flag in runtime health json");
+
+  fs::remove_all(fixture.root);
 }
 
 void TestNativeLifecycleShimWritesSessionArtifacts() {
@@ -3870,6 +4167,12 @@ int main() {
     TestNativeInputQueueFixtureWritesStableArtifacts();
     TestNativeInputQueueFixtureReportsFallbackHonestly();
     TestBinderServiceManagerFixtureWritesStableArtifacts();
+    TestRuntimeHealthFixtureWritesStableArtifacts();
+    TestRuntimeHealthFixtureSelectsMissingArtifactRecovery();
+    TestRuntimeHealthFixtureSelectsUnavailableDisplayRecovery();
+    TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
+    TestRuntimeHealthReplaySummarizesTrace();
+    TestRuntimeHealthCommandWritesStableJson();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

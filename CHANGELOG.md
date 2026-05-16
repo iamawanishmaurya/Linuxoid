@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.39 - 2026-05-17
+
+- Add a self-healing runtime observability skeleton so Linuxoid now records structured health for APK staging, native loading, surface readiness, input readiness, Binder/service readiness, and DEX/classloader readiness through `compatctl native-runtime-health-fixture`.
+- Add deterministic recovery-action selection plus replayable `runtime-health-trace.jsonl` and `runtime-health-replay.json` artifacts so native-path failures can be diagnosed without rerunning the full UI flow.
+- Refresh the README Mermaid architecture, phased plan, status output, and solution trail so the repo now reports the self-healing Android Device skeleton honestly while still marking ART/DEX execution, full Android Binder semantics, compositor-backed rendering, and full IME/text composition as pending.
+
 ## v0.1.38 - 2026-05-17
 
 - Add a minimal APK/ZIP resource-readiness bridge so Linuxoid can inspect manifest metadata, list normalized assets, reject path traversal, and emit stable JSON through `compatctl inspect-apk-resources` without depending on Waydroid, ADB, or an emulator for the native direct-run path.

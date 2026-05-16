@@ -1,6 +1,6 @@
 # Linuxoid — Phased Build Plan
 
-> Current state: scaffold `96/100` · execution `78/100`  
+> Current state: scaffold `96/100` · execution `82/100`  
 > Goal: Android apps on Linux. No Waydroid. No ADB. No emulator.
 
 ---
@@ -183,7 +183,7 @@ Duration: 4-6 weeks
 Goal: run Kotlin and Java APKs, not only NDK-first apps.  
 Outcome: F-Droid or Settings launches natively.
 
-Current repo note as of `2026-05-17`: Linuxoid now has a verified pre-ART APK resource bridge that can inspect plain APK/ZIP manifest metadata, list normalized asset paths, reject traversal, and emit stable readiness JSON for harnesses. Full `resources.arsc` semantics, binary XML handling, and actual ART/DEX execution are still pending.
+Current repo note as of `2026-05-17`: Linuxoid now has a verified pre-ART APK resource bridge that can inspect plain APK/ZIP manifest metadata, list normalized asset paths, reject traversal, and emit stable readiness JSON for harnesses. Linuxoid also now has a verified self-healing runtime health skeleton that can classify staging, native-load, surface, input, Binder, and DEX/classloader readiness, select deterministic recovery actions, and emit replayable JSONL traces. Full `resources.arsc` semantics, binary XML handling, and actual ART/DEX execution are still pending.
 
 ### Tasks
 
@@ -232,7 +232,7 @@ Duration: 4-6 weeks
 Goal: fake Binder IPC so apps can query essential services without a real Android runtime.  
 Outcome: PackageManager, ActivityManager, and peer services become callable.
 
-Current repo note as of `2026-05-17`: Linuxoid now has a verified local Binder-shaped service-manager fixture that writes deterministic service registration, lookup, and transaction artifacts for `package_manager` and `activity_manager`, the lifecycle shim now points at those machine-readable artifacts instead of only a flat text registry, and the local fixture now includes a socketpair-backed transport log for lookup/transaction round trips. Full Parcel semantics and real cross-process Android Binder behavior are still pending.
+Current repo note as of `2026-05-17`: Linuxoid now has a verified local Binder-shaped service-manager fixture that writes deterministic service registration, lookup, and transaction artifacts for `package_manager` and `activity_manager`, the lifecycle shim now points at those machine-readable artifacts instead of only a flat text registry, the local fixture now includes a socketpair-backed transport log for lookup/transaction round trips, and the self-healing runtime skeleton now classifies service-lookup failures into a deterministic recovery plan. Full Parcel semantics and real cross-process Android Binder behavior are still pending.
 
 ### Tasks
 

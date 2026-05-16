@@ -1154,3 +1154,23 @@
   Action: Fixed the helper-definition gap, added the missing test include, manually verified `compatctl inspect-apk-resources` against a plain stored ZIP fixture, and refreshed the README Mermaid graph, phased plan, changelog, solution notes, and status output.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, `inspect-apk-resources` now returns stable manifest plus asset/resource JSON on a local fixture, Linuxoid reports `scaffold 96/100` and `execution 78/100`, and the repo truthfully marks ART/DEX, full Android resource-table semantics, compositor-backed rendering, and full Binder behavior as the next gaps.
   Timestamp: 2026-05-17T12:25:00+05:30
+
+- Step: Self-healing runtime skeleton implementation
+  Action: Added a Linuxoid-owned runtime health model, deterministic recovery action selection, JSONL trace/replay artifacts, new `native-runtime-health-fixture` and `native-runtime-health-replay` commands, and fixture-backed tests around health classification plus recovery planning.
+  Result: The self-healing runtime slice is implemented in code and ready for the full build/test gate, while real ART/DEX execution, full Android Binder semantics, and compositor-backed rendering remain intentionally outside this step.
+  Timestamp: 2026-05-17T13:03:00+05:30
+
+- Step: Self-healing runtime regex compile failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the runtime health and replay module.
+  Result: The build failed in `src/runtime_health.cpp` because the replay regexes used malformed raw-string delimiters, so the next change is a narrow syntax fix before rerunning the gate.
+  Timestamp: 2026-05-17T13:07:00+05:30
+
+- Step: Self-healing runtime test helper ordering failure capture
+  Action: Re-ran the full build/test gate after fixing the runtime replay regex syntax.
+  Result: The build advanced into `tests/test_main.cpp` and then failed because the new runtime bootstrap fixture helper called `WriteStoredZipFixture` before it was declared, so the next change is a small test declaration-order fix.
+  Timestamp: 2026-05-17T13:10:00+05:30
+
+- Step: Self-healing runtime gate verification and repo sync
+  Action: Added the runtime-health solution notes, refreshed the Mermaid architecture, phased plan, changelog, and status output, then reran the full build/test gate and manually exercised the runtime-health fixture plus replay commands.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, Linuxoid now emits deterministic runtime health plus recovery artifacts for APK staging, native loading, surface, input, Binder, and DEX/classloader readiness, and the repo truthfully reports `scaffold 96/100` and `execution 82/100` while ART/DEX execution, full Binder semantics, compositor-backed rendering, and full IME/text composition remain pending.
+  Timestamp: 2026-05-17T13:28:00+05:30

@@ -12,6 +12,7 @@
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
+#include "wfa/runtime_health.hpp"
 #include "wfa/wayland_surface_fixture.hpp"
 #include "wfa/waydroid_integration.hpp"
 
@@ -37,6 +38,8 @@ void PrintUsage() {
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl native-service-manager-fixture <bootstrap-manifest>\n"
+      << "  compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]\n"
+      << "  compatctl native-runtime-health-replay <trace-jsonl-path>\n"
       << "  compatctl native-lifecycle-shim <bootstrap-manifest>\n"
       << "  compatctl native-process-bootstrap <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <bootstrap-manifest>\n"
@@ -264,6 +267,29 @@ int main(int argc, char** argv) {
           lifecycle.binder_service_manager);
       return lifecycle.binder_service_manager.manager_ready ? EXIT_SUCCESS
                                                             : EXIT_FAILURE;
+    }
+
+    if (command == "native-runtime-health-fixture") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string scenario = argc == 4 ? argv[3] : "baseline";
+      const auto report = wfa::RunRuntimeHealthFixture(argv[2], scenario);
+      std::cout << wfa::RenderRuntimeHealthReportJson(report);
+      return report.self_healing_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-runtime-health-replay") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report = wfa::ReplayRuntimeHealthTrace(argv[2]);
+      std::cout << wfa::RenderRuntimeHealthReplayJson(report);
+      return EXIT_SUCCESS;
     }
 
     if (command == "native-lifecycle-shim") {

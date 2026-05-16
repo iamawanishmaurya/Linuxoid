@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.38
+  VERSION 0.1.39
   LANGUAGES CXX
 )
 
@@ -31,6 +31,7 @@ add_library(
   src/package_layout.cpp
   src/project_status.cpp
   src/runtime_bridge.cpp
+  src/runtime_health.cpp
   src/waydroid_integration.cpp
 )
 
