@@ -20,10 +20,13 @@ struct RuntimeHealthRecord {
 };
 
 struct RuntimeRecoveryAction {
+  std::string action_id;
   std::string subsystem_name;
   std::string action_name;
   std::string action_state;
   std::string action_reason;
+  std::string artifact_path;
+  std::string replay_trace_path;
 };
 
 struct RuntimeHealthReport {
@@ -35,6 +38,8 @@ struct RuntimeHealthReport {
   std::string health_json_path;
   std::string trace_jsonl_path;
   std::string replay_json_path;
+  std::string recovery_plan_path;
+  std::string recovery_actions_jsonl_path;
   std::string scenario_name;
   std::string overall_state;
   std::string exit_reason;
@@ -59,6 +64,7 @@ RuntimeHealthReport RunRuntimeHealthFixture(
     const std::string& bootstrap_manifest_path,
     const std::string& scenario_name = "baseline");
 std::string RenderRuntimeHealthReportJson(const RuntimeHealthReport& report);
+std::string RenderRuntimeRecoveryPlanJson(const RuntimeHealthReport& report);
 
 RuntimeHealthReplayReport ReplayRuntimeHealthTrace(
     const std::string& trace_jsonl_path);

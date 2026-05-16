@@ -17,6 +17,9 @@ What that means **today**:
   - unavailable display
   - failed service lookup
   - pending DEX/classloader bootstrap
+- Linuxoid can now materialize those actions into stable plan artifacts:
+  - `runtime-recovery-plan.json`
+  - `runtime-recovery-actions.jsonl`
 - Linuxoid now has a concrete DEX/classloader preparation seam behind that recovery story:
   - `native-art-classloader-fixture`
   - `art/classloader-plan.json`
@@ -59,6 +62,7 @@ Current commands:
 
 ```bash
 ./build/compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]
+./build/compatctl native-runtime-recovery-plan <bootstrap-manifest> [scenario]
 ./build/compatctl native-runtime-health-replay <trace-jsonl-path>
 ./build/compatctl native-art-classloader-fixture <bootstrap-manifest>
 ./build/compatctl native-art-class-resolution-fixture <bootstrap-manifest>

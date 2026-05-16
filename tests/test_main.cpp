@@ -2434,6 +2434,103 @@ void TestRuntimeHealthCommandWritesStableJson() {
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeRecoveryPlanWritesStableArtifacts() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-plan", true, true);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+
+  Expect(fs::exists(report.recovery_plan_path),
+         "expected runtime recovery plan artifact");
+  Expect(fs::exists(report.recovery_actions_jsonl_path),
+         "expected runtime recovery actions trace artifact");
+  Expect(!report.recovery_actions.empty(),
+         "expected at least one deterministic baseline recovery action");
+
+  const auto dex_action = std::find_if(
+      report.recovery_actions.begin(), report.recovery_actions.end(),
+      [](const wfa::RuntimeRecoveryAction& action) {
+        return action.subsystem_name == "dex_classloader_readiness";
+      });
+  Expect(dex_action != report.recovery_actions.end(),
+         "expected dex recovery action");
+  Expect(dex_action->action_name == "attempt_host_art_class_resolution",
+         "expected host ART recovery action");
+  Expect(!dex_action->artifact_path.empty(),
+         "expected deterministic recovery artifact path");
+  Expect(!dex_action->replay_trace_path.empty(),
+         "expected deterministic replay trace path");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeRecoveryPlanScenariosSelectDeterministicActions() {
+  namespace fs = std::filesystem;
+  auto missing_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-missing", true, true);
+  auto native_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-native", true, true);
+  auto display_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-display", true, true);
+  auto binder_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-binder", true, true);
+
+  const auto missing = wfa::RunRuntimeHealthFixture(
+      missing_fixture.bootstrap.bootstrap_manifest_path, "missing_artifact");
+  const auto native = wfa::RunRuntimeHealthFixture(
+      native_fixture.bootstrap.bootstrap_manifest_path, "failed_native_load");
+  const auto display = wfa::RunRuntimeHealthFixture(
+      display_fixture.bootstrap.bootstrap_manifest_path, "unavailable_display");
+  const auto binder = wfa::RunRuntimeHealthFixture(
+      binder_fixture.bootstrap.bootstrap_manifest_path, "failed_service_lookup");
+
+  auto has_action = [](const wfa::RuntimeHealthReport& report,
+                       const std::string& action_name) {
+    return std::find_if(report.recovery_actions.begin(),
+                        report.recovery_actions.end(),
+                        [&](const wfa::RuntimeRecoveryAction& action) {
+                          return action.action_name == action_name;
+                        }) != report.recovery_actions.end();
+  };
+
+  Expect(has_action(missing, "restage_apk_bundle"),
+         "expected restage action for missing artifact");
+  Expect(has_action(native, "retry_native_load_after_bundle_refresh"),
+         "expected native refresh action for failed native load");
+  Expect(has_action(display, "fallback_to_headless_surface_probe"),
+         "expected fallback action for unavailable display");
+  Expect(has_action(binder, "rebuild_service_registry_and_retry_lookup"),
+         "expected registry rebuild action for failed service lookup");
+
+  fs::remove_all(missing_fixture.root);
+  fs::remove_all(native_fixture.root);
+  fs::remove_all(display_fixture.root);
+  fs::remove_all(binder_fixture.root);
+}
+
+void TestRuntimeRecoveryPlanCommandWritesStableJson() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-command", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-recovery-plan " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &exit_code);
+  Expect(exit_code == 0, "expected native-runtime-recovery-plan success");
+  Expect(output.find("\"recovery_plan_path\": ") != std::string::npos,
+         "expected recovery plan path in recovery json");
+  Expect(output.find("\"action_name\": \"attempt_host_art_class_resolution\"") !=
+             std::string::npos,
+         "expected deterministic dex recovery action in json");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeLifecycleShimWritesSessionArtifacts() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "linuxoid-native-lifecycle-test";
@@ -4545,6 +4642,9 @@ int main() {
     TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
     TestRuntimeHealthReplaySummarizesTrace();
     TestRuntimeHealthCommandWritesStableJson();
+    TestRuntimeRecoveryPlanWritesStableArtifacts();
+    TestRuntimeRecoveryPlanScenariosSelectDeterministicActions();
+    TestRuntimeRecoveryPlanCommandWritesStableJson();
     TestNativeArtClassloaderFixtureWritesStableArtifacts();
     TestNativeArtClassloaderFixtureHandlesMissingDexHonestly();
     TestNativeArtClassloaderCommandWritesStableJson();

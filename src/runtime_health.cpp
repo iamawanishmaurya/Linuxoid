@@ -111,6 +111,11 @@ std::string BuildTraceEventJson(int sequence, const std::string& event_type,
   return output.str();
 }
 
+std::string BuildRecoveryActionId(const std::string& subsystem_name,
+                                  const std::string& action_name) {
+  return subsystem_name + "::" + action_name;
+}
+
 std::string BuildRecoveryActionName(const RuntimeHealthRecord& record) {
   if (record.subsystem_name == "apk_staging") {
     return "restage_apk_bundle";
@@ -394,6 +399,29 @@ std::string BuildHealthTraceJsonl(const RuntimeHealthReport& report) {
   return output.str();
 }
 
+std::string BuildRecoveryActionsJsonl(const RuntimeHealthReport& report) {
+  std::ostringstream output;
+  int sequence = 1;
+  for (const auto& action : report.recovery_actions) {
+    output << "{"
+           << "\"sequence\": " << sequence++ << ", "
+           << "\"action_id\": \"" << EscapeJson(action.action_id) << "\", "
+           << "\"subsystem_name\": \"" << EscapeJson(action.subsystem_name)
+           << "\", "
+           << "\"action_name\": \"" << EscapeJson(action.action_name) << "\", "
+           << "\"action_state\": \"" << EscapeJson(action.action_state)
+           << "\", "
+           << "\"action_reason\": \"" << EscapeJson(action.action_reason)
+           << "\", "
+           << "\"artifact_path\": \"" << EscapeJson(action.artifact_path)
+           << "\", "
+           << "\"replay_trace_path\": \""
+           << EscapeJson(action.replay_trace_path) << "\""
+           << "}\n";
+  }
+  return output.str();
+}
+
 }  // namespace
 
 RuntimeHealthReport RunRuntimeHealthFixture(
@@ -428,6 +456,11 @@ RuntimeHealthReport RunRuntimeHealthFixture(
       (fs::path(report.artifact_root) / "runtime-health-trace.jsonl").string();
   report.replay_json_path =
       (fs::path(report.artifact_root) / "runtime-health-replay.json").string();
+  report.recovery_plan_path =
+      (fs::path(report.artifact_root) / "runtime-recovery-plan.json").string();
+  report.recovery_actions_jsonl_path =
+      (fs::path(report.artifact_root) / "runtime-recovery-actions.jsonl")
+          .string();
   report.scenario_name = scenario_name;
   fs::create_directories(report.artifact_root);
 
@@ -449,10 +482,14 @@ RuntimeHealthReport RunRuntimeHealthFixture(
       report.overall_state = "recovery_needed";
       if (!record.selected_recovery_action.empty()) {
         report.recovery_actions.push_back(
-            {.subsystem_name = record.subsystem_name,
+            {.action_id = BuildRecoveryActionId(record.subsystem_name,
+                                                record.selected_recovery_action),
+             .subsystem_name = record.subsystem_name,
              .action_name = record.selected_recovery_action,
              .action_state = "planned",
-             .action_reason = record.recovery_reason});
+             .action_reason = record.recovery_reason,
+             .artifact_path = record.artifact_path,
+             .replay_trace_path = report.trace_jsonl_path});
       }
       if (record.subsystem_name == "dex_classloader_readiness" &&
           record.state == "pending") {
@@ -468,6 +505,10 @@ RuntimeHealthReport RunRuntimeHealthFixture(
   const std::string trace_jsonl = BuildHealthTraceJsonl(report);
   WriteTextFile(report.trace_jsonl_path, trace_jsonl);
   WriteTextFile(report.health_json_path, RenderRuntimeHealthReportJson(report));
+  WriteTextFile(report.recovery_actions_jsonl_path,
+                BuildRecoveryActionsJsonl(report));
+  WriteTextFile(report.recovery_plan_path,
+                RenderRuntimeRecoveryPlanJson(report));
 
   std::vector<std::string> trace_lines;
   std::istringstream trace_input(trace_jsonl);
@@ -497,6 +538,10 @@ std::string RenderRuntimeHealthReportJson(const RuntimeHealthReport& report) {
          << "\",\n"
          << "  \"replay_json_path\": \"" << EscapeJson(report.replay_json_path)
          << "\",\n"
+         << "  \"recovery_plan_path\": \""
+         << EscapeJson(report.recovery_plan_path) << "\",\n"
+         << "  \"recovery_actions_jsonl_path\": \""
+         << EscapeJson(report.recovery_actions_jsonl_path) << "\",\n"
          << "  \"scenario_name\": \"" << EscapeJson(report.scenario_name)
          << "\",\n"
          << "  \"self_healing_ready\": "
@@ -536,13 +581,63 @@ std::string RenderRuntimeHealthReportJson(const RuntimeHealthReport& report) {
       output << ",\n";
     }
     output << "    {"
+           << "\"action_id\": \"" << EscapeJson(action.action_id) << "\", "
            << "\"subsystem_name\": \"" << EscapeJson(action.subsystem_name)
            << "\", "
            << "\"action_name\": \"" << EscapeJson(action.action_name) << "\", "
            << "\"action_state\": \"" << EscapeJson(action.action_state)
            << "\", "
            << "\"action_reason\": \"" << EscapeJson(action.action_reason)
-           << "\""
+           << "\", "
+           << "\"artifact_path\": \"" << EscapeJson(action.artifact_path)
+           << "\", "
+           << "\"replay_trace_path\": \""
+           << EscapeJson(action.replay_trace_path) << "\""
+           << "}";
+  }
+  output << "\n  ]\n"
+         << "}\n";
+  return output.str();
+}
+
+std::string RenderRuntimeRecoveryPlanJson(const RuntimeHealthReport& report) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"package_name\": \"" << EscapeJson(report.package_name)
+         << "\",\n"
+         << "  \"install_id\": \"" << EscapeJson(report.install_id) << "\",\n"
+         << "  \"bootstrap_manifest_path\": \""
+         << EscapeJson(report.bootstrap_manifest_path) << "\",\n"
+         << "  \"artifact_root\": \"" << EscapeJson(report.artifact_root)
+         << "\",\n"
+         << "  \"recovery_plan_path\": \""
+         << EscapeJson(report.recovery_plan_path) << "\",\n"
+         << "  \"recovery_actions_jsonl_path\": \""
+         << EscapeJson(report.recovery_actions_jsonl_path) << "\",\n"
+         << "  \"scenario_name\": \"" << EscapeJson(report.scenario_name)
+         << "\",\n"
+         << "  \"overall_state\": \"" << EscapeJson(report.overall_state)
+         << "\",\n"
+         << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason) << "\",\n"
+         << "  \"recovery_actions\": [\n";
+  for (std::size_t index = 0; index < report.recovery_actions.size(); ++index) {
+    const auto& action = report.recovery_actions[index];
+    if (index != 0) {
+      output << ",\n";
+    }
+    output << "    {"
+           << "\"action_id\": \"" << EscapeJson(action.action_id) << "\", "
+           << "\"subsystem_name\": \"" << EscapeJson(action.subsystem_name)
+           << "\", "
+           << "\"action_name\": \"" << EscapeJson(action.action_name) << "\", "
+           << "\"action_state\": \"" << EscapeJson(action.action_state)
+           << "\", "
+           << "\"action_reason\": \"" << EscapeJson(action.action_reason)
+           << "\", "
+           << "\"artifact_path\": \"" << EscapeJson(action.artifact_path)
+           << "\", "
+           << "\"replay_trace_path\": \""
+           << EscapeJson(action.replay_trace_path) << "\""
            << "}";
   }
   output << "\n  ]\n"

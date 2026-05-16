@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.42 - 2026-05-17
+
+- Add a Linuxoid-owned `native-runtime-recovery-plan` seam so the self-healing runtime can now materialize deterministic recovery-plan and action-trace artifacts instead of only selecting bounded recovery actions inside `runtime-health.json`.
+- Extend runtime-health records so recovery actions now carry stable action IDs, subsystem-scoped artifact paths, and replay-trace links for missing artifact, failed native load, unavailable display, failed service lookup, and pending DEX/ART work.
+- Refresh the README Mermaid architecture, phased plan, self-healing runtime note, changelog, and status output so Linuxoid now reports the deterministic recovery-plan gate honestly while still marking real ART/DEX execution, full Android Binder behavior, compositor-backed rendering, and IME/text composition as pending.
+
 ## v0.1.41 - 2026-05-17
 
 - Add a Linuxoid-owned `native-art-class-resolution-fixture` seam so staged APK dex entries can now resolve manifest-target descriptors offline, write deterministic resolution-map plus trace artifacts, and report unresolved classes honestly without pretending ART has already executed them.

@@ -45,6 +45,7 @@ void PrintUsage() {
       << "  compatctl native-art-runtime-smoke <bootstrap-manifest>\n"
       << "  compatctl native-service-manager-fixture <bootstrap-manifest>\n"
       << "  compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]\n"
+      << "  compatctl native-runtime-recovery-plan <bootstrap-manifest> [scenario]\n"
       << "  compatctl native-runtime-health-replay <trace-jsonl-path>\n"
       << "  compatctl native-lifecycle-shim <bootstrap-manifest>\n"
       << "  compatctl native-process-bootstrap <bootstrap-manifest>\n"
@@ -317,6 +318,18 @@ int main(int argc, char** argv) {
       const std::string scenario = argc == 4 ? argv[3] : "baseline";
       const auto report = wfa::RunRuntimeHealthFixture(argv[2], scenario);
       std::cout << wfa::RenderRuntimeHealthReportJson(report);
+      return report.self_healing_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-runtime-recovery-plan") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string scenario = argc == 4 ? argv[3] : "baseline";
+      const auto report = wfa::RunRuntimeHealthFixture(argv[2], scenario);
+      std::cout << wfa::RenderRuntimeRecoveryPlanJson(report);
       return report.self_healing_ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 

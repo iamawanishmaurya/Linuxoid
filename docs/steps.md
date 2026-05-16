@@ -1220,3 +1220,15 @@
   Action: Rebuilt Linuxoid, reran the full test suite, verified `native-art-class-resolution-fixture`, verified `native-art-runtime-smoke`, and reran the self-healing runtime health fixture against the staged Calculator bootstrap.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, Calculator now resolves both manifest targets offline from `classes.dex`, runtime smoke carries that evidence forward, and runtime health now selects `attempt_host_art_class_resolution` as the next bounded recovery action.
   Timestamp: 2026-05-17T20:45:00+05:30
+- Step: Runtime recovery plan red test
+  Action: Added failing tests for deterministic recovery-plan artifacts and a recovery-plan CLI surface on top of the existing runtime-health skeleton.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` failed because `RuntimeHealthReport` and `RuntimeRecoveryAction` do not yet expose recovery-plan artifact paths or per-action artifact metadata.
+  Timestamp: 2026-05-17T20:57:00+05:30
+- Step: Runtime recovery baseline expectation correction
+  Action: Re-ran the new recovery-plan tests and checked the failing baseline assumption against the staged fixture behavior.
+  Result: The test expected two baseline recovery actions, but the fixture only needs one because native loading is already ready; only the DEX/ART action remains pending in baseline.
+  Timestamp: 2026-05-17T21:03:00+05:30
+- Step: Runtime recovery plan gate verification and repo sync
+  Action: Rebuilt Linuxoid, reran the full test suite, verified the new `native-runtime-recovery-plan` command for baseline and missing-artifact scenarios, and refreshed status/docs for the deterministic recovery-plan surface.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, `native-runtime-recovery-plan` now writes stable `runtime-recovery-plan.json` and `runtime-recovery-actions.jsonl` artifacts, and `compatctl status` now reports `Native Execution Readiness: 91/100`.
+  Timestamp: 2026-05-17T21:12:00+05:30
