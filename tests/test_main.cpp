@@ -3,6 +3,7 @@
 #include "wfa/checkpoint.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/manifest_assessment.hpp"
+#include "wfa/native_spike.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
@@ -38,8 +39,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 94,
-         "expected average phase progress to equal 94");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 95,
+         "expected average phase progress to equal 95");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -86,7 +87,7 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("94/100") != std::string::npos,
+  Expect(report.find("95/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
@@ -341,6 +342,234 @@ void TestLoadedApkReportRendering() {
          "expected loaded apk report package");
   Expect(rendered.find("Install ID: vc42-1.0.0") != std::string::npos,
          "expected loaded apk report install id");
+}
+
+void TestNativeSpikeAssessmentAcceptsSimpleForegroundApp() {
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/simple.apk",
+      .install_id = "vc7-1.0.0",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "simple.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 7,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.simple",
+          .launcher_activity_name = "com.example.simple.MainActivity",
+          .declared_components = {"com.example.simple.MainActivity"},
+          .declared_activity_components = {"com.example.simple.MainActivity"},
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.simple",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+          .has_launcher_activity = true,
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "com.example.simple",
+           .install_id = "vc7-1.0.0",
+           .version_code = 7},
+          "/tmp/linuxoid-native-test"),
+      .install_root = "/tmp/linuxoid-native-test/users/0/packages/com.example.simple/vc7-1.0.0",
+  };
+
+  const auto assessment = wfa::AssessNativeSpikeCandidate(report);
+  Expect(assessment.native_spike_candidate,
+         "expected simple foreground app to be a native spike candidate");
+  Expect(assessment.launcher_component == "com.example.simple/.MainActivity",
+         "expected normalized launcher component");
+  Expect(assessment.blockers.empty(),
+         "expected no blockers for simple foreground candidate");
+}
+
+void TestNativeSpikeAssessmentAcceptsResolvedLauncherWithMultipleActivities() {
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/multi.apk",
+      .install_id = "vc9-1.0.0",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "multi.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 9,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.multi",
+          .launcher_activity_name = "com.example.multi.MainActivity",
+          .declared_components = {"com.example.multi.MainActivity",
+                                  "com.example.multi.SettingsActivity"},
+          .declared_activity_components = {"com.example.multi.MainActivity",
+                                           "com.example.multi.SettingsActivity"},
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.multi",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+          .has_launcher_activity = true,
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "com.example.multi",
+           .install_id = "vc9-1.0.0",
+           .version_code = 9},
+          "/tmp/linuxoid-native-test"),
+      .install_root = "/tmp/linuxoid-native-test/users/0/packages/com.example.multi/vc9-1.0.0",
+  };
+
+  const auto assessment = wfa::AssessNativeSpikeCandidate(report);
+  Expect(assessment.native_spike_candidate,
+         "expected launcher-resolved multi-activity app to remain eligible");
+  Expect(assessment.launcher_component == "com.example.multi/.MainActivity",
+         "expected normalized launcher component for multi-activity app");
+  Expect(assessment.blockers.empty(),
+         "expected no blockers for multi-activity foreground candidate");
+}
+
+void TestNativeSpikeAssessmentRejectsAdvancedRuntimeApp() {
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/advanced.apk",
+      .install_id = "vc8-1.0.0",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "advanced.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 8,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.advanced",
+          .launcher_activity_name = "com.example.advanced.MainActivity",
+          .declared_components = {"com.example.advanced.MainActivity",
+                                  "com.example.advanced.SyncService"},
+          .declared_activity_components = {"com.example.advanced.MainActivity"},
+          .has_launcher_activity = true,
+          .has_background_service = true,
+          .uses_secondary_processes = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.advanced",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "POST_P6_ADVANCED_RUNTIME",
+          .has_launcher_activity = true,
+          .uses_secondary_processes = true,
+          .blockers = {"Secondary process declarations require multi-process runtime support."},
+      },
+      .layout = wfa::BuildPackageLayout(
+          {.package_name = "com.example.advanced",
+           .install_id = "vc8-1.0.0",
+           .version_code = 8},
+          "/tmp/linuxoid-native-test"),
+      .install_root = "/tmp/linuxoid-native-test/users/0/packages/com.example.advanced/vc8-1.0.0",
+  };
+
+  const auto assessment = wfa::AssessNativeSpikeCandidate(report);
+  Expect(!assessment.native_spike_candidate,
+         "expected advanced runtime app to be rejected for native spike");
+  Expect(!assessment.blockers.empty(),
+         "expected blockers for advanced runtime app");
+  bool saw_runtime_blocker = false;
+  for (const auto& blocker : assessment.blockers) {
+    if (blocker.find("advanced runtime") != std::string::npos ||
+        blocker.find("Secondary process") != std::string::npos) {
+      saw_runtime_blocker = true;
+    }
+  }
+  Expect(saw_runtime_blocker,
+         "expected advanced runtime blocker to be surfaced");
+}
+
+void TestNativeLaunchPlanBuildsBundleLayout() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-native-plan-test";
+  const fs::path compat_root = root / "compat";
+  const fs::path native_root = root / "native";
+  fs::remove_all(root);
+
+  const auto layout = wfa::BuildPackageLayout(
+      {.package_name = "com.example.simple",
+       .install_id = "vc7-1.0.0",
+       .version_code = 7},
+      compat_root.string());
+  fs::create_directories(layout.host_package_root);
+  {
+    std::ofstream base_apk(fs::path(layout.host_package_root) / "base.apk");
+    base_apk << "apk bytes\n";
+  }
+  {
+    std::ofstream manifest(fs::path(layout.host_package_root) /
+                           "AndroidManifest.xml");
+    manifest << "<manifest package=\"com.example.simple\"/>\n";
+  }
+  {
+    std::ofstream assessment(fs::path(layout.host_package_root) /
+                             "assessment.txt");
+    assessment << "simple candidate\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/simple.apk",
+      .install_id = "vc7-1.0.0",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "simple.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 7,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.simple",
+          .launcher_activity_name = "com.example.simple.MainActivity",
+          .declared_components = {"com.example.simple.MainActivity"},
+          .declared_activity_components = {"com.example.simple.MainActivity"},
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.simple",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+          .has_launcher_activity = true,
+      },
+      .layout = layout,
+      .install_root = layout.host_package_root,
+  };
+
+  const auto plan = wfa::BuildNativeLaunchPlan(report, native_root.string());
+  Expect(plan.plan_written, "expected native launch plan to be written");
+  Expect(plan.assessment.native_spike_candidate,
+         "expected native candidate to remain eligible");
+  Expect(fs::exists(plan.bundle_apk_path),
+         "expected bundled apk copy to exist");
+  Expect(fs::exists(plan.bootstrap_spec_path),
+         "expected native bootstrap spec to exist");
+  Expect(fs::exists(plan.manifest_copy_path),
+         "expected native manifest copy to exist");
+
+  std::ifstream spec_input(plan.bootstrap_spec_path);
+  std::string spec((std::istreambuf_iterator<char>(spec_input)),
+                   std::istreambuf_iterator<char>());
+  Expect(spec.find("\"native_spike_candidate\": true") != std::string::npos,
+         "expected candidate flag in native spec");
+  Expect(spec.find("com.example.simple/.MainActivity") != std::string::npos,
+         "expected launcher component in native spec");
+
+  const auto rendered = wfa::RenderNativeLaunchPlanReport(plan);
+  Expect(rendered.find("Native Spike Candidate: yes") != std::string::npos,
+         "expected native spike candidate line");
+  Expect(rendered.find("Bootstrap Spec: ") != std::string::npos,
+         "expected bootstrap spec line");
+
+  fs::remove_all(root);
 }
 
 void TestRuntimeBridgeOutputParsers() {
@@ -2040,6 +2269,10 @@ int main() {
     TestInvalidManifestRejected();
     TestApktoolMetadataParsing();
     TestLoadedApkReportRendering();
+    TestNativeSpikeAssessmentAcceptsSimpleForegroundApp();
+    TestNativeSpikeAssessmentAcceptsResolvedLauncherWithMultipleActivities();
+    TestNativeSpikeAssessmentRejectsAdvancedRuntimeApp();
+    TestNativeLaunchPlanBuildsBundleLayout();
     TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();
     TestDesktopLaunchArtifactsForImeApp();

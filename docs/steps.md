@@ -614,3 +614,48 @@
   Action: Rebuilt Linuxoid after the README and status refresh, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, `inspect-package attached-adb 192.168.240.112:5555 com.android.settings`, `preflight-runtime attached-adb 192.168.240.112:5555 com.android.settings`, `launch-package attached-adb com.android.settings 192.168.240.112:5555`, and `verify-package-matrix attached-adb /tmp/linuxoid-attached-matrix 192.168.240.112:5555 com.android.settings com.android.calculator2 org.fdroid.fdroid`.
   Result: The refreshed build and test suite are green, the status now reports `94/100`, attached-target package inspection resolves launcher and version metadata correctly, and the attached-target matrix still passes `3/3` without explicit component input.
   Timestamp: 2026-05-16T16:12:48+05:30
+
+- Step: Native spike slice kickoff
+  Action: Reviewed the refreshed README roadmap and selected the next implementation slice: a concrete native package-launch spike planner for one simple foreground app class.
+  Result: Locked the next coding pass to a real native bundle-plan path that can classify simple APKs, materialize a Linuxoid-owned native runtime layout, and set up the later lifecycle, DEX, and graphics work.
+  Timestamp: 2026-05-16T16:19:24+05:30
+
+- Step: Native spike test setup
+  Action: Added unit expectations for native spike candidate assessment, advanced-runtime rejection, and native bundle-plan materialization before implementing the new planner code.
+  Result: Linuxoid now has red-bar coverage for a concrete native package-launch planning slice instead of only a roadmap bullet.
+  Timestamp: 2026-05-16T16:24:31+05:30
+
+- Step: Native spike red verification
+  Action: Ran `cmake --build build` after adding the new native spike tests and captured the first expected missing-implementation failure before writing production code.
+  Result: The build failed because `wfa/native_spike.hpp` does not exist yet, which confirmed the tests are exercising a genuinely missing native-planner surface; the exact error was logged in `docs/problems/2026-05-16-native-spike-planner-header-missing.md`.
+  Timestamp: 2026-05-16T16:26:08+05:30
+
+- Step: Native spike build integration
+  Action: Added the native spike planner header, implementation, CLI entry point, and build wiring, then rebuilt Linuxoid with `cmake --build build`.
+  Result: The new native-planner code compiles cleanly into both `compatctl` and `wfa_tests`, so the slice is ready for test and CLI verification.
+  Timestamp: 2026-05-16T15:39:19+05:30
+
+- Step: Native spike test verification
+  Action: Ran `ctest --test-dir build --output-on-failure` after integrating the native spike planner and new coverage.
+  Result: The full test suite passed, including the new candidate-assessment and native bundle-plan checks for the native launch spike.
+  Timestamp: 2026-05-16T15:39:32+05:30
+
+- Step: Native spike live APK verification
+  Action: Verified the attached Android target with `adb devices`, inspected `com.android.calculator2`, pulled `/system/product/app/ExactCalculator/ExactCalculator.apk`, and ran `./build/compatctl plan-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`.
+  Result: Linuxoid materialized the native bundle-plan layout and bootstrap spec for Calculator, but the planner rejected it as a native spike candidate because it currently requires exactly one declared activity; the mismatch will be logged and corrected.
+  Timestamp: 2026-05-16T15:40:10+05:30
+
+- Step: Native spike live fix verification
+  Action: Relaxed the native spike gate to accept launcher-resolved multi-activity apps, added regression coverage, rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, and reran `./build/compatctl plan-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`.
+  Result: The test suite stayed green and Calculator is now classified as a native spike candidate with a fully written bootstrap spec and no blockers, which makes the first native execution slice concrete instead of theoretical.
+  Timestamp: 2026-05-16T15:41:51+05:30
+
+- Step: Native spike documentation refresh
+  Action: Updated `README.md`, `src/project_status.cpp`, `CHANGELOG.md`, `CMakeLists.txt`, and the linked problem/solution notes so GitHub, the CLI status output, and the versioned changelog all reflect the new native spike planner slice.
+  Result: The repository now shows the current Mermaid architecture with the native spike planner, reports `95/100` phase loading, and points the next roadmap step at a Linuxoid-owned native activity bootstrap.
+  Timestamp: 2026-05-16T15:44:23+05:30
+
+- Step: Native spike final verification
+  Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, reran `./build/compatctl foundation`, reran `./build/compatctl plan-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, and inspected the generated `/tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/native-plan.json`.
+  Result: The build and tests are green, the status now reports `95/100`, the foundation text includes the native planner slice, and the Calculator bootstrap spec proves Linuxoid can now materialize a no-runtime execution plan for a real simple app candidate.
+  Timestamp: 2026-05-16T15:44:23+05:30

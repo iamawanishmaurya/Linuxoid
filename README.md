@@ -18,6 +18,7 @@ flowchart TB
   subgraph Host["Linux Host"]
     Compatctl --> Status["Status and Checkpoint Engine"]
     Compatctl --> Loader["APK Loader and Manifest Assessor"]
+    Compatctl --> NativePlanner["Native Spike Planner"]
     Compatctl --> Preflight["Runtime Discovery and Preflight"]
     Compatctl --> Inspector["Package Metadata and Launcher Resolver"]
     Compatctl --> Desktopify["Desktop Artifact Generator"]
@@ -25,6 +26,8 @@ flowchart TB
     Compatctl --> ApkVerifier["APK-backed Host Verifier"]
     Compatctl --> Runtime["Runtime Bridge Layer"]
     Loader --> CompatRoot["Compat Root and Package Staging"]
+    NativePlanner --> CompatRoot
+    NativePlanner --> NativeBundle["Native Bundle Layout and Bootstrap Spec"]
     Preflight --> Runtime
     Inspector --> Runtime
     Desktopify --> DesktopFiles[".desktop Files and Launcher Scripts"]
@@ -56,6 +59,8 @@ flowchart TB
   Verifier --> DesktopFiles
   Verifier --> BackendContract
   InstalledApps --> ProvenApps["Calculator, Settings, and F-Droid"]
+  NativeBundle --> NativeStub
+  NativeBundle --> NativeProof["Calculator Native Spike Proof"]
 ```
 
 This diagram is the current working architecture and should stay in sync with the verified Linuxoid flow on GitHub.
@@ -105,6 +110,7 @@ This is the long-term goal state: run Android apps on Linux without depending on
 - A `desktopify-apk-auto` path that infers the launcher activity from the APK manifest and splits desktop-entry and launcher-script roots for cleaner host integration
 - A `verify-apk-host-launch-auto` path that stages a local APK, generates Linux launcher artifacts for it, and verifies the generated launcher path against a live Android runtime
 - A backend-neutral installed-package launcher-artifact seam that now emits `launch-package` wrappers instead of hard-coding Waydroid in the generated host script
+- A `plan-native-spike` path that stages a local APK into a compat root, assesses whether it fits the first native app slice, writes a Linuxoid-owned bundle layout, and emits a bootstrap spec for future no-runtime execution
 - A `launch-waydroid-package` compatibility alias that still launches an already installed app through the Waydroid adapter without requiring an APK reinstall or a hardcoded ADB serial
 - A `desktopify-waydroid-package` path that generates a Linux launcher and `.desktop` entry for an installed Waydroid app
 - A generic `verify-package` path that proves direct Linux launch for an installed package by checking runtime launch, generated host-launch artifacts, and generated launcher execution across backend contracts
@@ -122,6 +128,7 @@ This is the long-term goal state: run Android apps on Linux without depending on
 - A live attached-ADB proof that `launch-package attached-adb com.android.settings 192.168.240.112:5555` succeeds without an explicit component
 - A live attached-ADB proof that `verify-package` now passes for `com.android.settings` without an explicit component
 - A live attached-ADB proof that `verify-package-matrix` now passes `3/3` for `com.android.settings`, `com.android.calculator2`, and `org.fdroid.fdroid` without explicit components
+- A live local-APK proof that `plan-native-spike` now accepts Calculator as a native candidate, writes a native bundle plan, and emits a bootstrap spec with no blockers
 - A local test suite that verifies the first scaffold behavior
 
 ## Current External Dependencies
@@ -141,15 +148,16 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 ### Dependency Notes
 
 - The new `launch-package` core path is backend-neutral, but **native Linux execution is still not implemented**.
-- The current live proofs on GitHub are still **Waydroid-backed** for installed-package launch and matrix verification.
-- `attached-adb` is now part of the core contract with target-side launcher and metadata lookup, but it is still a transition backend, not the final goal.
+- The new `plan-native-spike` core path materializes Linuxoid-owned native launch assets, but **those assets are not executing Android bytecode on Linux yet**.
+- The current live proofs on GitHub are still **runtime-backed**: Waydroid handles the installed-package Linux launch path, and `attached-adb` remains a transition backend plus regression oracle.
+- `attached-adb` is now part of the core contract with target-side launcher and metadata lookup, but it is still not the final goal.
 
 ## What To Do Next
 
 These are the next five highest-value moves from the current state if the goal is to run Android apps directly on Linux without depending on Waydroid or any other external Android runtime:
 
-1. Implement a **native package launch spike** for one simple foreground app class.
-   The first target should be a small app with one activity, no background services, no IME dependence, and no secondary processes.
+1. Implement a **Linuxoid-owned activity bootstrap** for the native spike candidate.
+   The first target should be a Calculator-like foreground app with a resolved launcher, no background services, no IME dependence, and no secondary processes.
 
 2. Build the first **Linuxoid-owned lifecycle and service shim**.
    The smallest meaningful slice is activity launch, process state, and a minimal Binder/service bridge for that simple app shape.
@@ -158,7 +166,7 @@ These are the next five highest-value moves from the current state if the goal i
    This is where Linuxoid starts proving real no-runtime execution instead of better orchestration around an external Android target.
 
 4. Replace the attached-target launcher dependency with a **Linuxoid-owned process bootstrap** for the native app slice.
-   That turns the current attached-target contract into a regression oracle instead of a runtime dependency.
+   That turns the current attached-target contract into a regression oracle instead of a runtime dependency and gives the bundle spec a real execution owner.
 
 5. Expand the native proof to a **three-app compatibility set** while keeping Waydroid and attached-ADB matrix runs as regression baselines.
    The goal is one native simple app, one native settings-style app, and one honest failure classification for a more complex app.
@@ -190,6 +198,7 @@ ctest --test-dir build --output-on-failure
 ./build/compatctl verify-package-matrix waydroid /tmp/linuxoid-generic-matrix - com.android.calculator2 com.android.settings org.fdroid.fdroid
 ./build/compatctl verify-package attached-adb com.android.settings 192.168.240.112:5555 - /tmp/linuxoid-attached-applications /tmp/linuxoid-attached-launchers
 ./build/compatctl verify-package-matrix attached-adb /tmp/linuxoid-attached-matrix 192.168.240.112:5555 com.android.settings com.android.calculator2 org.fdroid.fdroid
+./build/compatctl plan-native-spike /path/to/app.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike
 ./build/compatctl verify-apk-host-launch-auto emulator-5590 /path/to/app.apk /tmp/linuxoid-apk-verify /tmp/linuxoid-apk-applications /tmp/linuxoid-apk-launchers
 ./build/compatctl launch-waydroid-package com.android.calculator2
 ./build/compatctl verify-waydroid-package com.android.calculator2 /tmp/linuxoid-applications /tmp/linuxoid-launchers
@@ -204,7 +213,7 @@ ctest --test-dir build --output-on-failure
 
 ## Current Progress
 
-- Phase loading: `94/100`
+- Phase loading: `95/100`
 - Runtime checkpoint gates: `70/100`
 
 These values are generated by the code, not written by hand.

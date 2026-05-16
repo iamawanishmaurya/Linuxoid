@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.19 - 2026-05-16
+
+- Add the first `plan-native-spike` flow so Linuxoid can stage a local APK, assess whether it fits the first native app slice, and write a Linuxoid-owned bundle layout plus bootstrap spec for future no-runtime execution.
+- Fix the native spike gate so launcher-resolved multi-activity apps are still eligible, which lets Calculator pass the first real native planner proof without weakening the service, IME, boot, or secondary-process blockers.
+- Refresh the README Mermaid architecture, dependency notes, verification examples, and roadmap so the GitHub repo now reflects the new native-spike slice and the next work toward true direct Linux execution.
+
 ## v0.1.18 - 2026-05-16
 
 - Add attached-target `inspect-package` metadata lookup so Linuxoid can read package visibility, resolved launcher, install path, and version information from a live `attached-adb` runtime.

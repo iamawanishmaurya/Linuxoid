@@ -2,6 +2,7 @@
 #include "wfa/apk_loader.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/manifest_assessment.hpp"
+#include "wfa/native_spike.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
@@ -25,6 +26,7 @@ void PrintUsage() {
       << "  compatctl foundation\n"
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
+      << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl discover-runtime <backend>\n"
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
       << "  compatctl inspect-package <backend> <serial-or-dash> <package>\n"
@@ -87,6 +89,14 @@ std::string DefaultLauncherRoot() {
 
 std::string DefaultVerificationCompatRoot() {
   return "/tmp/linuxoid-apk-verify";
+}
+
+std::string DefaultNativeSpikeCompatRoot() {
+  return "/tmp/linuxoid-native-compat";
+}
+
+std::string DefaultNativeSpikeRoot() {
+  return "/tmp/linuxoid-native-spike";
 }
 
 std::string OptionalArgOrEmpty(const char* value) {
@@ -167,6 +177,22 @@ int main(int argc, char** argv) {
       const auto report = wfa::LoadApkToCompatRoot(argv[2], compat_root);
       std::cout << wfa::RenderLoadedApkReport(report);
       return EXIT_SUCCESS;
+    }
+
+    if (command == "plan-native-spike") {
+      if (argc < 3 || argc > 5) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string compat_root =
+          argc >= 4 ? argv[3] : DefaultNativeSpikeCompatRoot();
+      const std::string native_root =
+          argc == 5 ? argv[4] : DefaultNativeSpikeRoot();
+      const auto plan =
+          wfa::PlanNativeLaunchSpike(argv[2], compat_root, native_root);
+      std::cout << wfa::RenderNativeLaunchPlanReport(plan);
+      return plan.plan_written ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "discover-runtime") {
