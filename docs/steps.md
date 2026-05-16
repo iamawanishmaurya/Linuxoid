@@ -334,3 +334,8 @@
   Action: Connected Linuxoid to the live Waydroid runtime, regenerated the keyboard-app launcher against the active Waydroid serial, normalized the IME mutation path to the short component form, rebuilt the project, reran the tests, and executed the generated launcher from Linux.
   Result: The Linuxoid-generated host launcher now returns `Ready for typing: yes` on a live Waydroid target, proving install, IME enablement, default selection, and settings launch from Linux for the golden app.
   Timestamp: 2026-05-16T10:06:05+05:30
+
+- Step: Linuxoid release and publish
+  Action: Rebuilt Linuxoid after the final progress-model refresh, reran the tests, confirmed the `84/100` status output, staged the changes, committed them as `feat: verify Linuxoid launcher on Waydroid`, tagged `v0.1.7`, pushed `main`, and pushed the tags to the Linuxoid GitHub remote.
+  Result: The repository is now published at the user-provided remote with the live Waydroid launcher milestone recorded in both Git history and release tags.
+  Timestamp: 2026-05-16T10:20:40+05:30
