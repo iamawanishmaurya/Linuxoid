@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.27 - 2026-05-16
+
+- Complete a 15-track Linuxoid research wave covering process bootstrap, DEX/ART, JNI, Binder/services, graphics/input, browser-control surfaces, and storage/sandboxing for the direct Android-on-Linux roadmap.
+- Add `docs/15-track-research-wave-2026-05-16.md` as the integrated architecture note with per-track findings, repo touchpoints, immediate implementation moves, and a cross-track execution order.
+- Refresh the README roadmap and reference links so GitHub now points at the completed research wave and reflects the current `execution 20/100` state honestly.
+
 ## v0.1.26 - 2026-05-16
 
 - Add the first real `P1` native-runner slice with a dedicated `native_execute_stub.cpp`, minimal JNI/asset/looper/signal-handler surfaces, `dlopen`-based library discovery, `ANativeActivity_onCreate` resolution, and a five-second watchdog gate.

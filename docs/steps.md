@@ -839,3 +839,98 @@
   Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, reran `./build/compatctl foundation`, regenerated the real Calculator bootstrap with `./build/compatctl bootstrap-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, and executed the generated `launch-native-activity.sh`.
   Result: The suite is green, the CLI now reports `execution 20/100`, the generated bootstrap entrypoint points at `native-execute-stub`, the current Calculator artifact fails honestly with `No native library candidates found`, and the fixture-backed native runner remains the live `P1` success proof.
   Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: 15-track research wave kickoff
+  Action: Mapped the user’s 15-item architecture gap list onto Linuxoid’s current phased plan, confirmed the repo is clean, reviewed the parallel-agent workflow, and prepared one focused subagent brief per gap area.
+  Result: Linuxoid is now set up for a structured 15-track research wave that covers process bootstrap, runtime internals, browser design, evaluation surfaces, and sandboxing without collapsing the work into one vague thread.
+  Timestamp: 2026-05-16T18:19:20+05:30
+
+- Step: 15-track research wave constraint handling
+  Action: Logged the current-wave pinned-role model failure and repeated thread-limit failure in `docs/problems/2026-05-16-15-track-research-wave-subagent-constraints.md`, evaluated five recovery options in `docs/solutions/15-track-research-wave-subagent-recovery.md`, and selected a supported-role wave-queue strategy before continuing.
+  Result: Linuxoid now has a documented recovery path for finishing the 15-task research assignment without repeating the same broken bulk-spawn pattern.
+  Timestamp: 2026-05-16T18:21:04+05:30
+
+- Step: 15-track research synthesis scaffold
+  Action: Added `docs/15-track-research-wave-2026-05-16.md` with a task-by-task status table and synthesis placeholder so the queued subagent results can be folded back into one repo-visible architecture note.
+  Result: Linuxoid now has a stable landing zone for the 15 research memos instead of leaving the wave scattered across agent outputs.
+  Timestamp: 2026-05-16T18:21:04+05:30
+
+- Step: 15-track research wave first memo integrated
+  Action: Integrated the JNI Plumbing memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing its recommended ABI-boundary and VM-bootstrapping path.
+  Result: Task `3` is now closed with repo-visible findings, and its slot can be recycled into the next queued research track.
+  Timestamp: 2026-05-16T18:21:04+05:30
+
+- Step: 15-track research wave second memo integrated
+  Action: Integrated the Process Bootstrap memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the recommended `native-process-bootstrap` design plus the required session-state contract.
+  Result: Task `1` is now closed with repo-visible findings, and its slot can be recycled into the next queued research track.
+  Timestamp: 2026-05-16T18:21:04+05:30
+
+- Step: 15-track research wave third memo integrated
+  Action: Integrated the ART Runtime Shim memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the host-ART-sidecar recommendation plus its validation checkpoints.
+  Result: Task `4` is now closed with repo-visible findings, and its slot can be recycled into the next queued research track.
+  Timestamp: 2026-05-16T18:21:04+05:30
+
+- Step: 15-track research wave fourth memo integrated
+  Action: Integrated the Binder IPC memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the userspace-Binder-over-Unix-sockets recommendation plus its first service contract.
+  Result: Task `5` is now closed with repo-visible findings, and its slot can be recycled into the next queued research track.
+  Timestamp: 2026-05-16T18:21:04+05:30
+
+- Step: 15-track research wave fifth memo integrated
+  Action: Integrated the DEX / Class Loader memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the `PathClassLoader` recommendation plus the first class-resolution gate.
+  Result: Task `2` is now closed with repo-visible findings, and its slot can be recycled into the next queued research track.
+  Timestamp: 2026-05-16T18:21:04+05:30
+
+- Step: 15-track research wave sixth memo integrated
+  Action: Integrated the Graphics / Window memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the Wayland-first window strategy plus the blank-window validation ladder.
+  Result: Task `6` is now closed with repo-visible findings, and its slot can be recycled into the next queued research track.
+  Timestamp: 2026-05-16T18:21:04+05:30
+
+- Step: 15-track research wave seventh memo integrated
+  Action: Integrated the Input / IME memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the focused-window, looper-backed input, clipboard, and text-broker ordering needed before direct IME hosting is realistic.
+  Result: Task `7` is now closed with repo-visible findings, and its slot can be recycled into the next queued research track.
+  Timestamp: 2026-05-16T18:30:42+05:30
+
+- Step: 15-track research wave eighth-through-tenth memos integrated
+  Action: Integrated the Resource Loader, Android Services Layer, and 3-App Native Matrix memos into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the recommended APK archive/resource stack, minimal service-layer shape, and fixed honesty-ladder matrix design.
+  Result: Tasks `8`, `9`, and `10` are now closed with repo-visible findings, and their slots can be recycled into the remaining browser and sandbox research tracks.
+  Timestamp: 2026-05-16T18:31:22+05:30
+
+- Step: 15-track research browser wave dispatched
+  Action: Reused the four active subagent slots to dispatch tasks `11` through `14`, covering the BrowserSession skeleton, self-healing recovery policy, DOM/JS bridge, and trace/replay/eval artifact contract.
+  Result: Linuxoid’s remaining browser-track research is now in flight without reopening the known bulk-spawn/thread-limit failure path.
+  Timestamp: 2026-05-16T18:32:19+05:30
+
+- Step: 15-track research twelfth memo integrated
+  Action: Integrated the Self-Healing Recovery Policy memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the numeric recovery-budget model plus the explicit permission/auth/payment hard-stop rules.
+  Result: Task `12` is now closed with repo-visible findings, and its slot can be recycled into the final remaining research track.
+  Timestamp: 2026-05-16T18:33:49+05:30
+
+- Step: 15-track research fifteenth task dispatched
+  Action: Reused the freed subagent slot from task `12` to dispatch task `15`, covering Linuxoid’s direct-execution storage and sandbox model.
+  Result: All `15` requested architecture research tracks are now either integrated or actively in flight.
+  Timestamp: 2026-05-16T18:34:15+05:30
+
+- Step: 15-track research thirteenth-and-fourteenth memos integrated
+  Action: Integrated the DOM / JS Bridge and Trace / Replay / Eval Artifact memos into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the anchor-first WebView bridge strategy plus the full machine-readable browser run contract.
+  Result: Tasks `13` and `14` are now closed with repo-visible findings, leaving only the BrowserSession skeleton and Storage / Sandbox memos still in flight.
+  Timestamp: 2026-05-16T18:34:33+05:30
+
+- Step: 15-track research eleventh memo integrated
+  Action: Integrated the BrowserSession Skeleton memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the one-session-per-run WebView host shape plus its minimal control surface.
+  Result: Task `11` is now closed with repo-visible findings, leaving only the Storage / Sandbox memo still in flight.
+  Timestamp: 2026-05-16T18:35:11+05:30
+
+- Step: 15-track research fifteenth memo integrated
+  Action: Integrated the Storage / Sandbox memo into `docs/15-track-research-wave-2026-05-16.md`, updating the status table and capturing the per-package mount-namespace model plus the first deterministic storage-manifest contract.
+  Result: Task `15` is now closed with repo-visible findings, so all `15` requested research tracks are now complete.
+  Timestamp: 2026-05-16T18:37:44+05:30
+
+- Step: 15-track research synthesis and README refresh
+  Action: Replaced the synthesis placeholder in `docs/15-track-research-wave-2026-05-16.md` with a cross-track execution order, refreshed `README.md` so it links to the completed research wave and uses the current `execution 20/100` state consistently, and bumped Linuxoid to `v0.1.27` in `CHANGELOG.md` and `CMakeLists.txt`.
+  Result: Linuxoid now has a complete, published architecture-research package that is internally consistent, versioned, and ready to drive the next implementation wave.
+  Timestamp: 2026-05-16T18:37:44+05:30
+
+- Step: 15-track research wave verification
+  Action: Reconfigured and rebuilt Linuxoid with `cmake -S . -B build` and `cmake --build build`, reran `ctest --test-dir build --output-on-failure`, and reran `./build/compatctl status` after the `v0.1.27` documentation and version updates.
+  Result: The build and tests remain green, and `compatctl status` still reports the expected current state: scaffold `95/100`, native execution `20/100`, and checkpoint gates `70/100`.
+  Timestamp: 2026-05-16T18:39:22+05:30

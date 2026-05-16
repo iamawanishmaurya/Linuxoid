@@ -101,13 +101,13 @@ This diagram is the current working architecture and should stay in sync with th
 
 Linuxoid now treats the phased execution plan as the repo-facing source of truth for the direct-runtime push:
 
-- Current state: scaffold `95/100`, execution `0/100`
 - Current state: scaffold `95/100`, execution `20/100`
 - Current focus: `P0 Freeze & Triage`
 - Critical path: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Browser work is frozen until `P5`
 
 Plan document: [docs/phased-build-plan.md](/home/astra/codex/wine-for-android/docs/phased-build-plan.md)
+Detailed gap research: [docs/15-track-research-wave-2026-05-16.md](/home/astra/codex/wine-for-android/docs/15-track-research-wave-2026-05-16.md)
 
 ## Target Architecture
 
@@ -254,20 +254,20 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 
 These are the next five highest-value moves from the current state if the goal is to run Android apps directly on Linux without depending on Waydroid or any other external Android runtime:
 
-1. Replace the fixture-only proof with a real native Android target that actually ships `lib/*.so` and exposes `ANativeActivity_onCreate`.
-   Linuxoid now has the first working runner slice, but the current staged Calculator APK is not that target.
+1. Add `native-process-bootstrap` and make lifecycle state truthful.
+   Linuxoid needs a real parent-side process bootstrap plus session files that record `pid`, `process_state`, `exit_code`, and failure reasons instead of prewriting `RESUMED`.
 
-2. Teach the native spike path to extract and stage shared libraries from APKs when they exist.
-   The runner is ready to scan `library_root`, but the staging path still needs to materialize real app libraries.
+2. Teach the native path to stage real app libraries and APK-backed assets/resources.
+   The runner can already scan `library_root`, but Linuxoid still needs native-lib extraction, an APK archive layer, and a real `AAssetManager`/resource loader path.
 
-3. Expand the crash-driven stub loop from the fixture into real JNI, asset, and looper call coverage.
-   The new signal handler and five-second gate are in place; the next work is to let actual app crashes reveal the next missing surface.
+3. Start the host-ART + `PathClassLoader` path and make JNI ownership real.
+   The next major boundary is resolving classes from staged `base.apk` through a Linuxoid-owned ART sidecar, not pretending Java apps can already run.
 
-4. Promote the `native` backend contract beyond “not implemented” so discovery, preflight, and launch can use the new local runner.
-   The CLI seam already exists, and now the first execution core does too.
+4. Replace placeholder services with loopback Binder-shaped `package_manager` and `activity_manager`.
+   Lifecycle truth, package resolution, and future resolver/storage work all need to move out of the current placeholder service registry.
 
-5. Move straight into Wayland and EGL once a true native Android target survives the runner.
-   The next meaningful proof after the real `P1` target is still a pixel on screen, not more abstract scaffolding.
+5. Land Wayland/EGL window proof, then focused input and clipboard.
+   The next user-visible proof after a real native process is still a pixel on screen, followed by focused keyboard/pointer routing and only later text/IME composition.
 
 For every step above, keep the interfaces **MCP- and harness-compatible**:
 - machine-readable outputs should remain stable
@@ -287,13 +287,14 @@ What stays frozen until then:
 
 Why the freeze exists:
 
-- Linuxoid still has `execution 0/100` on the native path.
+- Linuxoid still has only `execution 20/100` on the native path.
 - `P1 -> P2` is the real blocker for the whole project.
 - Browser work only makes sense after Linuxoid can already host Android UI and app code directly.
 
 The browser target architecture is still useful as a design reference and stays documented here:
 
 Detailed architecture note: [docs/browser-self-healing-architecture.md](/home/astra/codex/wine-for-android/docs/browser-self-healing-architecture.md)
+Detailed research wave: [docs/15-track-research-wave-2026-05-16.md](/home/astra/codex/wine-for-android/docs/15-track-research-wave-2026-05-16.md)
 
 ## Build
 
