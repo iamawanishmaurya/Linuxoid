@@ -450,6 +450,11 @@
   Result: Linuxoid's repo-facing architecture and progress model now reflect both the keyboard and F-Droid local-APK Linux launch proofs, with overall phase loading moving to `90/100`.
   Timestamp: 2026-05-16T13:13:22+05:30
 
+- Step: Linuxoid v0.1.13 release and publish
+  Action: Staged the launcher-inference repair slice, committed it as `fix: skip disabled launcher activities during inference`, tagged `v0.1.13`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
+  Result: Linuxoid now publishes the repaired local-APK launcher inference and the live F-Droid proof on GitHub as `v0.1.13`.
+  Timestamp: 2026-05-16T13:21:19+05:30
+
 - Step: Linuxoid v0.1.12 release and publish
   Action: Staged the APK-backed host verifier slice, committed it as `feat: add apk-backed host launch verifier`, tagged `v0.1.12`, pushed `main`, and pushed the new tag to the Linuxoid GitHub remote.
   Result: Linuxoid now publishes a verified local-APK Linux launch verifier on GitHub as `v0.1.12`.
