@@ -41,6 +41,8 @@ std::string RenderRuntimeBackendName(RuntimeBackendKind backend) {
 
 namespace {
 
+constexpr int kAdbDiscoveryTimeoutSeconds = 5;
+
 struct StatusQueryAttempt {
   bool ok = false;
   std::string error;
@@ -58,6 +60,10 @@ std::string QuoteForShell(const std::string& value) {
   }
   quoted.push_back('\'');
   return quoted;
+}
+
+std::string WrapWithTimeout(const std::string& command, int seconds) {
+  return "timeout " + std::to_string(seconds) + "s " + command;
 }
 
 CommandResult RunCommandCaptureAllowFailure(const std::string& command) {
@@ -114,6 +120,28 @@ std::vector<std::string> SplitLines(const std::string& output) {
     lines.push_back(line);
   }
   return lines;
+}
+
+std::string TrimWhitespace(std::string value) {
+  while (!value.empty() &&
+         (value.front() == ' ' || value.front() == '\t' ||
+          value.front() == '\n' || value.front() == '\r')) {
+    value.erase(value.begin());
+  }
+  while (!value.empty() &&
+         (value.back() == ' ' || value.back() == '\t' ||
+          value.back() == '\n' || value.back() == '\r')) {
+    value.pop_back();
+  }
+  return value;
+}
+
+RuntimeTarget ParseAdbDeviceLine(const std::string& line) {
+  RuntimeTarget target;
+  std::istringstream input(line);
+  input >> target.serial >> target.state;
+  target.online = target.state == "device";
+  return target;
 }
 
 std::string CanonicalizeAndroidComponent(const std::string& component) {
@@ -180,6 +208,19 @@ int CalculateProvisioningProgress(const AdbProvisioningReport& report) {
 
   return static_cast<int>(
       std::lround((static_cast<double>(satisfied) / total) * 100.0));
+}
+
+std::string ReadAdbPropWithRunner(const std::string& serial,
+                                  const std::string& prop_name,
+                                  const CommandRunner& runner) {
+  const auto result =
+      runner(WrapWithTimeout(BuildAdbPrefix(serial) + " shell getprop " +
+                                 QuoteForShell(prop_name),
+                             kAdbDiscoveryTimeoutSeconds));
+  if (result.exit_code != 0) {
+    return "";
+  }
+  return TrimWhitespace(result.output);
 }
 
 StatusQueryAttempt TryQueryAdbImeStatusWithRunner(
@@ -368,6 +409,240 @@ std::string RenderInstalledAppLaunchReport(
   output << "Launch OK: " << (report.launch_ok ? "yes" : "no") << '\n';
   output << "Launch Output:\n" << report.output;
   return output.str();
+}
+
+std::string RenderRuntimeDiscoveryReport(
+    const RuntimeDiscoveryReport& report) {
+  std::ostringstream output;
+  output << "Runtime Backend: " << report.backend_name << '\n';
+  output << "Backend Available: "
+         << (report.backend_available ? "yes" : "no") << '\n';
+  output << "Targets Found: " << report.targets.size() << '\n';
+  for (const auto& target : report.targets) {
+    output << "  - Serial: " << target.serial << '\n';
+    output << "    State: " << target.state << '\n';
+    output << "    Online: " << (target.online ? "yes" : "no") << '\n';
+    output << "    Model: " << target.model << '\n';
+    output << "    Android: " << target.android_release << '\n';
+    output << "    ABI: " << target.abi << '\n';
+  }
+  output << "Backend Check Output:\n" << report.backend_check_output;
+  return output.str();
+}
+
+std::string RenderRuntimePreflightReport(
+    const RuntimePreflightReport& report) {
+  std::ostringstream output;
+  output << "Runtime Backend: " << report.backend_name << '\n';
+  output << "ADB Serial: " << report.serial << '\n';
+  output << "Package: " << report.package_name << '\n';
+  output << "Component: " << report.component << '\n';
+  output << "Backend Available: "
+         << (report.backend_available ? "yes" : "no") << '\n';
+  output << "Target Discovered: "
+         << (report.target_discovered ? "yes" : "no") << '\n';
+  output << "Target Selected: "
+         << (report.target_selected ? "yes" : "no") << '\n';
+  output << "Target Online: " << (report.target_online ? "yes" : "no")
+         << '\n';
+  output << "Package Visible: " << (report.package_visible ? "yes" : "no")
+         << '\n';
+  output << "Component Ready: " << (report.component_ready ? "yes" : "no")
+         << '\n';
+  output << "Ready For Launch: " << (report.ready_for_launch ? "yes" : "no")
+         << '\n';
+  output << "Model: " << report.model << '\n';
+  output << "Android: " << report.android_release << '\n';
+  output << "ABI: " << report.abi << '\n';
+  output << "Notes: " << report.notes << '\n';
+  output << "Backend Check Output:\n" << report.backend_check_output;
+  output << "Discovery Output:\n" << report.discovery_output;
+  output << "Package Check Output:\n" << report.package_check_output;
+  return output.str();
+}
+
+RuntimeDiscoveryReport DiscoverRuntimeTargetsWithRunner(
+    RuntimeBackendKind backend, const CommandRunner& runner) {
+  RuntimeDiscoveryReport report;
+  report.backend_name = RenderRuntimeBackendName(backend);
+
+  switch (backend) {
+    case RuntimeBackendKind::kAttachedAdb: {
+      const auto result =
+          runner(WrapWithTimeout("adb devices", kAdbDiscoveryTimeoutSeconds));
+      report.backend_check_output = result.output;
+      report.backend_available = result.exit_code == 0;
+      if (!report.backend_available) {
+        if (result.exit_code == 124) {
+          report.backend_check_output +=
+              "\nTimed out while querying attached ADB targets.\n";
+        }
+        return report;
+      }
+
+      for (const auto& line : SplitLines(result.output)) {
+        const std::string trimmed = TrimWhitespace(line);
+        if (trimmed.empty() || trimmed == "List of devices attached") {
+          continue;
+        }
+
+        RuntimeTarget target = ParseAdbDeviceLine(trimmed);
+        if (target.serial.empty()) {
+          continue;
+        }
+        target.backend_name = report.backend_name;
+        if (target.online) {
+          target.model =
+              ReadAdbPropWithRunner(target.serial, "ro.product.model", runner);
+          target.android_release = ReadAdbPropWithRunner(
+              target.serial, "ro.build.version.release", runner);
+          target.abi =
+              ReadAdbPropWithRunner(target.serial, "ro.product.cpu.abi", runner);
+        }
+        report.targets.push_back(target);
+      }
+      return report;
+    }
+
+    case RuntimeBackendKind::kWaydroid: {
+      const auto result = runner("waydroid status");
+      report.backend_check_output = result.output;
+      report.backend_available = result.exit_code == 0;
+      if (report.backend_available) {
+        RuntimeTarget target;
+        target.backend_name = report.backend_name;
+        target.serial = "waydroid";
+        target.state = result.output.find("RUNNING") != std::string::npos
+                           ? "running"
+                           : "stopped";
+        target.online = target.state == "running";
+        report.targets.push_back(target);
+      }
+      return report;
+    }
+
+    case RuntimeBackendKind::kNative:
+      report.backend_check_output = "native backend is not implemented yet\n";
+      report.backend_available = false;
+      return report;
+  }
+
+  throw std::invalid_argument("unsupported runtime backend enum");
+}
+
+RuntimeDiscoveryReport DiscoverRuntimeTargets(RuntimeBackendKind backend) {
+  return DiscoverRuntimeTargetsWithRunner(backend, MakeShellRunner());
+}
+
+RuntimePreflightReport PreflightRuntimeWithRunner(
+    const RuntimePreflightSpec& spec, const CommandRunner& runner) {
+  RuntimePreflightReport report;
+  report.backend_name = RenderRuntimeBackendName(spec.backend);
+  report.serial = spec.serial;
+  report.package_name = spec.package_name;
+  report.component = spec.component;
+
+  const auto discovery = DiscoverRuntimeTargetsWithRunner(spec.backend, runner);
+  report.backend_available = discovery.backend_available;
+  report.backend_check_output = discovery.backend_check_output;
+  report.discovery_output = RenderRuntimeDiscoveryReport(discovery);
+
+  if (spec.backend == RuntimeBackendKind::kNative) {
+    report.notes = "native backend is not implemented yet";
+    return report;
+  }
+
+  if (!report.backend_available) {
+    report.notes = "backend command is not available";
+    return report;
+  }
+
+  if (discovery.targets.empty()) {
+    report.notes = "no runtime targets were discovered";
+    return report;
+  }
+
+  const RuntimeTarget* selected_target = nullptr;
+  if (!spec.serial.empty()) {
+    for (const auto& target : discovery.targets) {
+      if (target.serial == spec.serial) {
+        selected_target = &target;
+        break;
+      }
+    }
+    if (selected_target == nullptr) {
+      report.notes = "requested serial was not discovered";
+      return report;
+    }
+  } else {
+    int online_targets = 0;
+    for (const auto& target : discovery.targets) {
+      if (target.online) {
+        ++online_targets;
+        selected_target = &target;
+      }
+    }
+    if (online_targets == 0) {
+      report.notes = "no online runtime targets were discovered";
+      return report;
+    }
+    if (online_targets > 1) {
+      report.notes = "multiple online targets were discovered; provide a serial";
+      return report;
+    }
+    report.serial = selected_target->serial;
+    report.notes = "auto-selected the only online target";
+  }
+
+  report.target_discovered = true;
+  report.target_selected = true;
+  report.target_online = selected_target->online;
+  report.model = selected_target->model;
+  report.android_release = selected_target->android_release;
+  report.abi = selected_target->abi;
+
+  if (!selected_target->online) {
+    report.notes = "target is discovered but not online";
+    return report;
+  }
+
+  report.component_ready = spec.backend != RuntimeBackendKind::kAttachedAdb ||
+                           spec.package_name.empty() || !spec.component.empty();
+  if (!report.component_ready) {
+    report.notes = "attached-adb launch requires an explicit component";
+  }
+
+  if (!spec.package_name.empty() &&
+      spec.backend == RuntimeBackendKind::kAttachedAdb) {
+    const auto package_result = runner(
+        WrapWithTimeout(BuildAdbPrefix(report.serial) + " shell pm list packages " +
+                            QuoteForShell(spec.package_name),
+                        kAdbDiscoveryTimeoutSeconds));
+    report.package_check_output = package_result.output;
+    report.package_visible =
+        package_result.exit_code == 0 &&
+        OutputContainsInstalledPackage(package_result.output, spec.package_name);
+    if (package_result.exit_code == 124) {
+      report.notes = "package visibility check timed out";
+    } else if (!report.package_visible && report.notes.empty()) {
+      report.notes = "package is not visible on the selected target";
+    }
+  } else {
+    report.package_visible = spec.package_name.empty() || report.target_online;
+  }
+
+  if (report.notes.empty()) {
+    report.notes = "runtime target looks ready for the requested launch path";
+  }
+
+  report.ready_for_launch =
+      report.backend_available && report.target_selected && report.target_online &&
+      report.package_visible && report.component_ready;
+  return report;
+}
+
+RuntimePreflightReport PreflightRuntime(const RuntimePreflightSpec& spec) {
+  return PreflightRuntimeWithRunner(spec, MakeShellRunner());
 }
 
 std::string RenderWaydroidAppLaunchReport(

@@ -25,6 +25,8 @@ void PrintUsage() {
       << "  compatctl foundation\n"
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
+      << "  compatctl discover-runtime <backend>\n"
+      << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
       << "  compatctl launch-activity <serial> <component>\n"
       << "  compatctl launch-package <backend> <package> [serial] [component]\n"
       << "  compatctl verify-apk-host-launch-auto <serial> <apk-path> [compat-root] [desktop-entry-root] [launcher-root]\n"
@@ -130,6 +132,36 @@ int main(int argc, char** argv) {
       const auto report = wfa::LoadApkToCompatRoot(argv[2], compat_root);
       std::cout << wfa::RenderLoadedApkReport(report);
       return EXIT_SUCCESS;
+    }
+
+    if (command == "discover-runtime") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report =
+          wfa::DiscoverRuntimeTargets(wfa::ParseRuntimeBackendKind(argv[2]));
+      std::cout << wfa::RenderRuntimeDiscoveryReport(report);
+      return EXIT_SUCCESS;
+    }
+
+    if (command == "preflight-runtime") {
+      if (argc < 3 || argc > 6) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string serial = argc >= 4 ? argv[3] : "";
+      const std::string package_name = argc >= 5 ? argv[4] : "";
+      const std::string component = argc == 6 ? argv[5] : "";
+      const auto report = wfa::PreflightRuntime(
+          {.backend = wfa::ParseRuntimeBackendKind(argv[2]),
+           .serial = serial,
+           .package_name = package_name,
+           .component = component});
+      std::cout << wfa::RenderRuntimePreflightReport(report);
+      return report.ready_for_launch ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "adb-ime-status") {

@@ -524,3 +524,18 @@
   Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, and reviewed the final README/changelog/version diff before publishing the docs release.
   Result: The docs slice stayed green, the build and test suite passed, and the README now accurately reflects the current dependencies and next-step roadmap.
   Timestamp: 2026-05-16T14:48:15+05:30
+
+- Step: Runtime discovery live smoke attempt
+  Action: Ran the new `discover-runtime attached-adb`, `preflight-runtime native`, and `preflight-runtime attached-adb` smoke checks after the discovery/preflight implementation landed.
+  Result: The native preflight returned the expected not-implemented report, but the attached-ADB discovery path hung without returning; the live-environment failure was logged in `docs/problems/2026-05-16-attached-adb-discovery-hangs-without-timeout.md`.
+  Timestamp: 2026-05-16T14:54:48+05:30
+
+- Step: Runtime discovery and preflight implementation
+  Action: Added backend-neutral runtime discovery and preflight reports plus the `discover-runtime` and `preflight-runtime` CLI commands, then expanded the contract tests for attached-ADB target parsing, auto-selection, multi-target rejection, timeout handling, and the native not-implemented path.
+  Result: Linuxoid can now enumerate attached Android targets and preflight the generic installed-package path before launch, which moves the project from backend-neutral launch toward backend-neutral runtime readiness.
+  Timestamp: 2026-05-16T14:59:02+05:30
+
+- Step: Runtime discovery timeout fix and live verification
+  Action: Bounded the attached-ADB discovery/preflight probes with timeouts, rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, and repeated the live `discover-runtime attached-adb`, `preflight-runtime attached-adb`, `preflight-runtime native`, and `compatctl status` smoke checks.
+  Result: The hang was eliminated, the live attached-ADB path now returns promptly with the discovered target `192.168.240.112:5555`, the native path still fails honestly as not implemented, and Linuxoid now reports `92/100` phase loading with `P4` at `88/100`.
+  Timestamp: 2026-05-16T14:59:02+05:30

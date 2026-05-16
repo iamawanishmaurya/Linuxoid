@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.16 - 2026-05-16
+
+- Add `discover-runtime` and `preflight-runtime` so Linuxoid can enumerate attached Android targets and check launch readiness before a generic installed-package launch.
+- Bound the new attached-ADB discovery/preflight path with timeouts so it fails fast instead of hanging in the live environment.
+- Refresh the README architecture and next-step roadmap to reflect that runtime discovery/preflight is now implemented and the next frontier is generic verification plus launcher resolution on attached targets.
+
 ## v0.1.15 - 2026-05-16
 
 - Refresh the GitHub README Mermaid architecture so it now shows both the current working backend-neutral transition architecture and the long-term native Linux runtime target.

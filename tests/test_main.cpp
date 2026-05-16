@@ -38,8 +38,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 91,
-         "expected average phase progress to equal 91");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 92,
+         "expected average phase progress to equal 92");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -86,7 +86,7 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("91/100") != std::string::npos,
+  Expect(report.find("92/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
@@ -943,6 +943,153 @@ void TestAttachedAdbInstalledAppLaunchUsesExplicitComponent() {
          "expected attached-adb backend name");
 }
 
+void TestAttachedAdbRuntimeDiscoveryParsesTargets() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "timeout 5s adb devices") {
+      return {0,
+              "List of devices attached\n"
+              "device-01\tdevice\n"
+              "device-02\toffline\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell getprop 'ro.product.model'") {
+      return {0, "Pixel 7\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell getprop 'ro.build.version.release'") {
+      return {0, "14\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell getprop 'ro.product.cpu.abi'") {
+      return {0, "x86_64\n"};
+    }
+    throw std::runtime_error("unexpected command in adb discovery test");
+  };
+
+  const auto report = wfa::DiscoverRuntimeTargetsWithRunner(
+      wfa::RuntimeBackendKind::kAttachedAdb, runner);
+
+  Expect(report.backend_available, "expected adb backend to be available");
+  Expect(report.targets.size() == 2, "expected two discovered targets");
+  Expect(report.targets[0].serial == "device-01",
+         "expected first serial to match");
+  Expect(report.targets[0].online, "expected first target to be online");
+  Expect(report.targets[0].model == "Pixel 7",
+         "expected first target model");
+  Expect(report.targets[0].android_release == "14",
+         "expected first target Android release");
+  Expect(report.targets[1].serial == "device-02",
+         "expected second serial to match");
+  Expect(!report.targets[1].online,
+         "expected second target to be offline");
+}
+
+void TestAttachedAdbPreflightAutoSelectsSingleTarget() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "timeout 5s adb devices") {
+      return {0,
+              "List of devices attached\n"
+              "device-01\tdevice\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell getprop 'ro.product.model'") {
+      return {0, "Pixel 7\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell getprop 'ro.build.version.release'") {
+      return {0, "14\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell getprop 'ro.product.cpu.abi'") {
+      return {0, "x86_64\n"};
+    }
+    if (command ==
+        "timeout 5s adb -s 'device-01' shell pm list packages 'com.example.demo'") {
+      return {0, "package:com.example.demo\n"};
+    }
+    throw std::runtime_error("unexpected command in adb preflight success test");
+  };
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+       .package_name = "com.example.demo",
+       .component = "com.example.demo/.MainActivity"},
+      runner);
+
+  Expect(report.target_selected, "expected preflight to select the only target");
+  Expect(report.target_online, "expected selected target to be online");
+  Expect(report.package_visible, "expected package to be visible");
+  Expect(report.component_ready, "expected component readiness");
+  Expect(report.ready_for_launch, "expected ready-for-launch success");
+  Expect(report.serial == "device-01",
+         "expected auto-selected serial in preflight report");
+}
+
+void TestAttachedAdbPreflightRequiresSerialWhenMultipleTargetsExist() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "timeout 5s adb devices") {
+      return {0,
+              "List of devices attached\n"
+              "device-01\tdevice\n"
+              "device-02\tdevice\n"};
+    }
+    if (command.find("timeout 5s adb -s") != std::string::npos &&
+        command.find("getprop") != std::string::npos) {
+      return {0, "value\n"};
+    }
+    throw std::runtime_error(
+        "unexpected command in adb preflight multi-target test");
+  };
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kAttachedAdb,
+       .package_name = "com.example.demo",
+       .component = "com.example.demo/.MainActivity"},
+      runner);
+
+  Expect(!report.target_selected,
+         "expected preflight to reject multiple auto-select candidates");
+  Expect(!report.ready_for_launch,
+         "expected multi-target preflight to be not ready");
+  Expect(report.notes.find("multiple online targets") != std::string::npos,
+         "expected multi-target note");
+}
+
+void TestAttachedAdbDiscoveryTimeoutReturnsUnavailable() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "timeout 5s adb devices") {
+      return {124, ""};
+    }
+    throw std::runtime_error("unexpected command in adb timeout test");
+  };
+
+  const auto report = wfa::DiscoverRuntimeTargetsWithRunner(
+      wfa::RuntimeBackendKind::kAttachedAdb, runner);
+
+  Expect(!report.backend_available,
+         "expected timed-out adb discovery to report unavailable");
+  Expect(report.backend_check_output.find("Timed out") != std::string::npos,
+         "expected timeout note in discovery output");
+}
+
+void TestNativeRuntimePreflightReportsNotImplemented() {
+  const auto runner = [](const std::string&) -> wfa::CommandResult {
+    throw std::runtime_error("native preflight should not execute commands");
+  };
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = "com.example.demo"},
+      runner);
+
+  Expect(!report.backend_available,
+         "expected native backend to report unavailable");
+  Expect(!report.ready_for_launch,
+         "expected native preflight to fail honestly");
+  Expect(report.notes.find("not implemented") != std::string::npos,
+         "expected native preflight note");
+}
+
 void TestWaydroidDesktopLaunchArtifacts() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "linuxoid-waydroid-launch";
@@ -1648,6 +1795,11 @@ int main() {
     TestWaydroidAppLaunchReportRendering();
     TestInstalledAppLaunchReportRendering();
     TestAttachedAdbInstalledAppLaunchUsesExplicitComponent();
+    TestAttachedAdbRuntimeDiscoveryParsesTargets();
+    TestAttachedAdbPreflightAutoSelectsSingleTarget();
+    TestAttachedAdbPreflightRequiresSerialWhenMultipleTargetsExist();
+    TestAttachedAdbDiscoveryTimeoutReturnsUnavailable();
+    TestNativeRuntimePreflightReportsNotImplemented();
     TestWaydroidDesktopLaunchArtifacts();
     TestInstalledPackageDesktopLaunchArtifactsRequireAttachedAdbFields();
     TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage();

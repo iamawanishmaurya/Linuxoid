@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace wfa {
 
@@ -82,6 +83,51 @@ struct InstalledAppLaunchReport {
   std::string output;
 };
 
+struct RuntimeTarget {
+  std::string backend_name;
+  std::string serial;
+  std::string state;
+  std::string model;
+  std::string android_release;
+  std::string abi;
+  bool online = false;
+};
+
+struct RuntimeDiscoveryReport {
+  std::string backend_name;
+  bool backend_available = false;
+  std::string backend_check_output;
+  std::vector<RuntimeTarget> targets;
+};
+
+struct RuntimePreflightSpec {
+  RuntimeBackendKind backend = RuntimeBackendKind::kAttachedAdb;
+  std::string serial;
+  std::string package_name;
+  std::string component;
+};
+
+struct RuntimePreflightReport {
+  std::string backend_name;
+  std::string serial;
+  std::string package_name;
+  std::string component;
+  bool backend_available = false;
+  bool target_discovered = false;
+  bool target_selected = false;
+  bool target_online = false;
+  bool package_visible = false;
+  bool component_ready = false;
+  bool ready_for_launch = false;
+  std::string model;
+  std::string android_release;
+  std::string abi;
+  std::string backend_check_output;
+  std::string discovery_output;
+  std::string package_check_output;
+  std::string notes;
+};
+
 RuntimeBackendKind ParseRuntimeBackendKind(const std::string& backend_name);
 std::string RenderRuntimeBackendName(RuntimeBackendKind backend);
 bool OutputContainsInstalledPackage(const std::string& output,
@@ -99,10 +145,20 @@ std::string RenderAdbActivityLaunchReport(
     const AdbActivityLaunchReport& report);
 std::string RenderInstalledAppLaunchReport(
     const InstalledAppLaunchReport& report);
+std::string RenderRuntimeDiscoveryReport(
+    const RuntimeDiscoveryReport& report);
+std::string RenderRuntimePreflightReport(
+    const RuntimePreflightReport& report);
 std::string RenderWaydroidAppLaunchReport(
     const WaydroidAppLaunchReport& report);
 std::string RenderAdbImeStatusReport(const AdbImeStatus& status);
 std::string RenderAdbProvisioningReport(const AdbProvisioningReport& report);
+RuntimeDiscoveryReport DiscoverRuntimeTargetsWithRunner(
+    RuntimeBackendKind backend, const CommandRunner& runner);
+RuntimeDiscoveryReport DiscoverRuntimeTargets(RuntimeBackendKind backend);
+RuntimePreflightReport PreflightRuntimeWithRunner(
+    const RuntimePreflightSpec& spec, const CommandRunner& runner);
+RuntimePreflightReport PreflightRuntime(const RuntimePreflightSpec& spec);
 AdbActivityLaunchReport LaunchAdbActivityWithRunner(
     const std::string& serial, const std::string& component,
     const CommandRunner& runner);
