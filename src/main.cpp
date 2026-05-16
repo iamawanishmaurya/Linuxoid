@@ -1,6 +1,7 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/desktop_integration.hpp"
+#include "wfa/egl_smoke_fixture.hpp"
 #include "wfa/manifest_assessment.hpp"
 #include "wfa/native_execute_stub.hpp"
 #include "wfa/native_lifecycle.hpp"
@@ -37,6 +38,7 @@ void PrintUsage() {
       << "  compatctl native-execute-stub <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <package> <launcher-component> <bundle-apk> <sandbox-root> <dex-cache-root> <resource-root> <library-root> <bootstrap-manifest>\n"
       << "  compatctl native-first-pixel-fixture <session-root> [width] [height] [format]\n"
+      << "  compatctl native-egl-smoke-fixture <session-root> [width] [height]\n"
       << "  compatctl native-wayland-surface-fixture <session-root> [width] [height]\n"
       << "  compatctl native-window-callback-fixture <session-root> [width] [height] [format]\n"
       << "  compatctl discover-runtime <backend>\n"
@@ -305,6 +307,24 @@ int main(int argc, char** argv) {
           argv[2], metadata, 0xff336699u);
       std::cout << wfa::RenderFirstPixelFixtureJson(report);
       return report.render_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-egl-smoke-fixture") {
+      if (argc < 3 || argc > 5) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      wfa::NativeWindowMetadata metadata{
+          .width = argc >= 4 ? std::stoi(argv[3]) : 64,
+          .height = argc == 5 ? std::stoi(argv[4]) : 48,
+          .format = wfa::kNativeWindowFormatRgba8888,
+          .stride = argc >= 4 ? std::stoi(argv[3]) : 64,
+      };
+      const auto report = wfa::RunEglSmokeFixture(argv[2], metadata);
+      std::cout << wfa::RenderEglSmokeFixtureJson(report);
+      return report.context_created && report.pbuffer_created ? EXIT_SUCCESS
+                                                              : EXIT_FAILURE;
     }
 
     if (command == "native-wayland-surface-fixture") {

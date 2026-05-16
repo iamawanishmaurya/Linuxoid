@@ -1054,3 +1054,18 @@
   Action: Updated the README Mermaid graph, verify examples, phased plan, changelog, dependency notes, and status output to reflect the verified real Wayland client surface fixture and the new native execution readiness value.
   Result: Linuxoid now reports `execution 50/100`, documents the real `wl_display` plus `wl_surface` proof honestly, and keeps EGL binding plus `ANativeWindow` backing for the real Wayland path clearly marked as the next graphics gate.
   Timestamp: 2026-05-17T00:44:31+05:30
+
+- Step: P2.2 EGL smoke tests red
+  Action: Added failing tests for an EGL smoke fixture covering the deterministic JSON/artifact contract and honest fallback behavior before implementing the EGL context plus pbuffer path.
+  Result: `cmake --build build` now fails at link time because the new EGL fixture API is declared in the test surface but not implemented or linked yet, which gives a clean first red bar for the EGL gate.
+  Timestamp: 2026-05-17T00:53:44+05:30
+
+- Step: P2.2 EGL smoke fixture green
+  Action: Added optional `libEGL` build detection, implemented a real `eglGetDisplay` plus `eglInitialize` plus `eglCreateContext` plus `eglCreatePbufferSurface` fixture path with stable `egl-metadata.json` output, and re-ran the local build plus test gate.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` now passes, and this Linux environment also proves the live EGL branch with `egl_available: true`, `context_created: true`, `pbuffer_created: true`, and `exit_reason: egl_pbuffer_ready`.
+  Timestamp: 2026-05-17T01:02:26+05:30
+
+- Step: P2.2 EGL status and architecture sync
+  Action: Updated the README Mermaid graph, verify examples, phased plan, changelog, dependency notes, and status output to reflect the verified real EGL smoke fixture and the new native execution readiness value.
+  Result: Linuxoid now reports `execution 58/100`, documents the real EGL context plus pbuffer proof honestly, and keeps Wayland-EGL binding plus `ANativeWindow` backing clearly marked as the next graphics gate.
+  Timestamp: 2026-05-17T01:08:14+05:30

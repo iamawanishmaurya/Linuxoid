@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.34 - 2026-05-17
+
+- Add an optional real EGL smoke fixture so Linuxoid can initialize an EGL display, choose a config, create an OpenGL ES context plus pbuffer surface, and write a deterministic `egl-metadata.json` artifact under the requested root.
+- Add the new `native-egl-smoke-fixture` command plus tests that verify the JSON/artifact contract, deterministic metadata paths, and honest fallback behavior when EGL support is unavailable at build or runtime.
+- Refresh the Mermaid architecture, phased plan, status output, verify examples, and dependency notes so Linuxoid now reports the real EGL context plus pbuffer proof honestly while still marking Wayland-EGL binding, `ANativeWindow` backing, DEX/ART, Binder, input, and full resources as pending.
+
 ## v0.1.33 - 2026-05-17
 
 - Add an optional real `wayland-client` surface fixture so Linuxoid can connect to `wl_display`, bind `wl_compositor`, create a real `wl_surface`, and write a deterministic `surface-metadata.json` artifact under the requested root.

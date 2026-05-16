@@ -3,6 +3,7 @@
 #include "wfa/asset_manager_stub.hpp"
 #include "wfa/checkpoint.hpp"
 #include "wfa/desktop_integration.hpp"
+#include "wfa/egl_smoke_fixture.hpp"
 #include "wfa/manifest_assessment.hpp"
 #include "wfa/native_lifecycle.hpp"
 #include "wfa/native_spike.hpp"
@@ -1142,6 +1143,85 @@ void TestWaylandSurfaceFixtureReportsAvailabilityHonestly() {
            "expected surface creation when wayland is available");
     Expect(report.exit_reason == "wayland_surface_created",
            "expected created surface reason");
+  }
+
+  fs::remove_all(root);
+}
+
+void TestEglSmokeFixtureWritesDeterministicMetadata() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-egl-smoke-fixture-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunEglSmokeFixture(
+      root.string(),
+      {.width = 80,
+       .height = 60,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 80});
+
+  Expect(report.width == 80, "expected egl fixture width");
+  Expect(report.height == 60, "expected egl fixture height");
+  Expect(report.artifact_root == root.string(),
+         "expected deterministic egl artifact root");
+  Expect(report.egl_metadata_path == (root / "egl-metadata.json").string(),
+         "expected deterministic egl metadata path");
+  Expect(fs::exists(report.egl_metadata_path),
+         "expected egl metadata artifact");
+
+  const auto rendered = wfa::RenderEglSmokeFixtureJson(report);
+  Expect(rendered.find("\"artifact_root\": \"" + root.string() + "\"") !=
+             std::string::npos,
+         "expected egl artifact root in json");
+  Expect(rendered.find("\"egl_metadata_path\": \"" +
+                           report.egl_metadata_path + "\"") !=
+             std::string::npos,
+         "expected egl metadata path in json");
+
+  fs::remove_all(root);
+}
+
+void TestEglSmokeFixtureReportsAvailabilityHonestly() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-egl-availability-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunEglSmokeFixture(
+      root.string(),
+      {.width = 64,
+       .height = 48,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 64});
+
+  if (!wfa::EglSupportCompiled()) {
+    Expect(!report.egl_available,
+           "expected unavailable egl when support is not compiled");
+    Expect(!report.context_created,
+           "expected no context when support is not compiled");
+    Expect(report.exit_reason == "egl_unavailable",
+           "expected unavailable build fallback reason");
+  } else if (!report.egl_available) {
+    Expect(!report.context_created,
+           "expected no context when runtime egl is unavailable");
+    Expect(report.exit_reason == "egl_display_unavailable" ||
+               report.exit_reason == "egl_initialize_failed" ||
+               report.exit_reason == "egl_no_config_found" ||
+               report.exit_reason == "egl_context_creation_failed" ||
+               report.exit_reason == "egl_pbuffer_creation_failed",
+           "expected honest runtime egl fallback reason");
+  } else {
+    Expect(report.display_initialized,
+           "expected initialized display when egl is available");
+    Expect(report.config_chosen,
+           "expected config selection when egl is available");
+    Expect(report.context_created,
+           "expected context creation when egl is available");
+    Expect(report.pbuffer_created,
+           "expected pbuffer creation when egl is available");
+    Expect(report.exit_reason == "egl_pbuffer_ready",
+           "expected successful egl pbuffer reason");
   }
 
   fs::remove_all(root);
@@ -3215,6 +3295,8 @@ int main() {
     TestHeadlessNativeWindowCallbackFixtureWritesJournal();
     TestWaylandSurfaceFixtureWritesDeterministicMetadata();
     TestWaylandSurfaceFixtureReportsAvailabilityHonestly();
+    TestEglSmokeFixtureWritesDeterministicMetadata();
+    TestEglSmokeFixtureReportsAvailabilityHonestly();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

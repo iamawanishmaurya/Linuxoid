@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.33
+  VERSION 0.1.34
   LANGUAGES CXX
 )
 
@@ -14,6 +14,8 @@ include(CTest)
 
 find_path(WAYLAND_CLIENT_INCLUDE_DIR wayland-client.h)
 find_library(WAYLAND_CLIENT_LIBRARY wayland-client)
+find_path(EGL_INCLUDE_DIR EGL/egl.h)
+find_library(EGL_LIBRARY EGL)
 
 add_library(
   wfa_core
@@ -38,6 +40,7 @@ add_library(
   src/jni_stub.cpp
   src/looper_stub.cpp
   src/native_execute_stub.cpp
+  src/egl_smoke_fixture.cpp
   src/native_window_surface.cpp
   src/wayland_surface_fixture.cpp
   src/signal_handler.cpp
@@ -48,6 +51,11 @@ if(WAYLAND_CLIENT_INCLUDE_DIR AND WAYLAND_CLIENT_LIBRARY)
   target_include_directories(linuxoid_p1 PRIVATE ${WAYLAND_CLIENT_INCLUDE_DIR})
   target_link_libraries(linuxoid_p1 PUBLIC ${WAYLAND_CLIENT_LIBRARY})
   target_compile_definitions(linuxoid_p1 PRIVATE WFA_HAVE_WAYLAND_CLIENT=1)
+endif()
+if(EGL_INCLUDE_DIR AND EGL_LIBRARY)
+  target_include_directories(linuxoid_p1 PRIVATE ${EGL_INCLUDE_DIR})
+  target_link_libraries(linuxoid_p1 PUBLIC ${EGL_LIBRARY})
+  target_compile_definitions(linuxoid_p1 PRIVATE WFA_HAVE_EGL=1)
 endif()
 
 add_executable(compatctl src/main.cpp)
