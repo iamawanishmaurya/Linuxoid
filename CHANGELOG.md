@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.22 - 2026-05-16
+
+- Add MCP and harness compatibility as an explicit Linuxoid architecture rule in the README and Mermaid diagrams.
+- Document that Linuxoid control paths, artifact layouts, and verification flows should remain machine-friendly for agent runtimes, MCP clients, and validation harnesses as native execution work continues.
+
 ## v0.1.21 - 2026-05-16
 
 - Add `bootstrap-native-spike` so Linuxoid can turn a native spike candidate into a Linuxoid-owned bootstrap manifest, env script, entrypoint stub, and bootstrap report.

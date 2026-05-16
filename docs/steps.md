@@ -714,3 +714,13 @@
   Action: Staged the native bootstrap slice, confirmed the staged release set with `git status`, and created the feature commit `feat: add native bootstrap stub`.
   Result: Linuxoid now has a clean release candidate commit for the native bootstrap slice, ready to be tagged and pushed as `v0.1.21`.
   Timestamp: 2026-05-16T15:57:13+05:30
+
+- Step: MCP and harness architecture rule kickoff
+  Action: Reviewed the current README architecture and chose to encode MCP and harness compatibility as an explicit Linuxoid architecture requirement instead of leaving it as a conversational note.
+  Result: The next docs slice is locked to machine-friendly control, verification, and artifact seams so future native work stays easy for agents and harnesses to drive.
+  Timestamp: 2026-05-16T15:58:24+05:30
+
+- Step: MCP and harness rule verification
+  Action: Rebuilt Linuxoid with `cmake --build build`, re-read the README architecture sections and Mermaid diagrams, and reviewed the resulting diff before release.
+  Result: The GitHub-facing architecture now explicitly includes MCP and harness compatibility, the Mermaid graphs show the agent-facing control layer, and the documentation-only release keeps the build green.
+  Timestamp: 2026-05-16T15:59:11+05:30

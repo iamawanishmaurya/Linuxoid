@@ -6,6 +6,7 @@ Linuxoid currently contains the first executable MVP scaffold for an Android-on-
 
 - Core language: `C++20`
 - Runtime strategy: backend-neutral attached Android targets on the path to a native Linux compatibility layer
+- Agent integration strategy: stable MCP- and harness-friendly control surfaces, artifact layouts, and verification commands
 - Current executable: `compatctl`
 
 ## Current Working Architecture
@@ -13,6 +14,7 @@ Linuxoid currently contains the first executable MVP scaffold for an Android-on-
 ```mermaid
 flowchart TB
   User["Linux User"] --> Desktop["Linux Desktop Entry or Shell Launcher"]
+  Agent["Agent / MCP Client / Harness"] --> Compatctl
   Desktop --> Compatctl["Linuxoid compatctl"]
 
   subgraph Host["Linux Host"]
@@ -26,11 +28,13 @@ flowchart TB
     Compatctl --> Verifier["Installed-Package Verifier and Matrix Verifier"]
     Compatctl --> ApkVerifier["APK-backed Host Verifier"]
     Compatctl --> Runtime["Runtime Bridge Layer"]
+    Compatctl --> MachineSurface["Machine-readable Control and Artifact Surface"]
     Loader --> CompatRoot["Compat Root and Package Staging"]
     NativePlanner --> CompatRoot
     NativePlanner --> NativeBundle["Native Bundle Layout and Bootstrap Spec"]
     NativeBootstrap --> NativeBundle
     NativeBootstrap --> NativeStubRunner["Linuxoid-owned Native Entrypoint Stub"]
+    MachineSurface --> Reports["Reports / Status / Bootstrap Specs"]
     Preflight --> Runtime
     Inspector --> Runtime
     Desktopify --> DesktopFiles[".desktop Files and Launcher Scripts"]
@@ -69,6 +73,13 @@ flowchart TB
 
 This diagram is the current working architecture and should stay in sync with the verified Linuxoid flow on GitHub.
 
+## Architecture Constraints
+
+- Keep Linuxoid control paths scriptable and machine-friendly so MCP clients, agent runtimes, and validation harnesses can drive them without reverse engineering human-only output.
+- Preserve stable artifact locations for staged APKs, bootstrap manifests, reports, and launch scripts so harnesses can discover and validate state deterministically.
+- Prefer backend-neutral commands and structured intermediate files over backend-specific ad hoc flows.
+- Treat Waydroid, attached ADB, and future native execution as pluggable backends behind the same agent-usable control surface where possible.
+
 ## Mermaid Update Rule
 
 - Update the **Current Working Architecture** Mermaid graph in the same commit as every meaningful change to runtime flow, backend contracts, native execution slices, or verification surfaces.
@@ -80,8 +91,10 @@ This diagram is the current working architecture and should stay in sync with th
 ```mermaid
 flowchart TB
   User["Linux User"] --> Linuxoid["Linuxoid Native Runtime"]
+  Agent["Agent / MCP Client / Harness"] --> Control["Control / MCP / Harness Adapter Layer"]
 
   subgraph Host["Linux Host"]
+    Control --> Linuxoid
     Linuxoid --> Loader["APK / Resources / Manifest Loader"]
     Linuxoid --> DexArt["DEX / ART Execution Layer"]
     Linuxoid --> Binder["Binder-Compatible IPC Layer"]
@@ -89,6 +102,7 @@ flowchart TB
     Linuxoid --> Graphics["Linux Window / Graphics Integration"]
     Linuxoid --> Input["Keyboard / Mouse / IME / Clipboard Integration"]
     Linuxoid --> Storage["App Sandbox / Filesystem Mapping"]
+    Linuxoid --> Reports["Structured Reports / Bootstrap Specs / Test Hooks"]
   end
 
   Loader --> App["Android App Process"]
@@ -165,6 +179,7 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 - The new `bootstrap-native-spike` and `native-execute-stub` paths prove Linuxoid can own the local bootstrap surface, but **the entrypoint is still a stub until lifecycle, DEX, and graphics integration land**.
 - The current live proofs on GitHub are still **runtime-backed**: Waydroid handles the installed-package Linux launch path, and `attached-adb` remains a transition backend plus regression oracle.
 - `attached-adb` is now part of the core contract with target-side launcher and metadata lookup, but it is still not the final goal.
+- Future native slices should preserve **MCP and harness compatibility** by keeping commands backend-neutral, outputs inspectable, and artifact paths deterministic for agent workflows.
 
 ## What To Do Next
 
@@ -184,6 +199,11 @@ These are the next five highest-value moves from the current state if the goal i
 
 5. Expand the native proof to a **three-app compatibility set** while keeping Waydroid and attached-ADB matrix runs as regression baselines.
    The goal is one native simple app, one native settings-style app, and one honest failure classification for a more complex app.
+
+For every step above, keep the interfaces **MCP- and harness-compatible**:
+- machine-readable outputs should remain stable
+- intermediate artifacts should stay discoverable
+- verification commands should stay composable in agent workflows
 
 ## Build
 
