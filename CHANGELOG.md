@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.23 - 2026-05-16
+
+- Add `native-lifecycle-shim` so Linuxoid can turn a native bootstrap manifest into deterministic session artifacts, activity-state tracking, and a first service registry for native candidates.
+- Route the generated native bootstrap entrypoint through the lifecycle shim, so local Linux execution now proves a real lifecycle handoff instead of jumping straight from bootstrap artifacts to a stubbed stop.
+- Refresh the README Mermaid architecture, MCP/harness-aligned roadmap, and status narrative so GitHub reflects the new lifecycle/service seam and the next process-bootstrap step.
+
 ## v0.1.22 - 2026-05-16
 
 - Add MCP and harness compatibility as an explicit Linuxoid architecture rule in the README and Mermaid diagrams.

@@ -3,6 +3,7 @@
 #include "wfa/checkpoint.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/manifest_assessment.hpp"
+#include "wfa/native_lifecycle.hpp"
 #include "wfa/native_spike.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
@@ -672,8 +673,8 @@ void TestNativeActivityBootstrapWritesArtifacts() {
   std::ifstream entrypoint_input(bootstrap.entrypoint_script_path);
   std::string entrypoint((std::istreambuf_iterator<char>(entrypoint_input)),
                          std::istreambuf_iterator<char>());
-  Expect(entrypoint.find("native-execute-stub") != std::string::npos,
-         "expected native execute stub in entrypoint script");
+  Expect(entrypoint.find("native-lifecycle-shim") != std::string::npos,
+         "expected native lifecycle shim in entrypoint script");
   Expect(entrypoint.find(bootstrap.bootstrap_manifest_path) !=
              std::string::npos,
          "expected bootstrap manifest path in entrypoint script");
@@ -683,6 +684,113 @@ void TestNativeActivityBootstrapWritesArtifacts() {
          "expected bootstrap readiness line");
   Expect(rendered.find("Execution Engine Ready: no") != std::string::npos,
          "expected execution readiness line");
+
+  fs::remove_all(root);
+}
+
+void TestNativeLifecycleShimWritesSessionArtifacts() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-native-lifecycle-test";
+  fs::remove_all(root);
+  const fs::path compat_root = root / "compat";
+  const fs::path native_root = root / "native";
+  const fs::path compatctl_path = root / "compatctl";
+  fs::create_directories(root);
+
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  const auto layout = wfa::BuildPackageLayout(
+      {.package_name = "com.example.simple",
+       .install_id = "vc7-1.0.0",
+       .version_code = 7},
+      compat_root.string());
+  fs::create_directories(layout.host_package_root);
+
+  {
+    std::ofstream apk(layout.host_package_root + "/base.apk");
+    apk << "apk payload\n";
+  }
+  {
+    std::ofstream manifest(layout.host_package_root + "/AndroidManifest.xml");
+    manifest << "<manifest package=\"com.example.simple\"/>\n";
+  }
+  {
+    std::ofstream assessment(layout.host_package_root + "/assessment.txt");
+    assessment << "simple candidate\n";
+  }
+
+  const wfa::LoadedApkReport report{
+      .apk_path = "/tmp/simple.apk",
+      .install_id = "vc7-1.0.0",
+      .metadata = wfa::ApktoolMetadata{
+          .apk_file_name = "simple.apk",
+          .min_sdk = 24,
+          .target_sdk = 35,
+          .version_code = 7,
+          .version_name = "1.0.0",
+      },
+      .manifest_profile = wfa::ManifestProfile{
+          .package_name = "com.example.simple",
+          .launcher_activity_name = "com.example.simple.MainActivity",
+          .declared_components = {"com.example.simple.MainActivity"},
+          .declared_activity_components = {"com.example.simple.MainActivity"},
+          .has_launcher_activity = true,
+      },
+      .assessment = wfa::ManifestAssessment{
+          .package_name = "com.example.simple",
+          .app_profile = "foreground_app",
+          .earliest_load_phase = "P4",
+          .earliest_ui_phase = "P6",
+          .earliest_full_use_phase = "P6",
+          .has_launcher_activity = true,
+      },
+      .layout = layout,
+      .install_root = layout.host_package_root,
+  };
+
+  const auto plan = wfa::BuildNativeLaunchPlan(report, native_root.string());
+  const auto bootstrap =
+      wfa::BuildNativeActivityBootstrap(plan, compatctl_path.string());
+  const auto lifecycle = wfa::BuildNativeLifecycleShim(bootstrap);
+
+  Expect(lifecycle.lifecycle_handoff_ready,
+         "expected lifecycle shim handoff to be ready");
+  Expect(!lifecycle.execution_engine_ready,
+         "expected lifecycle execution engine to remain pending");
+  Expect(lifecycle.current_activity_state == "RESUMED",
+         "expected lifecycle shim to reach resumed state");
+  Expect(fs::exists(lifecycle.session_manifest_path),
+         "expected session manifest");
+  Expect(fs::exists(lifecycle.activity_state_path),
+         "expected activity state file");
+  Expect(fs::exists(lifecycle.service_registry_path),
+         "expected service registry file");
+  Expect(fs::exists(lifecycle.report_path),
+         "expected lifecycle report");
+
+  std::ifstream state_input(lifecycle.activity_state_path);
+  std::string state((std::istreambuf_iterator<char>(state_input)),
+                    std::istreambuf_iterator<char>());
+  Expect(state.find("current_state=RESUMED") != std::string::npos,
+         "expected resumed activity state in lifecycle file");
+
+  std::ifstream services_input(lifecycle.service_registry_path);
+  std::string services((std::istreambuf_iterator<char>(services_input)),
+                       std::istreambuf_iterator<char>());
+  Expect(services.find("activity_manager") != std::string::npos,
+         "expected activity manager service");
+  Expect(services.find("package_manager") != std::string::npos,
+         "expected package manager service");
+
+  const auto rendered = wfa::RenderNativeLifecycleShimReport(lifecycle);
+  Expect(rendered.find("Lifecycle Handoff Ready: yes") !=
+             std::string::npos,
+         "expected lifecycle handoff line");
+  Expect(rendered.find("Execution Engine Ready: no") != std::string::npos,
+         "expected lifecycle execution readiness line");
 
   fs::remove_all(root);
 }
@@ -2389,6 +2497,7 @@ int main() {
     TestNativeSpikeAssessmentRejectsAdvancedRuntimeApp();
     TestNativeLaunchPlanBuildsBundleLayout();
     TestNativeActivityBootstrapWritesArtifacts();
+    TestNativeLifecycleShimWritesSessionArtifacts();
     TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();
     TestDesktopLaunchArtifactsForImeApp();

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.22
+  VERSION 0.1.23
   LANGUAGES CXX
 )
 
@@ -19,6 +19,7 @@ add_library(
   src/checkpoint.cpp
   src/desktop_integration.cpp
   src/manifest_assessment.cpp
+  src/native_lifecycle.cpp
   src/native_spike.cpp
   src/package_layout.cpp
   src/project_status.cpp

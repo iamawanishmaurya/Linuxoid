@@ -2,6 +2,7 @@
 #include "wfa/apk_loader.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/manifest_assessment.hpp"
+#include "wfa/native_lifecycle.hpp"
 #include "wfa/native_spike.hpp"
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
@@ -28,6 +29,7 @@ void PrintUsage() {
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
+      << "  compatctl native-lifecycle-shim <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <package> <launcher-component> <bundle-apk> <sandbox-root> <dex-cache-root> <resource-root> <library-root> <bootstrap-manifest>\n"
       << "  compatctl discover-runtime <backend>\n"
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
@@ -211,6 +213,18 @@ int main(int argc, char** argv) {
           argv[2], compat_root, native_root, compatctl_path);
       std::cout << wfa::RenderNativeActivityBootstrapReport(bootstrap);
       return bootstrap.bootstrap_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-lifecycle-shim") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto lifecycle =
+          wfa::BuildNativeLifecycleShimFromManifest(argv[2]);
+      std::cout << wfa::RenderNativeLifecycleShimReport(lifecycle);
+      return lifecycle.execution_engine_ready ? EXIT_SUCCESS : 2;
     }
 
     if (command == "native-execute-stub") {

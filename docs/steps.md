@@ -724,3 +724,33 @@
   Action: Rebuilt Linuxoid with `cmake --build build`, re-read the README architecture sections and Mermaid diagrams, and reviewed the resulting diff before release.
   Result: The GitHub-facing architecture now explicitly includes MCP and harness compatibility, the Mermaid graphs show the agent-facing control layer, and the documentation-only release keeps the build green.
   Timestamp: 2026-05-16T15:59:11+05:30
+
+- Step: Native lifecycle shim test setup
+  Action: Added a separate native lifecycle module surface, unit coverage for session artifacts and service bindings, and a new `native-lifecycle-shim` CLI entrypoint before writing the implementation.
+  Result: Linuxoid now has a red-bar target for the lifecycle and service shim slice behind the native bootstrap stub.
+  Timestamp: 2026-05-16T16:01:49+05:30
+
+- Step: Native lifecycle shim red verification
+  Action: Ran `cmake --build build` immediately after adding the new lifecycle shim declarations and tests.
+  Result: CMake failed because `src/native_lifecycle.cpp` does not exist yet; the exact configuration error is logged in `docs/problems/2026-05-16-native-lifecycle-module-missing.md`.
+  Timestamp: 2026-05-16T16:01:49+05:30
+
+- Step: Native lifecycle shim build integration
+  Action: Implemented the native lifecycle module, wired the bootstrap entrypoint over to the new lifecycle shim command, and rebuilt Linuxoid with `cmake --build build`.
+  Result: The lifecycle and service shim slice now compiles cleanly into both `compatctl` and `wfa_tests`, so it is ready for test and live verification.
+  Timestamp: 2026-05-16T16:03:59+05:30
+
+- Step: Native lifecycle shim live verification
+  Action: Ran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl bootstrap-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, reran `./build/compatctl native-lifecycle-shim /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json`, inspected the generated lifecycle files, and executed the generated `launch-native-activity.sh` entrypoint locally.
+  Result: The tests are green, Calculator now gets deterministic lifecycle session artifacts plus service bindings, the lifecycle shim reports `Lifecycle Handoff Ready: yes`, and both the direct command and generated entrypoint still fail honestly with exit code `2` until real execution lands.
+  Timestamp: 2026-05-16T16:06:03+05:30
+
+- Step: Native lifecycle shim documentation refresh
+  Action: Updated `README.md`, `src/project_status.cpp`, `CHANGELOG.md`, `CMakeLists.txt`, and the linked solution note so GitHub, CLI status output, and release metadata all reflect the new lifecycle and service shim slice.
+  Result: The repository now shows the native lifecycle shim in the Mermaid architecture, keeps the MCP/harness constraint visible, and moves the roadmap forward to the Linuxoid-owned process bootstrap.
+  Timestamp: 2026-05-16T16:06:03+05:30
+
+- Step: Native lifecycle shim final verification
+  Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, reran `./build/compatctl foundation`, reran `./build/compatctl bootstrap-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, reran `./build/compatctl native-lifecycle-shim /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json`, inspected the generated session manifest plus service registry, and reran the generated local entrypoint script.
+  Result: The build and tests are green, status still reports `95/100`, Linuxoid now owns a verified lifecycle/session handoff for Calculator, and the local path remains honest about the missing execution engine.
+  Timestamp: 2026-05-16T16:06:03+05:30
