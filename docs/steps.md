@@ -1189,3 +1189,34 @@
   Action: Added the Linuxoid-owned ART/classloader preparation fixture, wired it into `compatctl` and the runtime-health seam, refreshed the README Mermaid graph plus phased plan and status text, and reran the full build/test gate together with live fixture commands.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, `native-art-classloader-fixture` now writes deterministic dex inventory plus classloader-plan artifacts, and `native-runtime-health-fixture` now points `dex_classloader_readiness` at the real ART plan instead of a bundle placeholder while still reporting missing host ART honestly.
   Timestamp: 2026-05-17T14:24:00+05:30
+
+- Step: ART runtime smoke red test
+  Action: Added failing tests for a Linuxoid-owned ART runtime smoke fixture that should reuse the classloader plan, write invocation artifacts, and report runtime availability honestly without pretending class execution already works.
+  Result: The tests are in place and now define the next direct-runtime gate before any production ART smoke code is added.
+  Timestamp: 2026-05-17T15:02:00+05:30
+
+- Step: ART runtime smoke missing-module failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the ART runtime smoke tests.
+  Result: The build failed in `tests/test_main.cpp` because the new `wfa/art_runtime_smoke.hpp` module does not exist yet, so the next change is to add the production ART runtime smoke seam and wire it into `compatctl`.
+  Timestamp: 2026-05-17T15:03:00+05:30
+
+- Step: ART runtime smoke gate verification and repo sync
+  Action: Added the Linuxoid-owned ART runtime smoke seam, wired it into `compatctl` and the runtime-health evidence path, refreshed the Mermaid architecture plus phased plan and status text, and reran the full build/test gate together with live smoke commands.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, `native-art-runtime-smoke` now writes deterministic invocation-plan plus runtime-log artifacts and safely probes local ART availability when possible, and `native-runtime-health-fixture` now points `dex_classloader_readiness` at the richer runtime-smoke artifact while still reporting missing host ART honestly.
+  Timestamp: 2026-05-17T15:28:00+05:30
+- Step: ART runtime smoke baseline re-verification
+  Action: Rebuilt Linuxoid and reran `compatctl native-art-runtime-smoke` against the staged Calculator bootstrap to confirm the current seam before the next class-resolution gate.
+  Result: `cmake --build build` completed successfully, and the runtime-smoke artifact still reports `classpath_plan_ready: true` with honest `art_runtime_not_detected` output on this host.
+  Timestamp: 2026-05-17T20:16:00+05:30
+- Step: ART class-resolution red test
+  Action: Added failing tests for a new `native-art-class-resolution-fixture` contract that resolves manifest-target classes from staged DEX contents and exposes deterministic JSON/artifacts.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` failed at compile time because `wfa/art_class_resolution_fixture.hpp` does not exist yet, confirming the new gate is genuinely unimplemented.
+  Timestamp: 2026-05-17T20:22:00+05:30
+- Step: ART class-resolution fixture implementation
+  Action: Added a new `native-art-class-resolution-fixture` module, wired it into `compatctl`, taught the runtime health skeleton to consume its artifacts, and updated the ART runtime smoke seam to carry offline DEX resolution evidence forward.
+  Result: Linuxoid can now resolve manifest-target descriptors from real staged DEX contents, write deterministic resolution-map plus trace artifacts, and expose `attempt_host_art_class_resolution` as the next recovery action instead of stopping at classpath planning.
+  Timestamp: 2026-05-17T20:36:00+05:30
+- Step: ART class-resolution gate verification
+  Action: Rebuilt Linuxoid, reran the full test suite, verified `native-art-class-resolution-fixture`, verified `native-art-runtime-smoke`, and reran the self-healing runtime health fixture against the staged Calculator bootstrap.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, Calculator now resolves both manifest targets offline from `classes.dex`, runtime smoke carries that evidence forward, and runtime health now selects `attempt_host_art_class_resolution` as the next bounded recovery action.
+  Timestamp: 2026-05-17T20:45:00+05:30

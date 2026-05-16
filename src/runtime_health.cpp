@@ -1,6 +1,8 @@
 #include "wfa/runtime_health.hpp"
 
+#include "wfa/art_class_resolution_fixture.hpp"
 #include "wfa/art_classloader_fixture.hpp"
+#include "wfa/art_runtime_smoke.hpp"
 #include "wfa/apk_archive.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/native_input_queue_fixture.hpp"
@@ -25,7 +27,8 @@ namespace {
 struct RuntimeObservationContext {
   NativeLifecycleShim lifecycle;
   ApkResourceReadinessReport resources;
-  NativeArtClassloaderFixtureReport art;
+  NativeArtClassResolutionFixtureReport art_resolution;
+  NativeArtRuntimeSmokeReport art_runtime;
   NativeWindowBridgeFixtureReport bridge;
   NativeInputQueueFixtureReport input;
   bool has_classes_dex = false;
@@ -122,7 +125,7 @@ std::string BuildRecoveryActionName(const RuntimeHealthRecord& record) {
     return "rebuild_service_registry_and_retry_lookup";
   }
   if (record.subsystem_name == "dex_classloader_readiness") {
-    return "prepare_art_sidecar_classpath";
+    return "attempt_host_art_class_resolution";
   }
   if (record.subsystem_name == "input_queue_readiness") {
     return "recreate_input_queue_after_surface_ready";
@@ -144,7 +147,7 @@ std::string BuildRecoveryReason(const RuntimeHealthRecord& record) {
     return "A service lookup failed, so the local Binder-shaped registry should be rebuilt before replaying the request.";
   }
   if (record.subsystem_name == "dex_classloader_readiness") {
-    return "APK classes are present but ART/DEX bootstrap is still missing, so the next step is to prepare the classpath and sidecar runtime.";
+    return "APK classes are now resolved offline from real DEX contents, so the next step is to attempt host-side ART or PathClassLoader class resolution against the staged bundle.";
   }
   if (record.subsystem_name == "input_queue_readiness") {
     return "Input delivery depends on a live surface contract, so Linuxoid should recreate the input queue after surface readiness improves.";
@@ -285,23 +288,30 @@ RuntimeHealthRecord BuildBinderRecord(
 }
 
 RuntimeHealthRecord BuildDexRecord(const RuntimeObservationContext& context) {
-  const bool dex_present = context.art.dex_entries_present;
+  const bool dex_present = context.art_resolution.dex_entries_present;
   if (!dex_present) {
     return MakeHealthRecord("dex_classloader_readiness", "not_required", true,
-                            context.art.classloader_plan_path, "",
+                            context.art_resolution.result_json_path, "",
                             "APK archive does not contain classes.dex entries.");
   }
 
   return MakeHealthRecord(
       "dex_classloader_readiness", "pending", false,
-      context.art.classloader_plan_path,
+      context.art_resolution.result_json_path,
       "dex_classloader_unimplemented",
       "classpath_plan_ready=" +
-          std::string(context.art.classpath_plan_ready ? "true" : "false") +
+          std::string(context.art_resolution.classpath_plan_ready ? "true"
+                                                                  : "false") +
+      "; offline_resolution_ready=" +
+          std::string(context.art_resolution.offline_resolution_ready ? "true"
+                                                                      : "false") +
+      "; resolved_targets=" +
+          std::to_string(context.art_resolution.resolved_target_count) +
+      "; missing_targets=" +
+          std::to_string(context.art_resolution.missing_target_count) +
       "; art_runtime_detected=" +
-          std::string(context.art.art_runtime_detected ? "true" : "false") +
-      "; target_classes=" +
-          std::to_string(context.art.target_class_names.size()));
+          std::string(context.art_runtime.art_runtime_detected ? "true"
+                                                               : "false"));
 }
 
 RuntimeHealthReplayReport BuildReplayReportFromEvents(
@@ -394,14 +404,16 @@ RuntimeHealthReport RunRuntimeHealthFixture(
   context.resources = InspectApkResourceReadiness(
       context.lifecycle.bootstrap.plan.bundle_apk_path,
       context.lifecycle.bootstrap.plan.resource_root);
-  context.art = RunNativeArtClassloaderFixture(bootstrap_manifest_path);
+  context.art_resolution =
+      RunNativeArtClassResolutionFixture(bootstrap_manifest_path);
+  context.art_runtime = RunNativeArtRuntimeSmokeFixture(bootstrap_manifest_path);
   context.bridge = RunNativeWindowBridgeFixture(
       (fs::path(context.lifecycle.session_root) / "health" / "surface").string(),
       {.width = 48, .height = 32, .format = kNativeWindowFormatRgba8888, .stride = 48});
   context.input = RunNativeInputQueueFixture(
       (fs::path(context.lifecycle.session_root) / "health" / "input").string(),
       {.width = 48, .height = 32, .format = kNativeWindowFormatRgba8888, .stride = 48});
-  context.has_classes_dex = context.art.dex_entries_present;
+  context.has_classes_dex = context.art_resolution.dex_entries_present;
 
   RuntimeHealthReport report;
   report.package_name = context.lifecycle.bootstrap.plan.assessment.package_name;

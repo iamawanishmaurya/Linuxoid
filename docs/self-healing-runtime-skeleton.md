@@ -22,6 +22,16 @@ What that means **today**:
   - `art/classloader-plan.json`
   - `art/dex-inventory.json`
   - `art/art-classloader-trace.jsonl`
+- Linuxoid now has a concrete offline DEX class-resolution seam behind that preparation step:
+  - `native-art-class-resolution-fixture`
+  - `art/class-resolution-map.json`
+  - `art/art-class-resolution-trace.jsonl`
+  - `art/art-class-resolution-result.json`
+- Linuxoid now also has a host-ART runtime smoke seam that builds on that plan:
+  - `native-art-runtime-smoke`
+  - `art/runtime-smoke-invocation-plan.json`
+  - `art/runtime-smoke-invocation.log`
+  - `art/runtime-smoke-result.json`
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -32,7 +42,7 @@ What it **does not** mean yet:
 
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet have ART or a real `PathClassLoader`.
-- Linuxoid does **not** yet execute application classes through a real host-side ART invocation.
+- Linuxoid does **not** yet execute application classes through a real host-side ART invocation, even though it can now resolve manifest-target descriptors offline from real DEX contents.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
@@ -51,6 +61,8 @@ Current commands:
 ./build/compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]
 ./build/compatctl native-runtime-health-replay <trace-jsonl-path>
 ./build/compatctl native-art-classloader-fixture <bootstrap-manifest>
+./build/compatctl native-art-class-resolution-fixture <bootstrap-manifest>
+./build/compatctl native-art-runtime-smoke <bootstrap-manifest>
 ```
 
 Current deterministic scenarios:
@@ -63,4 +75,4 @@ Current deterministic scenarios:
 
 Next gate after this skeleton:
 
-- attach a real host-side ART + `PathClassLoader` smoke path so the existing classpath plan and target-class artifacts can move from preparation into the first real class-resolution attempt for simple APKs.
+- use the existing offline class-resolution plus host-ART smoke seams to drive the first real `PathClassLoader` or equivalent class-resolution attempt for simple APKs.

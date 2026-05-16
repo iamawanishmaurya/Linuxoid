@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.41 - 2026-05-17
+
+- Add a Linuxoid-owned `native-art-class-resolution-fixture` seam so staged APK dex entries can now resolve manifest-target descriptors offline, write deterministic resolution-map plus trace artifacts, and report unresolved classes honestly without pretending ART has already executed them.
+- Add a Linuxoid-owned `native-art-runtime-smoke` seam so the staged ART/classloader plan can now produce deterministic invocation-plan, runtime-log, and result artifacts while probing local ART availability safely and honestly.
+- Thread the new offline class-resolution and runtime-smoke artifacts into the self-healing runtime story so `dex_classloader_readiness` now carries evidence about classpath readiness, resolved versus missing manifest targets, runtime detection, and probe attempts instead of stopping at a classloader-plan placeholder.
+- Refresh the README Mermaid architecture, phased plan, self-healing runtime note, changelog, and status output so Linuxoid now reports the offline DEX resolution plus host-ART smoke gates honestly while still marking real host ART class execution, Android framework loading, full Binder behavior, compositor-backed rendering, and IME/text composition as pending.
+
 ## v0.1.40 - 2026-05-17
 
 - Add a Linuxoid-owned `native-art-classloader-fixture` seam so staged APK dex entries can be inventoried, manifest application/activity targets can be normalized into deterministic descriptors, and stable `art/classloader-plan.json` plus trace artifacts can be written without depending on Waydroid, ADB, or an emulator.

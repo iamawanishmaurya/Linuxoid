@@ -1,6 +1,8 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/art_classloader_fixture.hpp"
+#include "wfa/art_class_resolution_fixture.hpp"
+#include "wfa/art_runtime_smoke.hpp"
 #include "wfa/binder_service_manager.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/egl_smoke_fixture.hpp"
@@ -39,6 +41,8 @@ void PrintUsage() {
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl native-art-classloader-fixture <bootstrap-manifest>\n"
+      << "  compatctl native-art-class-resolution-fixture <bootstrap-manifest>\n"
+      << "  compatctl native-art-runtime-smoke <bootstrap-manifest>\n"
       << "  compatctl native-service-manager-fixture <bootstrap-manifest>\n"
       << "  compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]\n"
       << "  compatctl native-runtime-health-replay <trace-jsonl-path>\n"
@@ -265,6 +269,28 @@ int main(int argc, char** argv) {
 
       const auto report = wfa::RunNativeArtClassloaderFixture(argv[2]);
       std::cout << wfa::RenderNativeArtClassloaderFixtureJson(report);
+      return report.classpath_plan_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-art-class-resolution-fixture") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report = wfa::RunNativeArtClassResolutionFixture(argv[2]);
+      std::cout << wfa::RenderNativeArtClassResolutionFixtureJson(report);
+      return report.classpath_plan_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-art-runtime-smoke") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report = wfa::RunNativeArtRuntimeSmokeFixture(argv[2]);
+      std::cout << wfa::RenderNativeArtRuntimeSmokeFixtureJson(report);
       return report.classpath_plan_ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 

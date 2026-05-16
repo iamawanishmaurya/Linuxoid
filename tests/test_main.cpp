@@ -1,5 +1,7 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/art_classloader_fixture.hpp"
+#include "wfa/art_class_resolution_fixture.hpp"
+#include "wfa/art_runtime_smoke.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/asset_manager_stub.hpp"
 #include "wfa/binder_service_manager.hpp"
@@ -104,6 +106,85 @@ std::string BuildStubDexPayload() {
   return payload;
 }
 
+std::string EncodeUleb128(std::uint32_t value) {
+  std::string encoded;
+  do {
+    unsigned char byte = static_cast<unsigned char>(value & 0x7Fu);
+    value >>= 7u;
+    if (value != 0) {
+      byte |= 0x80u;
+    }
+    encoded.push_back(static_cast<char>(byte));
+  } while (value != 0);
+  return encoded;
+}
+
+std::string BuildResolvableDexPayload(
+    const std::vector<std::string>& class_descriptors) {
+  std::vector<std::string> strings = class_descriptors;
+  std::sort(strings.begin(), strings.end());
+  strings.erase(std::unique(strings.begin(), strings.end()), strings.end());
+
+  const std::uint32_t string_ids_size =
+      static_cast<std::uint32_t>(strings.size());
+  const std::uint32_t type_ids_size = string_ids_size;
+  const std::uint32_t class_defs_size = string_ids_size;
+
+  const std::uint32_t header_size = 0x70u;
+  const std::uint32_t string_ids_off = header_size;
+  const std::uint32_t type_ids_off = string_ids_off + string_ids_size * 4u;
+  const std::uint32_t class_defs_off = type_ids_off + type_ids_size * 4u;
+  const std::uint32_t data_off = class_defs_off + class_defs_size * 32u;
+
+  std::string payload(data_off, '\0');
+
+  auto write_le32 = [&](std::size_t offset, std::uint32_t value) {
+    payload[offset + 0] = static_cast<char>(value & 0xFFu);
+    payload[offset + 1] = static_cast<char>((value >> 8) & 0xFFu);
+    payload[offset + 2] = static_cast<char>((value >> 16) & 0xFFu);
+    payload[offset + 3] = static_cast<char>((value >> 24) & 0xFFu);
+  };
+
+  payload[0] = 'd';
+  payload[1] = 'e';
+  payload[2] = 'x';
+  payload[3] = '\n';
+  payload[4] = '0';
+  payload[5] = '3';
+  payload[6] = '5';
+  payload[7] = '\0';
+
+  std::uint32_t cursor = data_off;
+  for (std::size_t index = 0; index < strings.size(); ++index) {
+    write_le32(string_ids_off + index * 4u, cursor);
+    payload += EncodeUleb128(
+        static_cast<std::uint32_t>(strings[index].size()));
+    payload += strings[index];
+    payload.push_back('\0');
+    cursor = static_cast<std::uint32_t>(payload.size());
+  }
+
+  for (std::size_t index = 0; index < strings.size(); ++index) {
+    write_le32(type_ids_off + index * 4u,
+               static_cast<std::uint32_t>(index));
+    write_le32(class_defs_off + index * 32u,
+               static_cast<std::uint32_t>(index));
+  }
+
+  write_le32(32, static_cast<std::uint32_t>(payload.size()));
+  write_le32(36, header_size);
+  write_le32(40, 0x12345678u);
+  write_le32(56, string_ids_size);
+  write_le32(60, string_ids_off);
+  write_le32(64, type_ids_size);
+  write_le32(68, type_ids_off);
+  write_le32(96, class_defs_size);
+  write_le32(100, class_defs_off);
+  write_le32(104, static_cast<std::uint32_t>(payload.size() - data_off));
+  write_le32(108, data_off);
+  return payload;
+}
+
 struct RuntimeHealthBootstrapFixture {
   std::filesystem::path root;
   wfa::NativeActivityBootstrap bootstrap;
@@ -152,7 +233,10 @@ RuntimeHealthBootstrapFixture CreateRuntimeHealthBootstrapFixture(
       {"resources.arsc", "arsc"},
   };
   if (include_classes_dex) {
-    archive_entries.push_back({"classes.dex", BuildStubDexPayload()});
+    archive_entries.push_back(
+        {"classes.dex",
+         BuildResolvableDexPayload({"Lcom/example/runtimehealth/App;",
+                                    "Lcom/example/runtimehealth/MainActivity;"})});
   }
   WriteStoredZipFixture(fs::path(layout.host_package_root) / "base.apk",
                         archive_entries);
@@ -1952,7 +2036,7 @@ void TestRuntimeHealthFixtureWritesStableArtifacts() {
   Expect(dex_record->state == "pending",
          "expected dex/classloader to remain pending");
   Expect(!dex_record->ready, "expected pending dex/classloader readiness");
-  Expect(dex_record->selected_recovery_action == "prepare_art_sidecar_classpath",
+  Expect(dex_record->selected_recovery_action == "attempt_host_art_class_resolution",
          "expected deterministic dex recovery action");
 
   const auto native_record = std::find_if(
@@ -2052,6 +2136,182 @@ void TestNativeArtClassloaderCommandWritesStableJson() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeArtRuntimeSmokeWritesStableArtifacts() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-runtime-smoke", true, true);
+
+  const auto report = wfa::RunNativeArtRuntimeSmokeFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.classpath_plan_ready,
+         "expected runtime smoke to reuse a ready classpath plan");
+  Expect(report.pathclassloader_resolution_planned,
+         "expected pathclassloader resolution plan flag");
+  Expect(!report.pathclassloader_resolution_attempted,
+         "expected no false class resolution attempt yet");
+  Expect(fs::exists(report.invocation_plan_path),
+         "expected invocation plan artifact");
+  Expect(fs::exists(report.invocation_log_path),
+         "expected invocation log artifact");
+  Expect(fs::exists(report.result_json_path),
+         "expected runtime smoke result artifact");
+  Expect(report.target_class_names.size() == 2,
+         "expected normalized target classes to carry forward");
+
+  const auto rendered = wfa::RenderNativeArtRuntimeSmokeFixtureJson(report);
+  Expect(rendered.find("\"invocation_plan_path\": \"" +
+                           report.invocation_plan_path + "\"") !=
+             std::string::npos,
+         "expected invocation plan path in runtime smoke json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtRuntimeSmokeHandlesRuntimeAvailabilityHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-runtime-availability", true, true);
+
+  const auto report = wfa::RunNativeArtRuntimeSmokeFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  if (!report.art_runtime_detected) {
+    Expect(!report.runtime_probe_attempted,
+           "expected no runtime probe when ART is absent");
+    Expect(report.exit_reason == "art_runtime_not_detected",
+           "expected absent-art exit reason");
+  } else if (!report.safe_runtime_probe_available) {
+    Expect(!report.runtime_probe_attempted,
+           "expected no unsafe runtime probe attempt");
+    Expect(report.exit_reason ==
+               "art_runtime_detected_without_safe_probe",
+           "expected no-safe-probe exit reason");
+  } else {
+    Expect(report.runtime_probe_attempted,
+           "expected runtime probe attempt when safe ART probe exists");
+    Expect(report.runtime_exit_code >= 0,
+           "expected concrete runtime probe exit code");
+  }
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtRuntimeSmokeCommandWritesStableJson() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-runtime-command", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-art-runtime-smoke " +
+          fixture.bootstrap.bootstrap_manifest_path,
+      &exit_code);
+  Expect(exit_code == 0, "expected native-art-runtime-smoke success");
+  Expect(output.find("\"classpath_plan_ready\": true") !=
+             std::string::npos,
+         "expected classpath plan readiness in runtime smoke json");
+  Expect(output.find("\"pathclassloader_resolution_planned\": true") !=
+             std::string::npos,
+         "expected pathclassloader plan flag in runtime smoke json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtClassResolutionFixtureResolvesManifestTargets() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-class-resolution", true, true);
+
+  const auto report = wfa::RunNativeArtClassResolutionFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.classpath_plan_ready,
+         "expected classpath plan ready before class resolution");
+  Expect(report.offline_resolution_ready,
+         "expected offline dex resolution readiness");
+  Expect(report.resolved_target_count == 2,
+         "expected both manifest targets resolved");
+  Expect(report.missing_target_count == 0,
+         "expected no missing manifest targets");
+  Expect(fs::exists(report.resolution_map_path),
+         "expected resolution map artifact");
+  Expect(fs::exists(report.trace_jsonl_path),
+         "expected class resolution trace artifact");
+  Expect(fs::exists(report.result_json_path),
+         "expected class resolution result artifact");
+  Expect(report.target_results.size() == 2,
+         "expected per-target class resolution results");
+  Expect(std::all_of(report.target_results.begin(), report.target_results.end(),
+                     [](const wfa::ResolvedClassTarget& result) {
+                       return result.resolved_in_dex &&
+                              result.resolution_reason == "resolved_in_dex";
+                     }),
+         "expected every manifest target resolved from dex");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtClassResolutionFixtureHandlesMissingDexTargetsHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-class-resolution-missing", true, true);
+  WriteStoredZipFixture(
+      fs::path(fixture.bootstrap.plan.bundle_root) / "base.apk",
+      {{"AndroidManifest.xml",
+        R"(<manifest package="com.example.runtimehealth">
+  <application android:name="com.example.runtimehealth.App">
+    <activity android:name="com.example.runtimehealth.MissingActivity"/>
+  </application>
+</manifest>
+)"},
+       {"classes.dex", BuildResolvableDexPayload({"Lcom/example/runtimehealth/App;"})}});
+
+  const auto report = wfa::RunNativeArtClassResolutionFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.resolved_target_count == 1,
+         "expected only application target resolved");
+  Expect(report.missing_target_count == 1,
+         "expected one missing activity target");
+  const auto missing_it = std::find_if(
+      report.target_results.begin(), report.target_results.end(),
+      [](const wfa::ResolvedClassTarget& result) {
+        return result.class_name == "com.example.runtimehealth.MissingActivity";
+      });
+  Expect(missing_it != report.target_results.end(),
+         "expected missing activity result");
+  Expect(!missing_it->resolved_in_dex,
+         "expected missing activity to stay unresolved");
+  Expect(missing_it->resolution_reason == "descriptor_not_found_in_dex",
+         "expected honest missing-descriptor reason");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtClassResolutionCommandWritesStableJson() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-class-resolution-command", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-art-class-resolution-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path,
+      &exit_code);
+  Expect(exit_code == 0,
+         "expected native-art-class-resolution-fixture success");
+  Expect(output.find("\"offline_resolution_ready\": true") !=
+             std::string::npos,
+         "expected offline resolution readiness in class-resolution json");
+  Expect(output.find("\"resolved_target_count\": 2") != std::string::npos,
+         "expected resolved target count in class-resolution json");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeHealthFixtureSelectsMissingArtifactRecovery() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -2142,7 +2402,7 @@ void TestRuntimeHealthReplaySummarizesTrace() {
          "expected dex classloader replay failure");
   Expect(std::find(replay.selected_actions.begin(),
                    replay.selected_actions.end(),
-                   "prepare_art_sidecar_classpath") !=
+                   "attempt_host_art_class_resolution") !=
              replay.selected_actions.end(),
          "expected dex recovery action in replay");
 
@@ -4288,6 +4548,12 @@ int main() {
     TestNativeArtClassloaderFixtureWritesStableArtifacts();
     TestNativeArtClassloaderFixtureHandlesMissingDexHonestly();
     TestNativeArtClassloaderCommandWritesStableJson();
+    TestNativeArtRuntimeSmokeWritesStableArtifacts();
+    TestNativeArtRuntimeSmokeHandlesRuntimeAvailabilityHonestly();
+    TestNativeArtRuntimeSmokeCommandWritesStableJson();
+    TestNativeArtClassResolutionFixtureResolvesManifestTargets();
+    TestNativeArtClassResolutionFixtureHandlesMissingDexTargetsHonestly();
+    TestNativeArtClassResolutionCommandWritesStableJson();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();
