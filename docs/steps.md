@@ -139,3 +139,68 @@
   Action: Re-ran the build, tests, keyboard APK load, launched runtime verification, and read-only runtime verification after the last report wording fix.
   Result: The full loader/runtime slice stayed green, and the read-only ADB report now correctly says `Settings launch OK: not checked` when launch verification is skipped.
   Timestamp: 2026-05-16T07:49:37+05:30
+
+- Step: Loader/runtime release commit
+  Action: Staged and committed the APK loader, runtime bridge, review-driven hardening, and the updated project progress model.
+  Result: The repository now has a dedicated feature commit for the `load-apk` and `adb-ime-status` capabilities.
+  Timestamp: 2026-05-16T07:50:25+05:30
+
+- Step: Resume and target lock
+  Action: Re-read the repository state, the latest verified runtime evidence, and the user goal to keep building until the keyboard app properly loads and works.
+  Result: Locked the next slice to real IME provisioning on the live Android target: install, enable, set default, launch settings, and re-verify with code-backed reporting.
+  Timestamp: 2026-05-16T08:03:00+05:30
+
+- Step: IME provisioning red phase
+  Action: Added failing tests for a real IME provisioning flow with install, enable, set-default, and readiness reporting, then rebuilt the project.
+  Result: The build failed as expected because the runtime bridge does not yet define the command-result type, provisioning API, or provisioning report renderer.
+  Timestamp: 2026-05-16T08:06:32+05:30
+
+- Step: Enabled-IME verification red phase
+  Action: Tightened the runtime tests to require proof that the target IME appears in the secure `enabled_input_methods` list, then rebuilt the project.
+  Result: The build failed as expected because the runtime bridge does not yet parse or report explicit enabled-IME state.
+  Timestamp: 2026-05-16T08:12:15+05:30
+
+- Step: IME provisioning implementation and verification
+  Action: Implemented the `provision-ime` CLI command with install, enable, set-default, re-query, and rendered readiness reporting, then rebuilt the project and ran the full test suite.
+  Result: The runtime bridge now provisions an IME on a live Android target and reports `Ready for typing: yes` only when install, registration, enablement, default selection, and optional settings launch all verify successfully.
+  Timestamp: 2026-05-16T08:14:58+05:30
+
+- Step: Enabled-IME verification success
+  Action: Extended the runtime bridge to query and parse `enabled_input_methods`, then reran the tests plus the live keyboard-app status and provisioning commands against `emulator-5590`.
+  Result: The project now proves that `org.futo.inputmethod.latin/.LatinIME` is installed, registered, explicitly enabled, set as default, and settings-launchable on the live Android target.
+  Timestamp: 2026-05-16T08:18:41+05:30
+
+- Step: Runtime repeatability rerun
+  Action: Re-ran the test suite and the full live `provision-ime` flow against `emulator-5590` without code changes.
+  Result: The second verification pass stayed green, confirming the keyboard-app provisioning path is repeatable on the current target.
+  Timestamp: 2026-05-16T08:20:11+05:30
+
+- Step: Progress model refresh after IME proof
+  Action: Updated the phase and checkpoint model, rebuilt the project, reran the tests, and reran both `status` and the live keyboard provisioning flow.
+  Result: The verified project loading is now `71/100`, runtime checkpoint gates are `48/100`, and the golden-app plus repeatability checkpoints are now complete.
+  Timestamp: 2026-05-16T08:25:40+05:30
+
+- Step: Provisioning-guard red phase
+  Action: Added reviewer-driven tests for wrong-APK/package mismatch detection and non-throwing readback failure reporting, then rebuilt the project.
+  Result: The build failed as expected because the provisioning report does not yet carry package-match or readback-status evidence.
+  Timestamp: 2026-05-16T08:31:08+05:30
+
+- Step: Provisioning-guard fix and verification
+  Action: Added APK declared-package inspection, non-throwing provisioning readback reporting, rebuilt the project, reran the tests, reran the live success path, and ran a deliberate wrong-package provisioning attempt.
+  Result: The real keyboard path still returns `Ready for typing: yes`, while the deliberate mismatch path now exits non-zero and reports `APK package match: no` instead of a false success.
+  Timestamp: 2026-05-16T08:38:52+05:30
+
+- Step: Fail-closed guard red phase
+  Action: Tightened the reviewer-driven tests again so wrong-APK mismatches must stop before any ADB mutation and so partial readback facts must survive a late readback failure.
+  Result: The updated test suite failed because the current mismatch guard still mutates the target before returning a failure verdict.
+  Timestamp: 2026-05-16T08:43:17+05:30
+
+- Step: Fail-closed guard fix and verification
+  Action: Made APK/package mismatches fail before any ADB mutation and preserved partial readback facts as each query succeeds, then rebuilt the project, reran the tests, reran the mismatch path, and reran the live success path.
+  Result: The mismatch path now exits quickly with `0/100` provisioning loading and no device-side mutations, while the real keyboard path still verifies `Ready for typing: yes`.
+  Timestamp: 2026-05-16T08:48:42+05:30
+
+- Step: Final review pass
+  Action: Sent the hardened provisioning diff back through the reviewer subagent after the fail-closed and incremental-readback fixes.
+  Result: The reviewer reported no remaining findings in the current scope after rebuilding and rerunning the local test suite.
+  Timestamp: 2026-05-16T08:51:19+05:30

@@ -1,9 +1,17 @@
 #ifndef WFA_RUNTIME_BRIDGE_HPP
 #define WFA_RUNTIME_BRIDGE_HPP
 
+#include <functional>
 #include <string>
 
 namespace wfa {
+
+struct CommandResult {
+  int exit_code = 0;
+  std::string output;
+};
+
+using CommandRunner = std::function<CommandResult(const std::string&)>;
 
 struct AdbImeStatus {
   std::string serial;
@@ -12,20 +20,61 @@ struct AdbImeStatus {
   std::string settings_component;
   bool package_installed = false;
   bool ime_registered = false;
+  bool ime_enabled = false;
   bool is_default_ime = false;
   bool settings_launch_ok = false;
+  std::string enabled_input_methods;
   std::string default_input_method;
+};
+
+struct AdbProvisioningReport {
+  std::string serial;
+  std::string apk_path;
+  std::string package_name;
+  std::string ime_id;
+  std::string settings_component;
+  std::string apk_declared_package_name;
+  bool apk_matches_requested_package = true;
+  bool install_ok = false;
+  bool enable_ok = false;
+  bool set_ok = false;
+  bool readback_ok = true;
+  bool ready_for_typing = false;
+  std::string readback_error;
+  std::string install_output;
+  std::string enable_output;
+  std::string set_output;
+  AdbImeStatus final_status;
 };
 
 bool OutputContainsInstalledPackage(const std::string& output,
                                     const std::string& package_name);
 bool OutputContainsImeId(const std::string& output, const std::string& ime_id);
+bool EnabledInputMethodsContainIme(const std::string& output,
+                                   const std::string& ime_id);
+bool InstallOutputLooksSuccessful(const std::string& output);
 bool LaunchOutputLooksSuccessful(const std::string& output);
 std::string RenderAdbImeStatusReport(const AdbImeStatus& status);
+std::string RenderAdbProvisioningReport(const AdbProvisioningReport& report);
+AdbImeStatus QueryAdbImeStatusWithRunner(const std::string& serial,
+                                         const std::string& package_name,
+                                         const std::string& ime_id,
+                                         const std::string& settings_component,
+                                         const CommandRunner& runner);
 AdbImeStatus QueryAdbImeStatus(const std::string& serial,
                                const std::string& package_name,
                                const std::string& ime_id,
                                const std::string& settings_component = "");
+AdbProvisioningReport ProvisionAdbImeWithRunner(
+    const std::string& serial, const std::string& apk_path,
+    const std::string& package_name, const std::string& ime_id,
+    const std::string& settings_component, const CommandRunner& runner,
+    const std::string& apk_declared_package_name = "");
+AdbProvisioningReport ProvisionAdbIme(const std::string& serial,
+                                      const std::string& apk_path,
+                                      const std::string& package_name,
+                                      const std::string& ime_id,
+                                      const std::string& settings_component = "");
 
 }  // namespace wfa
 

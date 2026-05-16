@@ -21,6 +21,7 @@ void PrintUsage() {
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl adb-ime-status <serial> <package> <ime-id> [settings-component]\n"
+      << "  compatctl provision-ime <serial> <apk-path> <package> <ime-id> [settings-component]\n"
       << "  compatctl layout <package> <install-id> <version-code> [compat-root]\n";
 }
 
@@ -92,6 +93,19 @@ int main(int argc, char** argv) {
           wfa::QueryAdbImeStatus(argv[2], argv[3], argv[4], settings_component);
       std::cout << wfa::RenderAdbImeStatusReport(status);
       return EXIT_SUCCESS;
+    }
+
+    if (command == "provision-ime") {
+      if (argc != 6 && argc != 7) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string settings_component = argc == 7 ? argv[6] : "";
+      const auto report = wfa::ProvisionAdbIme(
+          argv[2], argv[3], argv[4], argv[5], settings_component);
+      std::cout << wfa::RenderAdbProvisioningReport(report);
+      return report.ready_for_typing ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "layout") {

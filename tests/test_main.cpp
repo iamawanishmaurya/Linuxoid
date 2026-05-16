@@ -9,6 +9,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -22,18 +23,18 @@ void TestWeightedCheckpointProgress() {
   const auto checkpoints = wfa::BuildDefaultCheckpoints();
 
   Expect(checkpoints.size() == 5, "expected five runtime checkpoints");
-  Expect(wfa::CalculateWeightedCheckpointProgress(checkpoints) == 28,
-         "expected weighted checkpoint progress to round to 28");
-  Expect(wfa::CountCompletedCheckpoints(checkpoints) == 0,
-         "expected zero completed runtime checkpoints");
+  Expect(wfa::CalculateWeightedCheckpointProgress(checkpoints) == 48,
+         "expected weighted checkpoint progress to round to 48");
+  Expect(wfa::CountCompletedCheckpoints(checkpoints) == 2,
+         "expected two completed runtime checkpoints");
 }
 
 void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 65,
-         "expected average phase progress to equal 65");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 71,
+         "expected average phase progress to equal 71");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -80,9 +81,9 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("65/100") != std::string::npos,
+  Expect(report.find("71/100") != std::string::npos,
          "expected average phase progress in report");
-  Expect(report.find("28/100") != std::string::npos,
+  Expect(report.find("48/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
 }
 
@@ -319,6 +320,14 @@ void TestRuntimeBridgeOutputParsers() {
              "org.futo.inputmethod.latin/.LatinIMEBeta:\n",
              "org.futo.inputmethod.latin/.LatinIME"),
          "expected exact ime matching");
+  Expect(wfa::EnabledInputMethodsContainIme(
+             "com.example.other/.Ime:org.futo.inputmethod.latin/.LatinIME",
+             "org.futo.inputmethod.latin/.LatinIME"),
+         "expected enabled-input-method parser");
+  Expect(!wfa::EnabledInputMethodsContainIme(
+             "org.futo.inputmethod.latin/.LatinIMEBeta:com.example.other/.Ime",
+             "org.futo.inputmethod.latin/.LatinIME"),
+         "expected exact enabled-input-method matching");
   Expect(wfa::LaunchOutputLooksSuccessful("Status: ok\nComplete\n"),
          "expected launch parser");
 
@@ -329,12 +338,208 @@ void TestRuntimeBridgeOutputParsers() {
       .settings_component = "",
       .package_installed = true,
       .ime_registered = true,
+      .ime_enabled = true,
       .is_default_ime = true,
       .settings_launch_ok = false,
+      .enabled_input_methods =
+          "com.example.other/.Ime:org.futo.inputmethod.latin/.LatinIME",
       .default_input_method = "org.futo.inputmethod.latin/.LatinIME",
   });
+  Expect(report.find("IME enabled: yes") != std::string::npos,
+         "expected enabled ime in status report");
   Expect(report.find("Settings launch OK: not checked") != std::string::npos,
          "expected not-checked launch status");
+}
+
+void TestImeProvisioningSuccessPath() {
+  std::vector<std::string> commands;
+
+  const auto runner = [&](const std::string& command) -> wfa::CommandResult {
+    commands.push_back(command);
+
+    if (command.find(" install -r ") != std::string::npos) {
+      return {0, "Success\n"};
+    }
+    if (command.find(" shell ime enable ") != std::string::npos) {
+      return {0, "Input method org.futo.inputmethod.latin/.LatinIME: now enabled\n"};
+    }
+    if (command.find(" shell ime set ") != std::string::npos) {
+      return {0, "Input method org.futo.inputmethod.latin/.LatinIME selected\n"};
+    }
+    if (command.find(" shell pm list packages") != std::string::npos) {
+      return {0, "package:org.futo.inputmethod.latin\n"};
+    }
+    if (command.find(" shell ime list -a") != std::string::npos) {
+      return {0, "org.futo.inputmethod.latin/.LatinIME:\n"};
+    }
+    if (command.find(" settings get secure default_input_method") !=
+        std::string::npos) {
+      return {0, "org.futo.inputmethod.latin/.LatinIME\n"};
+    }
+    if (command.find(" settings get secure enabled_input_methods") !=
+        std::string::npos) {
+      return {0,
+              "com.example.other/.Ime:org.futo.inputmethod.latin/.LatinIME\n"};
+    }
+    if (command.find(" shell am start -W -n ") != std::string::npos) {
+      return {0, "Status: ok\nComplete\n"};
+    }
+
+    throw std::runtime_error("unexpected command in provisioning success path");
+  };
+
+  const auto report = wfa::ProvisionAdbImeWithRunner(
+      "emulator-5590", "/tmp/keyboard.apk", "org.futo.inputmethod.latin",
+      "org.futo.inputmethod.latin/.LatinIME",
+      "org.futo.inputmethod.latin/.uix.settings.SettingsActivity", runner);
+
+  Expect(report.install_ok, "expected install success");
+  Expect(report.enable_ok, "expected ime enable success");
+  Expect(report.set_ok, "expected ime set success");
+  Expect(report.ready_for_typing, "expected ready for typing");
+  Expect(report.final_status.package_installed,
+         "expected installed package after provisioning");
+  Expect(report.final_status.ime_registered,
+         "expected registered ime after provisioning");
+  Expect(report.final_status.ime_enabled,
+         "expected enabled ime after provisioning");
+  Expect(report.final_status.is_default_ime,
+         "expected default ime after provisioning");
+  Expect(commands.size() == 8, "expected eight adb commands in provisioning flow");
+
+  const auto rendered = wfa::RenderAdbProvisioningReport(report);
+  Expect(rendered.find("Ready for typing: yes") != std::string::npos,
+         "expected ready-for-typing line");
+}
+
+void TestImeProvisioningDetectsIncompleteActivation() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command.find(" install -r ") != std::string::npos) {
+      return {0, "Success\n"};
+    }
+    if (command.find(" shell ime enable ") != std::string::npos) {
+      return {0, "Input method org.futo.inputmethod.latin/.LatinIME: now enabled\n"};
+    }
+    if (command.find(" shell ime set ") != std::string::npos) {
+      return {0, "Input method org.futo.inputmethod.latin/.LatinIME selected\n"};
+    }
+    if (command.find(" shell pm list packages") != std::string::npos) {
+      return {0, "package:org.futo.inputmethod.latin\n"};
+    }
+    if (command.find(" shell ime list -a") != std::string::npos) {
+      return {0, "org.futo.inputmethod.latin/.LatinIME:\n"};
+    }
+    if (command.find(" settings get secure default_input_method") !=
+        std::string::npos) {
+      return {0, "com.example.other/.Ime\n"};
+    }
+    if (command.find(" settings get secure enabled_input_methods") !=
+        std::string::npos) {
+      return {0, "org.futo.inputmethod.latin/.LatinIME\n"};
+    }
+
+    throw std::runtime_error(
+        "unexpected command in provisioning incomplete-activation path");
+  };
+
+  const auto report = wfa::ProvisionAdbImeWithRunner(
+      "emulator-5590", "/tmp/keyboard.apk", "org.futo.inputmethod.latin",
+      "org.futo.inputmethod.latin/.LatinIME", "", runner);
+
+  Expect(report.install_ok, "expected install success in incomplete flow");
+  Expect(report.enable_ok, "expected enable success in incomplete flow");
+  Expect(report.set_ok, "expected set success in incomplete flow");
+  Expect(!report.ready_for_typing,
+         "expected readiness failure when default ime does not match");
+
+  const auto rendered = wfa::RenderAdbProvisioningReport(report);
+  Expect(rendered.find("Ready for typing: no") != std::string::npos,
+         "expected failed ready-for-typing line");
+}
+
+void TestImeProvisioningRejectsWrongApkPackagePairing() {
+  std::vector<std::string> commands;
+  const auto runner = [&](const std::string& command) -> wfa::CommandResult {
+    commands.push_back(command);
+    return {0, "unexpected command\n"};
+  };
+
+  const auto report = wfa::ProvisionAdbImeWithRunner(
+      "emulator-5590", "/tmp/not-keyboard.apk", "org.futo.inputmethod.latin",
+      "org.futo.inputmethod.latin/.LatinIME", "", runner,
+      "com.example.notkeyboard");
+
+  Expect(!report.apk_matches_requested_package,
+         "expected wrong apk package pairing to be detected");
+  Expect(commands.empty(),
+         "expected wrong apk package pairing to fail before any adb mutation");
+  Expect(!report.install_ok,
+         "expected no install attempt on wrong apk package pairing");
+  Expect(!report.readback_ok,
+         "expected no readback success on wrong apk package pairing");
+  Expect(!report.ready_for_typing,
+         "expected wrong apk package pairing to fail readiness");
+  Expect(report.readback_error.find("package mismatch") != std::string::npos,
+         "expected package mismatch readback error");
+
+  const auto rendered = wfa::RenderAdbProvisioningReport(report);
+  Expect(rendered.find("APK package match: no") != std::string::npos,
+         "expected wrong apk package match line");
+}
+
+void TestImeProvisioningKeepsPartialEvidenceOnReadbackFailure() {
+  const auto runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command.find(" install -r ") != std::string::npos) {
+      return {0, "Success\n"};
+    }
+    if (command.find(" shell ime enable ") != std::string::npos) {
+      return {0, "Input method org.futo.inputmethod.latin/.LatinIME: now enabled\n"};
+    }
+    if (command.find(" shell ime set ") != std::string::npos) {
+      return {0, "Input method org.futo.inputmethod.latin/.LatinIME selected\n"};
+    }
+    if (command.find(" shell pm list packages") != std::string::npos) {
+      return {0, "package:org.futo.inputmethod.latin\n"};
+    }
+    if (command.find(" shell ime list -a") != std::string::npos) {
+      return {0, "org.futo.inputmethod.latin/.LatinIME:\n"};
+    }
+    if (command.find(" settings get secure enabled_input_methods") !=
+        std::string::npos) {
+      return {0, "org.futo.inputmethod.latin/.LatinIME\n"};
+    }
+    if (command.find(" settings get secure default_input_method") !=
+        std::string::npos) {
+      return {256, "permission denied\n"};
+    }
+
+    throw std::runtime_error(
+        "unexpected command in provisioning readback-failure path");
+  };
+
+  const auto report = wfa::ProvisionAdbImeWithRunner(
+      "emulator-5590", "/tmp/keyboard.apk", "org.futo.inputmethod.latin",
+      "org.futo.inputmethod.latin/.LatinIME", "", runner);
+
+  Expect(report.install_ok, "expected install success before readback failure");
+  Expect(report.enable_ok, "expected enable success before readback failure");
+  Expect(report.set_ok, "expected set success before readback failure");
+  Expect(report.final_status.package_installed,
+         "expected package-installed fact to survive readback failure");
+  Expect(report.final_status.ime_registered,
+         "expected ime-registered fact to survive readback failure");
+  Expect(report.final_status.ime_enabled,
+         "expected ime-enabled fact to survive readback failure");
+  Expect(!report.readback_ok,
+         "expected readback to fail without throwing away report");
+  Expect(!report.ready_for_typing,
+         "expected readback failure to prevent ready-for-typing");
+  Expect(report.readback_error.find("default_input_method") != std::string::npos,
+         "expected readback error to mention the failing command");
+
+  const auto rendered = wfa::RenderAdbProvisioningReport(report);
+  Expect(rendered.find("Readback OK: no") != std::string::npos,
+         "expected readback failure line");
 }
 
 }  // namespace
@@ -354,6 +559,10 @@ int main() {
     TestApktoolMetadataParsing();
     TestLoadedApkReportRendering();
     TestRuntimeBridgeOutputParsers();
+    TestImeProvisioningSuccessPath();
+    TestImeProvisioningDetectsIncompleteActivation();
+    TestImeProvisioningRejectsWrongApkPackagePairing();
+    TestImeProvisioningKeepsPartialEvidenceOnReadbackFailure();
   } catch (const std::exception& error) {
     std::cerr << "Test failure: " << error.what() << '\n';
     return EXIT_FAILURE;

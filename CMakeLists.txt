@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   wine_for_android
-  VERSION 0.1.1
+  VERSION 0.1.4
   LANGUAGES CXX
 )
 

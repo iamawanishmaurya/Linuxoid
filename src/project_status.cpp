@@ -13,12 +13,12 @@ std::vector<PhaseStatus> BuildDefaultPhases() {
        "CMake, CLI entrypoint, and local test target exist."},
       {"P3", "Package and storage contract", 100,
        "APK layout and host storage mapping are encoded in code."},
-      {"P4", "Runtime and service contract", 70,
-       "The project can load an APK into a compat root and assess its runtime needs."},
+      {"P4", "Runtime and service contract", 80,
+       "The project can load an APK into a compat root, install it on a live target, and provision its IME service."},
       {"P5", "Graphics and host integration", 0,
        "No host window or compositor work has started yet."},
-      {"P6", "APK execution and validation", 20,
-       "A live Android target has been queried and the keyboard settings UI launch is verified."},
+      {"P6", "APK execution and validation", 45,
+       "A live Android target now proves install, IME enablement, default selection, and keyboard settings launch for the golden app."},
   };
 }
 
@@ -27,16 +27,16 @@ std::vector<Checkpoint> BuildDefaultCheckpoints() {
       {"C1", "Environment Reproducibility", 15,
        CompletionState::kInValidation,
        "Build instructions and the local scaffold exist; clean-room proof is pending."},
-      {"C2", "Golden App Launch", 20, CompletionState::kInValidation,
-       "Keyboard APK load and live settings launch exist, but the full golden-app gate is not complete."},
+      {"C2", "Golden App Launch", 20, CompletionState::kComplete,
+       "The keyboard APK now installs, enables, sets default IME, and launches settings successfully on the live target."},
       {"C3", "Representative Compatibility Set", 25,
        CompletionState::kNotStarted,
        "No compatibility matrix exists yet."},
       {"C4", "Host Integration", 20, CompletionState::kNotStarted,
        "Graphics, input, network, and file handoff still need executable proof."},
       {"C5", "Repeatability and Regression Guard", 20,
-       CompletionState::kInValidation,
-       "A local rebuild/test loop exists; second-run validation is still pending."},
+       CompletionState::kComplete,
+       "The build, tests, and live keyboard provisioning flow all passed again without code changes."},
   };
 }
 
@@ -102,6 +102,7 @@ std::string DescribeMvpFoundation() {
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: container-first Android userspace integration\n";
   output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, APK loader, runtime bridge, and status CLI\n";
+  output << "Golden App Proof: the FUTO keyboard APK now provisions successfully on the connected Android target.\n";
   output << "Why: this keeps the first executable slice aligned with the future core.\n";
   return output.str();
 }

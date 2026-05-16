@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.4 - 2026-05-16
+
+- Add a real `provision-ime` path that installs a keyboard APK on a live Android target, enables the IME, sets it as default, and re-verifies the resulting runtime state.
+- Extend live runtime verification to prove the target IME is explicitly present in `enabled_input_methods` in addition to being registered and selected as default.
+- Guard the provisioning verdict against wrong-APK/package mismatches and preserve partial evidence when post-action readback fails.
+- Raise verified project loading to `71/100` and runtime checkpoint gates to `48/100`, with the golden-app launch and repeatability checkpoints now complete.
+
 ## v0.1.3 - 2026-05-16
 
 - Add a real `load-apk` path that stages APKs into a compat root using decoded manifest and `apktool.yml` metadata.

@@ -29,6 +29,7 @@ struct LoadedApkReport {
 
 ApktoolMetadata ParseApktoolMetadata(std::string_view yaml);
 std::string BuildInstallId(const ApktoolMetadata& metadata);
+std::string InspectApkPackageName(const std::string& apk_path);
 std::string RenderLoadedApkReport(const LoadedApkReport& report);
 LoadedApkReport LoadApkToCompatRoot(const std::string& apk_path,
                                     const std::string& compat_root);

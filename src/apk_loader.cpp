@@ -17,6 +17,13 @@ namespace fs = std::filesystem;
 
 namespace {
 
+struct DecodedApkInspection {
+  ApktoolMetadata metadata;
+  ManifestProfile profile;
+  ManifestAssessment assessment;
+  std::string manifest_xml;
+};
+
 std::string QuoteForShell(const std::string& value) {
   std::string quoted = "'";
   for (const char character : value) {
@@ -139,54 +146,9 @@ void WriteTextFile(const fs::path& path, const std::string& contents) {
   output << contents;
 }
 
-}  // namespace
-
-ApktoolMetadata ParseApktoolMetadata(std::string_view yaml) {
-  ApktoolMetadata metadata;
-  metadata.apk_file_name = ExtractYamlString(yaml, "apkFileName");
-  metadata.min_sdk = ExtractYamlInt(yaml, "minSdkVersion");
-  metadata.target_sdk = ExtractYamlInt(yaml, "targetSdkVersion");
-  metadata.version_code = ExtractYamlInt(yaml, "versionCode");
-  metadata.version_name = ExtractYamlString(yaml, "versionName");
-
-  if (metadata.apk_file_name.empty() || metadata.version_code <= 0 ||
-      metadata.version_name.empty()) {
-    throw std::invalid_argument(
-        "apktool metadata is missing required version fields");
-  }
-
-  return metadata;
-}
-
-std::string BuildInstallId(const ApktoolMetadata& metadata) {
-  return "vc" + std::to_string(metadata.version_code) + "-" +
-         SanitizeInstallSegment(metadata.version_name);
-}
-
-std::string RenderLoadedApkReport(const LoadedApkReport& report) {
-  std::ostringstream output;
-  output << "APK Path: " << report.apk_path << '\n';
-  output << "Package: " << report.manifest_profile.package_name << '\n';
-  output << "Version: " << report.metadata.version_name << " ("
-         << report.metadata.version_code << ")\n";
-  output << "Min SDK: " << report.metadata.min_sdk << '\n';
-  output << "Target SDK: " << report.metadata.target_sdk << '\n';
-  output << "Install ID: " << report.install_id << '\n';
-  output << "Install Root: " << report.install_root << '\n';
-  output << "Earliest package load phase: " << report.assessment.earliest_load_phase
-         << '\n';
-  output << "Earliest settings/UI phase: " << report.assessment.earliest_ui_phase
-         << '\n';
-  output << "Earliest full-use phase: "
-         << report.assessment.earliest_full_use_phase << '\n';
-  return output.str();
-}
-
-LoadedApkReport LoadApkToCompatRoot(const std::string& apk_path,
-                                    const std::string& compat_root) {
-  const fs::path apk = apk_path;
+DecodedApkInspection InspectDecodedApk(const fs::path& apk) {
   if (!fs::exists(apk)) {
-    throw std::invalid_argument("apk path does not exist: " + apk_path);
+    throw std::invalid_argument("apk path does not exist: " + apk.string());
   }
 
   std::string decode_template =
@@ -213,15 +175,72 @@ LoadedApkReport LoadApkToCompatRoot(const std::string& apk_path,
                               QuoteForShell(apk.string()) + " >/dev/null";
   RunCommandCapture(command);
 
-  const auto metadata = ParseApktoolMetadata(ReadFile(decode_root / "apktool.yml"));
-  const auto profile =
-      ParseDecodedManifest(ReadFile(decode_root / "AndroidManifest.xml"));
-  const auto assessment = AssessRuntimeRequirements(profile);
+  const auto manifest_xml = ReadFile(decode_root / "AndroidManifest.xml");
+  const auto profile = ParseDecodedManifest(manifest_xml);
+  return DecodedApkInspection{
+      .metadata = ParseApktoolMetadata(ReadFile(decode_root / "apktool.yml")),
+      .profile = profile,
+      .assessment = AssessRuntimeRequirements(profile),
+      .manifest_xml = manifest_xml,
+  };
+}
+
+}  // namespace
+
+ApktoolMetadata ParseApktoolMetadata(std::string_view yaml) {
+  ApktoolMetadata metadata;
+  metadata.apk_file_name = ExtractYamlString(yaml, "apkFileName");
+  metadata.min_sdk = ExtractYamlInt(yaml, "minSdkVersion");
+  metadata.target_sdk = ExtractYamlInt(yaml, "targetSdkVersion");
+  metadata.version_code = ExtractYamlInt(yaml, "versionCode");
+  metadata.version_name = ExtractYamlString(yaml, "versionName");
+
+  if (metadata.apk_file_name.empty() || metadata.version_code <= 0 ||
+      metadata.version_name.empty()) {
+    throw std::invalid_argument(
+        "apktool metadata is missing required version fields");
+  }
+
+  return metadata;
+}
+
+std::string BuildInstallId(const ApktoolMetadata& metadata) {
+  return "vc" + std::to_string(metadata.version_code) + "-" +
+         SanitizeInstallSegment(metadata.version_name);
+}
+
+std::string InspectApkPackageName(const std::string& apk_path) {
+  return InspectDecodedApk(apk_path).profile.package_name;
+}
+
+std::string RenderLoadedApkReport(const LoadedApkReport& report) {
+  std::ostringstream output;
+  output << "APK Path: " << report.apk_path << '\n';
+  output << "Package: " << report.manifest_profile.package_name << '\n';
+  output << "Version: " << report.metadata.version_name << " ("
+         << report.metadata.version_code << ")\n";
+  output << "Min SDK: " << report.metadata.min_sdk << '\n';
+  output << "Target SDK: " << report.metadata.target_sdk << '\n';
+  output << "Install ID: " << report.install_id << '\n';
+  output << "Install Root: " << report.install_root << '\n';
+  output << "Earliest package load phase: " << report.assessment.earliest_load_phase
+         << '\n';
+  output << "Earliest settings/UI phase: " << report.assessment.earliest_ui_phase
+         << '\n';
+  output << "Earliest full-use phase: "
+         << report.assessment.earliest_full_use_phase << '\n';
+  return output.str();
+}
+
+LoadedApkReport LoadApkToCompatRoot(const std::string& apk_path,
+                                    const std::string& compat_root) {
+  const fs::path apk = apk_path;
+  const auto inspection = InspectDecodedApk(apk);
 
   PackageInstallRequest install_request{
-      .package_name = profile.package_name,
-      .install_id = BuildInstallId(metadata),
-      .version_code = metadata.version_code,
+      .package_name = inspection.profile.package_name,
+      .install_id = BuildInstallId(inspection.metadata),
+      .version_code = inspection.metadata.version_code,
   };
   const auto layout = BuildPackageLayout(install_request, compat_root);
 
@@ -233,39 +252,47 @@ LoadedApkReport LoadApkToCompatRoot(const std::string& apk_path,
   const fs::path installed_apk_path = fs::path(layout.host_package_root) / "base.apk";
   fs::copy_file(apk, installed_apk_path, fs::copy_options::overwrite_existing);
   WriteTextFile(fs::path(layout.host_package_root) / "AndroidManifest.xml",
-                ReadFile(decode_root / "AndroidManifest.xml"));
+                inspection.manifest_xml);
   WriteTextFile(
       fs::path(layout.host_package_root) / "assessment.txt",
-      RenderManifestAssessmentReport(assessment));
+      RenderManifestAssessmentReport(inspection.assessment));
 
   std::ostringstream metadata_json;
   metadata_json << "{\n"
-                << "  \"package_name\": \"" << EscapeJson(profile.package_name)
+                << "  \"package_name\": \""
+                << EscapeJson(inspection.profile.package_name)
                 << "\",\n"
-                << "  \"version_name\": \"" << EscapeJson(metadata.version_name)
+                << "  \"version_name\": \""
+                << EscapeJson(inspection.metadata.version_name)
                 << "\",\n"
-                << "  \"version_code\": " << metadata.version_code << ",\n"
-                << "  \"min_sdk\": " << metadata.min_sdk << ",\n"
-                << "  \"target_sdk\": " << metadata.target_sdk << ",\n"
+                << "  \"version_code\": " << inspection.metadata.version_code
+                << ",\n"
+                << "  \"min_sdk\": " << inspection.metadata.min_sdk << ",\n"
+                << "  \"target_sdk\": " << inspection.metadata.target_sdk
+                << ",\n"
                 << "  \"install_id\": \"" << EscapeJson(install_request.install_id)
                 << "\",\n"
                 << "  \"launcher_component\": \""
-                << EscapeJson(profile.launcher_activity_name) << "\",\n"
+                << EscapeJson(inspection.profile.launcher_activity_name)
+                << "\",\n"
                 << "  \"earliest_load_phase\": \""
-                << EscapeJson(assessment.earliest_load_phase) << "\",\n"
+                << EscapeJson(inspection.assessment.earliest_load_phase)
+                << "\",\n"
                 << "  \"earliest_ui_phase\": \""
-                << EscapeJson(assessment.earliest_ui_phase) << "\",\n"
+                << EscapeJson(inspection.assessment.earliest_ui_phase)
+                << "\",\n"
                 << "  \"earliest_full_use_phase\": \""
-                << EscapeJson(assessment.earliest_full_use_phase) << "\"\n"
+                << EscapeJson(inspection.assessment.earliest_full_use_phase)
+                << "\"\n"
                 << "}\n";
   WriteTextFile(layout.host_manifest_path, metadata_json.str());
 
   return LoadedApkReport{
       .apk_path = apk_path,
       .install_id = install_request.install_id,
-      .metadata = metadata,
-      .manifest_profile = profile,
-      .assessment = assessment,
+      .metadata = inspection.metadata,
+      .manifest_profile = inspection.profile,
+      .assessment = inspection.assessment,
       .layout = layout,
       .install_root = layout.host_package_root,
   };
