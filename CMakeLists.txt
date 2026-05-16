@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.35
+  VERSION 0.1.36
   LANGUAGES CXX
 )
 
@@ -40,6 +40,7 @@ add_library(
   src/jni_stub.cpp
   src/looper_stub.cpp
   src/native_execute_stub.cpp
+  src/native_input_queue_fixture.cpp
   src/egl_smoke_fixture.cpp
   src/native_window_surface.cpp
   src/wayland_surface_fixture.cpp

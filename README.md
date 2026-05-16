@@ -31,6 +31,7 @@ flowchart TB
     Compatctl --> NativeWayland["P2.1 Real Wayland Surface Fixture"]
     Compatctl --> NativeEgl["P2.2 EGL Smoke Fixture"]
     Compatctl --> NativeBridge["P2.3 ANativeWindow Bridge Fixture"]
+    Compatctl --> NativeInput["P2.4 Focused Input Queue Fixture"]
     Compatctl --> Preflight["Runtime Discovery and Preflight"]
     Compatctl --> Inspector["Package Metadata and Launcher Resolver"]
     Compatctl --> Desktopify["Desktop Artifact Generator"]
@@ -52,12 +53,14 @@ flowchart TB
     NativeBridge --> NativeSurface
     NativeBridge --> NativeWayland
     NativeBridge --> NativeEgl
+    NativeInput --> NativeBridge
     NativeRunner --> NativeStubs["JNI Stub / APK-backed Asset Bridge / Looper Stub / Signal Handler"]
     NativeSurface --> NativeMarker["Headless First-pixel Marker"]
     NativeCallbacks --> NativeCallbackJournal["Window Callback Journal"]
     NativeWayland --> NativeWaylandArtifact["surface-metadata.json"]
     NativeEgl --> NativeEglArtifact["egl-metadata.json"]
     NativeBridge --> NativeBridgeArtifact["native-window-bridge-metadata.json / events.jsonl"]
+    NativeInput --> NativeInputArtifact["native-input-queue-metadata.json / events.jsonl"]
     NativeLifecycle --> NativeStubRunner["Linuxoid-owned Native Entrypoint Stub"]
     NativeExecute --> NativeSession["Truthful Session / Runner Logs / JSON Reports"]
     MachineSurface --> Reports["Reports / Status / Bootstrap Specs"]
@@ -102,6 +105,7 @@ flowchart TB
   NativeWayland --> NativeWaylandProof["Real wl_display / wl_surface Proof"]
   NativeEgl --> NativeEglProof["Real EGL Context / Pbuffer Proof"]
   NativeBridge --> NativeBridgeProof["ANativeWindow Bridge Contract Proof"]
+  NativeInput --> NativeInputProof["Focused Input Queue Contract Proof"]
   NativeStubRunner --> NativeStubProof["Generated Entrypoint Now Calls Native Runner"]
 ```
 
@@ -126,7 +130,7 @@ This diagram is the current working architecture and should stay in sync with th
 
 Linuxoid now treats the phased execution plan as the repo-facing source of truth for the direct-runtime push:
 
-- Current state: scaffold `95/100`, execution `64/100`
+- Current state: scaffold `95/100`, execution `70/100`
 - Current focus: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Critical path: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Browser work is frozen until `P5`
@@ -226,6 +230,7 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
 - A `native-wayland-surface-fixture <session-root> [width] [height]` path that uses the system `wayland-client` library when available to connect to a real `wl_display`, bind `wl_compositor`, create a `wl_surface`, and write a stable `surface-metadata.json` artifact, while still falling back honestly when Wayland is unavailable
 - A `native-egl-smoke-fixture <session-root> [width] [height]` path that uses the system `libEGL` when available to initialize a real EGL display, choose a config, create an OpenGL ES context plus pbuffer surface, and write a stable `egl-metadata.json` artifact, while still falling back honestly when EGL is unavailable
 - A `native-window-bridge-fixture <session-root> [width] [height] [format]` path that exposes a minimal `ANativeWindow` bridge contract with width, height, format, stride, deterministic buffer-geometry updates, stable metadata/event artifacts, and honest probe-only versus headless-fallback reporting
+- A `native-input-queue-fixture <session-root> [width] [height] [format]` path that injects a deterministic focus-acquire plus pointer/key event sequence against the bridge contract, writes stable metadata plus JSONL event artifacts, and reports honest probe-only versus headless-fallback backing without claiming full IME or text composition support
 - Minimal `P1` runtime surfaces for a future direct runner:
   - JNI stub
   - asset-manager stub
@@ -239,6 +244,11 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
   - Linuxoid-owned `ANativeActivityCallbacks` contract
   - created/changed/destroyed window dispatch helpers
   - deterministic callback journal artifact
+- Minimal `P2.4` focused input seams for a future direct runner:
+  - deterministic focus ownership metadata
+  - pointer down/move/up injection journal
+  - keyboard down/up injection journal
+  - explicit note that full IME and text composition are still pending
 - A `launch-waydroid-package` compatibility alias that still launches an already installed app through the Waydroid adapter without requiring an APK reinstall or a hardcoded ADB serial
 - A `desktopify-waydroid-package` path that generates a Linux launcher and `.desktop` entry for an installed Waydroid app
 - A generic `verify-package` path that proves direct Linux launch for an installed package by checking runtime launch, generated host-launch artifacts, and generated launcher execution across backend contracts
@@ -290,7 +300,7 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 
 - The new `launch-package` core path is backend-neutral, but **native Linux execution is still not implemented**.
 - The new `plan-native-spike` core path materializes Linuxoid-owned native launch assets, but **those assets are not executing Android bytecode on Linux yet**.
-- The new `bootstrap-native-spike` and `native-execute-stub` paths now prove Linuxoid can own the local bootstrap surface, `execve` a real child runner, persist truthful session state, stage host-ABI native libraries plus extracted assets/resources, and emit structured JNI/library results, the new `native-first-pixel-fixture` plus `native-window-callback-fixture` prove headless host-surface and callback-marker paths, the `native-wayland-surface-fixture` proves a real optional `wl_display` plus `wl_surface` path, the `native-egl-smoke-fixture` proves a real optional EGL context plus pbuffer path, and the `native-window-bridge-fixture` proves a minimal `ANativeWindow` bridge contract over those seams, but **binding EGL to the real Wayland surface, backing that path with the bridge contract for actual Android drawing, compositor-backed activity callbacks, DEX/ART, Binder, input, and full Android resource-table loading are still pending**.
+- The new `bootstrap-native-spike` and `native-execute-stub` paths now prove Linuxoid can own the local bootstrap surface, `execve` a real child runner, persist truthful session state, stage host-ABI native libraries plus extracted assets/resources, and emit structured JNI/library results, the new `native-first-pixel-fixture` plus `native-window-callback-fixture` prove headless host-surface and callback-marker paths, the `native-wayland-surface-fixture` proves a real optional `wl_display` plus `wl_surface` path, the `native-egl-smoke-fixture` proves a real optional EGL context plus pbuffer path, the `native-window-bridge-fixture` proves a minimal `ANativeWindow` bridge contract over those seams, and the new `native-input-queue-fixture` proves focused pointer/key injection plus stable event artifacts, but **binding EGL to the real Wayland surface, backing that path with the bridge contract for actual Android drawing, compositor-backed activity callbacks, full IME/text composition, DEX/ART, Binder, and full Android resource-table loading are still pending**.
 - The new `native-lifecycle-shim` path proves Linuxoid can own lifecycle/session handoff and service binding artifacts locally, but **it is still a pre-DEX, pre-Binder, pre-graphics scaffold seam**.
 - The current local `com.android.calculator2` APK staged for Linuxoid is **dex-only** and contains no `lib/*.so`, so it currently serves as a negative oracle rather than the literal `P1` gate app.
 - The current live proofs on GitHub are still **runtime-backed**: Waydroid handles the installed-package Linux launch path, and `attached-adb` remains a transition backend plus regression oracle.
@@ -312,8 +322,8 @@ These are the next five highest-value moves from the current state if the goal i
 3. Replace placeholder services with loopback Binder-shaped `package_manager` and `activity_manager`.
    Lifecycle truth, package resolution, and future resolver/storage work all need to move out of the current placeholder service registry.
 
-4. Land Wayland/EGL window proof, then focused input and clipboard.
-   The next user-visible proof after a real native process is still a pixel on screen, followed by focused keyboard/pointer routing and only later text/IME composition.
+4. Bind the current Wayland/EGL probes plus focused input seam into one real native activity surface path.
+   Linuxoid now has separate Wayland, EGL, `ANativeWindow`, and focused input proofs; the next user-visible step is one combined path that lets a native activity observe the same surface and input contract instead of isolated fixtures.
 
 5. Add a deterministic storage manifest and replace the flat `sandbox_root` assumption.
    Linuxoid now has a truthful parent/child bootstrap path; the next filesystem step is to expose distinct guest paths for private data, code cache, app-specific external data, and OBB roots.
@@ -336,7 +346,7 @@ What stays frozen until then:
 
 Why the freeze exists:
 
-- Linuxoid still has only `execution 64/100` on the native path.
+- Linuxoid still has only `execution 70/100` on the native path.
 - `P1 -> P2` is the real blocker for the whole project.
 - Browser work only makes sense after Linuxoid can already host Android UI and app code directly.
 
@@ -381,6 +391,7 @@ ctest --test-dir build --output-on-failure
 ./build/compatctl native-egl-smoke-fixture /tmp/linuxoid-egl-smoke 96 72
 ./build/compatctl native-wayland-surface-fixture /tmp/linuxoid-wayland-surface-smoke 120 90
 ./build/compatctl native-window-bridge-fixture /tmp/linuxoid-native-window-bridge-smoke 44 28 1
+./build/compatctl native-input-queue-fixture /tmp/linuxoid-native-input-queue-smoke 48 32 1
 ./build/compatctl native-window-callback-fixture /tmp/linuxoid-native-window-callback-smoke
 ./build/compatctl verify-apk-host-launch-auto emulator-5590 /path/to/app.apk /tmp/linuxoid-apk-verify /tmp/linuxoid-apk-applications /tmp/linuxoid-apk-launchers
 ./build/compatctl launch-waydroid-package com.android.calculator2

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.36 - 2026-05-17
+
+- Add a minimal `native-input-queue-fixture` contract so Linuxoid now proves focused native-surface ownership, deterministic pointer/key injection, and stable metadata plus JSONL event artifacts without depending on Waydroid, ADB, or an emulator for the native direct-run path.
+- Keep the new input seam honest by reporting probe-only versus headless-fallback backing separately from full IME/text composition, and keep the existing P1/P2 surface, Wayland, EGL, and callback proofs green.
+- Refresh the Mermaid architecture, phased plan, verify examples, and status output so Linuxoid now reports the focused input contract as verified while still marking full IME/text composition, bound Wayland-EGL rendering, DEX/ART, Binder, and Android resource-table work as pending.
+
 ## v0.1.35 - 2026-05-17
 
 - Add a minimal `ANativeWindow` bridge contract over the existing headless, Wayland, and EGL fixture seams so Linuxoid now exposes width, height, format, stride, deterministic buffer-geometry updates, and stable bridge artifacts without pretending full Android rendering is complete.

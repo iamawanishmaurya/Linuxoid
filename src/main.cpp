@@ -4,6 +4,7 @@
 #include "wfa/egl_smoke_fixture.hpp"
 #include "wfa/manifest_assessment.hpp"
 #include "wfa/native_execute_stub.hpp"
+#include "wfa/native_input_queue_fixture.hpp"
 #include "wfa/native_lifecycle.hpp"
 #include "wfa/native_spike.hpp"
 #include "wfa/native_window_surface.hpp"
@@ -41,6 +42,7 @@ void PrintUsage() {
       << "  compatctl native-egl-smoke-fixture <session-root> [width] [height]\n"
       << "  compatctl native-wayland-surface-fixture <session-root> [width] [height]\n"
       << "  compatctl native-window-bridge-fixture <session-root> [width] [height] [format]\n"
+      << "  compatctl native-input-queue-fixture <session-root> [width] [height] [format]\n"
       << "  compatctl native-window-callback-fixture <session-root> [width] [height] [format]\n"
       << "  compatctl discover-runtime <backend>\n"
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
@@ -362,6 +364,24 @@ int main(int argc, char** argv) {
           wfa::RunNativeWindowBridgeFixture(argv[2], metadata);
       std::cout << wfa::RenderNativeWindowBridgeFixtureJson(report);
       return report.native_window_bridge_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-input-queue-fixture") {
+      if (argc < 3 || argc > 6) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      wfa::NativeWindowMetadata metadata{
+          .width = argc >= 4 ? std::stoi(argv[3]) : 64,
+          .height = argc >= 5 ? std::stoi(argv[4]) : 48,
+          .format = argc == 6 ? std::stoi(argv[5])
+                              : wfa::kNativeWindowFormatRgba8888,
+          .stride = argc >= 4 ? std::stoi(argv[3]) : 64,
+      };
+      const auto report = wfa::RunNativeInputQueueFixture(argv[2], metadata);
+      std::cout << wfa::RenderNativeInputQueueFixtureJson(report);
+      return report.input_queue_ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "native-window-callback-fixture") {

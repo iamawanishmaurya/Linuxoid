@@ -1,6 +1,6 @@
 # Linuxoid — Phased Build Plan
 
-> Current state: scaffold `95/100` · execution `64/100`  
+> Current state: scaffold `95/100` · execution `70/100`  
 > Goal: Android apps on Linux. No Waydroid. No ADB. No emulator.
 
 ---
@@ -120,7 +120,7 @@ Duration: 3-4 weeks
 Goal: Calculator renders a real pixel in a Wayland window.  
 Outcome: first visible frame from an Android NDK app on the Linux desktop.
 
-Current repo note as of `2026-05-17`: Linuxoid now has a verified headless `ANativeWindow`-shaped surface fixture that writes a deterministic first-pixel marker, a verified native-activity callback fixture that records ordered `window_created`, `window_changed`, and `window_destroyed` events without a real compositor, a verified real Wayland client surface fixture that can connect to `wl_display` and create a `wl_surface` when Wayland is available, a verified EGL smoke fixture that can initialize a real EGL display plus context plus pbuffer when EGL is available, and a verified minimal `ANativeWindow` bridge contract with deterministic geometry updates and stable artifacts. Binding EGL to the real Wayland surface and backing actual Android drawing through that bridge are still pending.
+Current repo note as of `2026-05-17`: Linuxoid now has a verified headless `ANativeWindow`-shaped surface fixture that writes a deterministic first-pixel marker, a verified native-activity callback fixture that records ordered `window_created`, `window_changed`, and `window_destroyed` events without a real compositor, a verified real Wayland client surface fixture that can connect to `wl_display` and create a `wl_surface` when Wayland is available, a verified EGL smoke fixture that can initialize a real EGL display plus context plus pbuffer when EGL is available, a verified minimal `ANativeWindow` bridge contract with deterministic geometry updates and stable artifacts, and a verified focused input queue fixture with deterministic pointer/key injection plus focus ownership metadata. Binding EGL to the real Wayland surface, routing that bound surface through the bridge contract, and adding full IME/text composition are still pending.
 
 ### Tasks
 
@@ -165,6 +165,7 @@ eglGetDisplay(wl_display)
 - Read input from `libinput` or the smallest suitable Linux input path.
 - Translate to `AInputEvent`.
 - Feed the events through the looper fd.
+- Current repo note: Linuxoid now has a deterministic focused input queue fixture and JSONL event artifacts, but it is still not a real `AInputQueue`, not connected to native activity code yet, and not a full IME/text composition path.
 - Files: `src/input_queue.cpp`
 
 #### P2.6 — Verify Calculator window opens

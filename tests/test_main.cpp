@@ -5,6 +5,7 @@
 #include "wfa/desktop_integration.hpp"
 #include "wfa/egl_smoke_fixture.hpp"
 #include "wfa/manifest_assessment.hpp"
+#include "wfa/native_input_queue_fixture.hpp"
 #include "wfa/native_lifecycle.hpp"
 #include "wfa/native_spike.hpp"
 #include "wfa/native_window_surface.hpp"
@@ -1306,6 +1307,93 @@ void TestNativeWindowBridgeFixtureReportsFallbackHonestly() {
            "expected honest fallback mode when real backing is unavailable");
     Expect(report.exit_reason == "native_window_bridge_ready_headless_fallback",
            "expected fallback bridge exit reason");
+  }
+
+  fs::remove_all(root);
+}
+
+void TestNativeInputQueueFixtureWritesStableArtifacts() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-native-input-queue-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunNativeInputQueueFixture(
+      root.string(),
+      {.width = 48,
+       .height = 32,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 48});
+
+  Expect(report.input_queue_ready, "expected native input queue readiness");
+  Expect(report.focus_owned, "expected focused native input queue");
+  Expect(report.focus_owner == "linuxoid-native-window",
+         "expected deterministic focus owner");
+  Expect(report.width == 56, "expected deterministic input width update");
+  Expect(report.height == 36, "expected deterministic input height update");
+  Expect(report.format == wfa::kNativeWindowFormatRgba8888,
+         "expected input format to remain rgba8888");
+  Expect(report.stride == 56, "expected deterministic input stride update");
+  Expect(report.pointer_events_injected == 3,
+         "expected deterministic pointer event count");
+  Expect(report.key_events_injected == 2,
+         "expected deterministic key event count");
+  Expect(report.artifact_root == root.string(),
+         "expected deterministic input artifact root");
+  Expect(report.metadata_path ==
+             (root / "native-input-queue-metadata.json").string(),
+         "expected deterministic input metadata path");
+  Expect(report.event_log_path ==
+             (root / "native-input-events.jsonl").string(),
+         "expected deterministic input event log path");
+  Expect(fs::exists(report.metadata_path), "expected input metadata artifact");
+  Expect(fs::exists(report.event_log_path), "expected input event log");
+
+  std::ifstream event_input(report.event_log_path);
+  std::string event_log((std::istreambuf_iterator<char>(event_input)),
+                        std::istreambuf_iterator<char>());
+  Expect(event_log.find("\"event_name\": \"focus_acquired\"") !=
+             std::string::npos,
+         "expected focus-acquired event");
+  Expect(event_log.find("\"event_name\": \"pointer_down\"") !=
+             std::string::npos,
+         "expected pointer-down event");
+  Expect(event_log.find("\"event_name\": \"key_up\"") != std::string::npos,
+         "expected key-up event");
+
+  const auto rendered = wfa::RenderNativeInputQueueFixtureJson(report);
+  Expect(rendered.find("\"input_queue_ready\": true") != std::string::npos,
+         "expected input queue ready json flag");
+  Expect(rendered.find("\"metadata_path\": \"" + report.metadata_path + "\"") !=
+             std::string::npos,
+         "expected input metadata path in json");
+
+  fs::remove_all(root);
+}
+
+void TestNativeInputQueueFixtureReportsFallbackHonestly() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-native-input-queue-fallback-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunNativeInputQueueFixture(
+      root.string(),
+      {.width = 36,
+       .height = 24,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 36});
+
+  Expect(report.input_queue_ready,
+         "expected input queue contract to stay testable");
+  if (report.backing_mode == "probe_only_wayland_egl_available") {
+    Expect(report.exit_reason == "native_input_queue_ready_probe_only",
+           "expected probe-only input queue exit reason");
+  } else {
+    Expect(report.backing_mode == "headless_fallback",
+           "expected honest fallback mode for input queue");
+    Expect(report.exit_reason == "native_input_queue_ready_headless_fallback",
+           "expected fallback input queue exit reason");
   }
 
   fs::remove_all(root);
@@ -3383,6 +3471,8 @@ int main() {
     TestEglSmokeFixtureReportsAvailabilityHonestly();
     TestNativeWindowBridgeFixtureWritesStableArtifacts();
     TestNativeWindowBridgeFixtureReportsFallbackHonestly();
+    TestNativeInputQueueFixtureWritesStableArtifacts();
+    TestNativeInputQueueFixtureReportsFallbackHonestly();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

@@ -1079,3 +1079,23 @@
   Action: Updated the README Mermaid graph, verify examples, phased plan, changelog, dependency notes, and status output to reflect the verified `ANativeWindow` bridge contract and the new native execution readiness value.
   Result: Linuxoid now reports `execution 64/100`, documents the bridge contract honestly, and keeps real Android drawing over a bound Wayland plus EGL path clearly marked as the next graphics gate.
   Timestamp: 2026-05-17T01:18:57+05:30
+
+- Step: P2.4 focused input queue inspection
+  Action: Audited the existing `ANativeWindow` bridge, Wayland/EGL fixtures, CLI entrypoints, tests, and status/docs surfaces to place a minimal Linuxoid-owned input queue contract without pulling in runtime-backed input paths.
+  Result: Confirmed a clean insertion point for a new `native-input-queue-fixture` command, deterministic metadata plus JSONL artifacts, and focused pointer/key injection tests while keeping full IME and text composition explicitly out of scope.
+  Timestamp: 2026-05-17T01:33:44+05:30
+
+- Step: P2.4 focused input queue red test
+  Action: Added failing tests for deterministic focus ownership, pointer/key injection counts, stable metadata plus JSONL artifact paths, and honest fallback reporting for a new `native-input-queue-fixture` contract.
+  Result: `cmake --build build` now fails at link time with undefined references to `wfa::RunNativeInputQueueFixture(...)` and `wfa::RenderNativeInputQueueFixtureJson(...)`, confirming the missing implementation seam before any runtime-backed input work is attempted.
+  Timestamp: 2026-05-17T01:35:41+05:30
+
+- Step: P2.4 focused input queue implementation
+  Action: Implemented `src/native_input_queue_fixture.cpp`, wired it into `linuxoid_p1`, exposed `compatctl native-input-queue-fixture`, and built the new contract on top of the existing `ANativeWindow` bridge seam so Linuxoid now writes deterministic focus, pointer, and keyboard artifacts without claiming full IME support.
+  Result: `native-input-queue-fixture /tmp/linuxoid-native-input-queue-smoke 48 32 1` now returns `input_queue_ready: true`, `focus_owner: linuxoid-native-window`, `pointer_events_injected: 3`, `key_events_injected: 2`, and stable metadata/event-log paths under the requested artifact root.
+  Timestamp: 2026-05-17T01:42:07+05:30
+
+- Step: P2.4 focused input queue verification and status sync
+  Action: Re-ran the full build/test gate, refreshed the README Mermaid architecture, phased plan, changelog, and status text, and documented the solved linker gap in `docs/solutions/`.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passes again, Linuxoid now reports `execution 70/100`, and the repo truthfully describes the new focused input queue contract while keeping full IME/text composition, bound Wayland-EGL rendering, DEX/ART, Binder, and richer resources clearly pending.
+  Timestamp: 2026-05-17T01:44:59+05:30
