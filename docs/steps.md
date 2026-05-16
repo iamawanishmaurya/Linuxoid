@@ -1034,3 +1034,23 @@
   Action: Updated the README Mermaid graph, phased plan, changelog, verify examples, and status output to reflect the verified native-window callback fixture and the new native execution readiness value.
   Result: Linuxoid now reports `execution 46/100`, documents the callback journal seam honestly, and keeps real Wayland/EGL surface wiring plus compositor-backed callbacks clearly marked as the next graphics gate.
   Timestamp: 2026-05-17T00:21:44+05:30
+
+- Step: P2.1 real Wayland surface inspection
+  Action: Checked the local toolchain and runtime environment for `wayland-client` support, headers, and an active `WAYLAND_DISPLAY` before scoping the first real Wayland surface slice.
+  Result: Confirmed that the current Linux environment already has `wayland-client`, headers, and a live Wayland session, so Linuxoid can add a real client-surface proof while still keeping a compile-time and runtime fallback path honest.
+  Timestamp: 2026-05-17T00:28:12+05:30
+
+- Step: P2.1 real Wayland surface tests red
+  Action: Added failing tests for a real Wayland surface fixture covering the JSON contract, deterministic metadata path, and honest fallback behavior before implementing the Wayland client surface code.
+  Result: `cmake --build build` now fails at link time because the new Wayland fixture API is declared in the test surface but not implemented or linked yet, giving a clean first red bar for the real Wayland gate.
+  Timestamp: 2026-05-17T00:31:47+05:30
+
+- Step: P2.1 real Wayland surface fixture green
+  Action: Added optional `wayland-client` build detection, implemented a real `wl_display` plus `wl_registry` plus `wl_compositor` plus `wl_surface` fixture path with stable `surface-metadata.json` output, and re-ran the local build plus test gate.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` now passes, and this Linux environment also proves the live Wayland branch with `wayland_available: true`, `surface_created: true`, and `exit_reason: wayland_surface_created`.
+  Timestamp: 2026-05-17T00:37:56+05:30
+
+- Step: P2.1 Wayland status and architecture sync
+  Action: Updated the README Mermaid graph, verify examples, phased plan, changelog, dependency notes, and status output to reflect the verified real Wayland client surface fixture and the new native execution readiness value.
+  Result: Linuxoid now reports `execution 50/100`, documents the real `wl_display` plus `wl_surface` proof honestly, and keeps EGL binding plus `ANativeWindow` backing for the real Wayland path clearly marked as the next graphics gate.
+  Timestamp: 2026-05-17T00:44:31+05:30

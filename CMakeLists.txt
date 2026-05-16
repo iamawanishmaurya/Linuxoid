@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.32
+  VERSION 0.1.33
   LANGUAGES CXX
 )
 
@@ -11,6 +11,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(CTest)
+
+find_path(WAYLAND_CLIENT_INCLUDE_DIR wayland-client.h)
+find_library(WAYLAND_CLIENT_LIBRARY wayland-client)
 
 add_library(
   wfa_core
@@ -36,10 +39,16 @@ add_library(
   src/looper_stub.cpp
   src/native_execute_stub.cpp
   src/native_window_surface.cpp
+  src/wayland_surface_fixture.cpp
   src/signal_handler.cpp
 )
 target_include_directories(linuxoid_p1 PUBLIC include)
 target_link_libraries(linuxoid_p1 PUBLIC dl)
+if(WAYLAND_CLIENT_INCLUDE_DIR AND WAYLAND_CLIENT_LIBRARY)
+  target_include_directories(linuxoid_p1 PRIVATE ${WAYLAND_CLIENT_INCLUDE_DIR})
+  target_link_libraries(linuxoid_p1 PUBLIC ${WAYLAND_CLIENT_LIBRARY})
+  target_compile_definitions(linuxoid_p1 PRIVATE WFA_HAVE_WAYLAND_CLIENT=1)
+endif()
 
 add_executable(compatctl src/main.cpp)
 target_link_libraries(compatctl PRIVATE wfa_core linuxoid_p1)

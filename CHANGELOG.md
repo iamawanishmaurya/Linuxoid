@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.33 - 2026-05-17
+
+- Add an optional real `wayland-client` surface fixture so Linuxoid can connect to `wl_display`, bind `wl_compositor`, create a real `wl_surface`, and write a deterministic `surface-metadata.json` artifact under the requested root.
+- Add the new `native-wayland-surface-fixture` command plus tests that verify the JSON/artifact contract, deterministic metadata paths, and honest fallback behavior when Wayland support is unavailable at build or runtime.
+- Refresh the Mermaid architecture, phased plan, status output, and dependency notes so Linuxoid now reports the real Wayland client surface proof honestly while still marking EGL binding, `ANativeWindow` backing, DEX/ART, Binder, input, and full resources as pending.
+
 ## v0.1.32 - 2026-05-17
 
 - Add a minimal `ANativeActivityCallbacks` contract and a `native-window-callback-fixture` command so Linuxoid can dispatch deterministic `window_created`, `window_changed`, and `window_destroyed` events against the existing headless native-window surface.

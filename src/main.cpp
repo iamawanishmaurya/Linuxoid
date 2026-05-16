@@ -9,6 +9,7 @@
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
+#include "wfa/wayland_surface_fixture.hpp"
 #include "wfa/waydroid_integration.hpp"
 
 #include <cstdlib>
@@ -36,6 +37,7 @@ void PrintUsage() {
       << "  compatctl native-execute-stub <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <package> <launcher-component> <bundle-apk> <sandbox-root> <dex-cache-root> <resource-root> <library-root> <bootstrap-manifest>\n"
       << "  compatctl native-first-pixel-fixture <session-root> [width] [height] [format]\n"
+      << "  compatctl native-wayland-surface-fixture <session-root> [width] [height]\n"
       << "  compatctl native-window-callback-fixture <session-root> [width] [height] [format]\n"
       << "  compatctl discover-runtime <backend>\n"
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
@@ -303,6 +305,23 @@ int main(int argc, char** argv) {
           argv[2], metadata, 0xff336699u);
       std::cout << wfa::RenderFirstPixelFixtureJson(report);
       return report.render_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-wayland-surface-fixture") {
+      if (argc < 3 || argc > 5) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      wfa::NativeWindowMetadata metadata{
+          .width = argc >= 4 ? std::stoi(argv[3]) : 64,
+          .height = argc == 5 ? std::stoi(argv[4]) : 48,
+          .format = wfa::kNativeWindowFormatRgba8888,
+          .stride = argc >= 4 ? std::stoi(argv[3]) : 64,
+      };
+      const auto report = wfa::RunWaylandSurfaceFixture(argv[2], metadata);
+      std::cout << wfa::RenderWaylandSurfaceFixtureJson(report);
+      return report.surface_created ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "native-window-callback-fixture") {

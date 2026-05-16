@@ -10,6 +10,7 @@
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
+#include "wfa/wayland_surface_fixture.hpp"
 #include "wfa/waydroid_integration.hpp"
 
 #include <cstdlib>
@@ -1071,6 +1072,77 @@ void TestHeadlessNativeWindowCallbackFixtureWritesJournal() {
          "expected callbacks-ready json flag");
   Expect(rendered.find("\"callback_journal_path\":") != std::string::npos,
          "expected callback journal path in fixture json");
+
+  fs::remove_all(root);
+}
+
+void TestWaylandSurfaceFixtureWritesDeterministicMetadata() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-wayland-surface-fixture-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunWaylandSurfaceFixture(
+      root.string(),
+      {.width = 96,
+       .height = 72,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 96});
+
+  Expect(report.width == 96, "expected wayland fixture width");
+  Expect(report.height == 72, "expected wayland fixture height");
+  Expect(report.artifact_root == root.string(),
+         "expected deterministic wayland artifact root");
+  Expect(report.surface_metadata_path ==
+             (root / "surface-metadata.json").string(),
+         "expected deterministic wayland metadata path");
+  Expect(fs::exists(report.surface_metadata_path),
+         "expected wayland metadata artifact");
+
+  const auto rendered = wfa::RenderWaylandSurfaceFixtureJson(report);
+  Expect(rendered.find("\"artifact_root\": \"" + root.string() + "\"") !=
+             std::string::npos,
+         "expected wayland artifact root in json");
+  Expect(rendered.find("\"surface_metadata_path\": \"" +
+                           report.surface_metadata_path + "\"") !=
+             std::string::npos,
+         "expected wayland metadata path in json");
+
+  fs::remove_all(root);
+}
+
+void TestWaylandSurfaceFixtureReportsAvailabilityHonestly() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-wayland-availability-test";
+  fs::remove_all(root);
+
+  const auto report = wfa::RunWaylandSurfaceFixture(
+      root.string(),
+      {.width = 64,
+       .height = 48,
+       .format = wfa::kNativeWindowFormatRgba8888,
+       .stride = 64});
+
+  if (!wfa::WaylandClientSupportCompiled()) {
+    Expect(!report.wayland_available,
+           "expected unavailable wayland when support is not compiled");
+    Expect(!report.surface_created,
+           "expected no surface when support is not compiled");
+    Expect(report.exit_reason == "wayland_client_unavailable",
+           "expected unavailable build fallback reason");
+  } else if (!report.wayland_available) {
+    Expect(!report.surface_created,
+           "expected no surface when runtime wayland is unavailable");
+    Expect(report.exit_reason == "wayland_display_unavailable" ||
+               report.exit_reason == "wayland_compositor_unavailable",
+           "expected honest runtime wayland fallback reason");
+  } else {
+    Expect(report.surface_created,
+           "expected surface creation when wayland is available");
+    Expect(report.exit_reason == "wayland_surface_created",
+           "expected created surface reason");
+  }
 
   fs::remove_all(root);
 }
@@ -3141,6 +3213,8 @@ int main() {
     TestHeadlessNativeWindowSurfaceTracksMetadataAndLifecycle();
     TestHeadlessFirstPixelFixtureWritesDeterministicMarker();
     TestHeadlessNativeWindowCallbackFixtureWritesJournal();
+    TestWaylandSurfaceFixtureWritesDeterministicMetadata();
+    TestWaylandSurfaceFixtureReportsAvailabilityHonestly();
     TestNativeLifecycleShimWritesSessionArtifacts();
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();

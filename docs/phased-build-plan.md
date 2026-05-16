@@ -1,6 +1,6 @@
 # Linuxoid — Phased Build Plan
 
-> Current state: scaffold `95/100` · execution `46/100`  
+> Current state: scaffold `95/100` · execution `50/100`  
 > Goal: Android apps on Linux. No Waydroid. No ADB. No emulator.
 
 ---
@@ -120,7 +120,7 @@ Duration: 3-4 weeks
 Goal: Calculator renders a real pixel in a Wayland window.  
 Outcome: first visible frame from an Android NDK app on the Linux desktop.
 
-Current repo note as of `2026-05-17`: Linuxoid now has a verified headless `ANativeWindow`-shaped surface fixture that writes a deterministic first-pixel marker and a verified native-activity callback fixture that records ordered `window_created`, `window_changed`, and `window_destroyed` events without a real compositor. Real Wayland/EGL surface wiring and compositor-backed callbacks are still pending.
+Current repo note as of `2026-05-17`: Linuxoid now has a verified headless `ANativeWindow`-shaped surface fixture that writes a deterministic first-pixel marker, a verified native-activity callback fixture that records ordered `window_created`, `window_changed`, and `window_destroyed` events without a real compositor, and a verified real Wayland client surface fixture that can connect to `wl_display` and create a `wl_surface` when Wayland is available. EGL wiring and `ANativeWindow` backing for the real surface path are still pending.
 
 ### Tasks
 
