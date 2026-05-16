@@ -659,3 +659,8 @@
   Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, reran `./build/compatctl foundation`, reran `./build/compatctl plan-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, and inspected the generated `/tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/native-plan.json`.
   Result: The build and tests are green, the status now reports `95/100`, the foundation text includes the native planner slice, and the Calculator bootstrap spec proves Linuxoid can now materialize a no-runtime execution plan for a real simple app candidate.
   Timestamp: 2026-05-16T15:44:23+05:30
+
+- Step: Native spike release preparation
+  Action: Staged the native spike planner slice, confirmed the full staged set with `git status`, and created the feature commit `feat: add native spike planner`.
+  Result: Linuxoid now has a clean release candidate commit for the native planner slice, ready to be tagged and pushed as `v0.1.19`.
+  Timestamp: 2026-05-16T15:45:20+05:30
