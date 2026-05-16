@@ -341,7 +341,14 @@ NativeActivityBootstrap BuildNativeActivityBootstrap(
   bootstrap.execution_engine_ready = false;
 
   std::ostringstream command;
-  command << QuoteForShell(compatctl_path) << " native-lifecycle-shim "
+  command << QuoteForShell(compatctl_path) << " native-execute-stub "
+          << QuoteForShell(plan.assessment.package_name) << " "
+          << QuoteForShell(plan.assessment.launcher_component) << " "
+          << QuoteForShell(plan.bundle_apk_path) << " "
+          << QuoteForShell(plan.sandbox_root) << " "
+          << QuoteForShell(plan.dex_cache_root) << " "
+          << QuoteForShell(plan.resource_root) << " "
+          << QuoteForShell(plan.library_root) << " "
           << QuoteForShell(bootstrap.bootstrap_manifest_path);
   bootstrap.command_line = command.str();
 
@@ -475,9 +482,9 @@ std::string RenderNativeActivityBootstrapReport(
          << (bootstrap.execution_engine_ready ? "yes" : "no") << '\n';
   output << "Bootstrap Report: " << bootstrap.report_path << '\n';
   output << "Next Steps:\n";
-  output << "  - Hand the bootstrap manifest to the Linuxoid lifecycle and service shim.\n";
+  output << "  - Execute the bootstrap manifest through Linuxoid's native runner.\n";
   output << "  - Attach DEX/class loading to the native entrypoint.\n";
-  output << "  - Replace the stub with real Linux execution.\n";
+  output << "  - Expand the runner beyond the first native fixture and missing-library checks.\n";
   return output.str();
 }
 

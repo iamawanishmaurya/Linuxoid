@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.26 - 2026-05-16
+
+- Add the first real `P1` native-runner slice with a dedicated `native_execute_stub.cpp`, minimal JNI/asset/looper/signal-handler surfaces, `dlopen`-based library discovery, `ANativeActivity_onCreate` resolution, and a five-second watchdog gate.
+- Switch the generated native bootstrap entrypoint from `native-lifecycle-shim` to `native-execute-stub`, and add fixture-based tests that prove the runner reaches `ANativeActivity_onCreate` and exits `0`.
+- Document the current local Calculator APK as a dex-only negative oracle, update the phased plan and README to reflect the fixture-backed `P1` proof, and record the new status split as `scaffold 95/100, execution 20/100`.
+
 ## v0.1.25 - 2026-05-16
 
 - Add `docs/phased-build-plan.md` as the repo-facing source of truth for the direct-execution roadmap from `P0 Freeze & Triage` through `P6 Polish + Release`.

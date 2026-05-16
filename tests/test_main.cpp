@@ -11,6 +11,7 @@
 #include "wfa/waydroid_integration.hpp"
 
 #include <cstdlib>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -24,6 +25,36 @@ void Expect(bool condition, const std::string& message) {
   if (!condition) {
     throw std::runtime_error(message);
   }
+}
+
+std::string ReadCommandOutput(const std::string& command, int* exit_code) {
+  const std::string wrapped = command + " 2>&1";
+  FILE* pipe = popen(wrapped.c_str(), "r");
+  if (pipe == nullptr) {
+    throw std::runtime_error("unable to open pipe for command: " + command);
+  }
+
+  std::string output;
+  char buffer[256];
+  while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+    output += buffer;
+  }
+
+  const int status = pclose(pipe);
+  if (exit_code != nullptr) {
+    *exit_code = status;
+  }
+  return output;
+}
+
+std::filesystem::path ResolveBuildDirFromTestBinary() {
+  namespace fs = std::filesystem;
+  std::error_code error;
+  const fs::path self = fs::read_symlink("/proc/self/exe", error);
+  if (error || self.empty()) {
+    throw std::runtime_error("unable to resolve test binary path");
+  }
+  return self.parent_path();
 }
 
 void TestWeightedCheckpointProgress() {
@@ -675,8 +706,13 @@ void TestNativeActivityBootstrapWritesArtifacts() {
   std::ifstream entrypoint_input(bootstrap.entrypoint_script_path);
   std::string entrypoint((std::istreambuf_iterator<char>(entrypoint_input)),
                          std::istreambuf_iterator<char>());
-  Expect(entrypoint.find("native-lifecycle-shim") != std::string::npos,
-         "expected native lifecycle shim in entrypoint script");
+  Expect(entrypoint.find("native-execute-stub") != std::string::npos,
+         "expected native execute stub in entrypoint script");
+  Expect(entrypoint.find(plan.assessment.package_name) != std::string::npos,
+         "expected package name in entrypoint script");
+  Expect(entrypoint.find(plan.assessment.launcher_component) !=
+             std::string::npos,
+         "expected launcher component in entrypoint script");
   Expect(entrypoint.find(bootstrap.bootstrap_manifest_path) !=
              std::string::npos,
          "expected bootstrap manifest path in entrypoint script");
@@ -793,6 +829,100 @@ void TestNativeLifecycleShimWritesSessionArtifacts() {
          "expected lifecycle handoff line");
   Expect(rendered.find("Execution Engine Ready: no") != std::string::npos,
          "expected lifecycle execution readiness line");
+
+  fs::remove_all(root);
+}
+
+void TestNativeExecuteStubReportsMissingNativeLibraryPayload() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-p1-missing-lib-test";
+  fs::remove_all(root);
+  fs::create_directories(root / "sandbox");
+  fs::create_directories(root / "dex-cache");
+  fs::create_directories(root / "resources");
+  fs::create_directories(root / "lib");
+  {
+    std::ofstream apk(root / "base.apk");
+    apk << "fake apk\n";
+  }
+  {
+    std::ofstream manifest(root / "activity-bootstrap.json");
+    manifest << "{}\n";
+  }
+
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const std::string command =
+      (build_dir / "compatctl").string() +
+      " native-execute-stub com.android.calculator2 com.android.calculator2/.Calculator " +
+      (root / "base.apk").string() + " " + (root / "sandbox").string() + " " +
+      (root / "dex-cache").string() + " " + (root / "resources").string() +
+      " " + (root / "lib").string() + " " +
+      (root / "activity-bootstrap.json").string();
+
+  int status = 0;
+  const std::string output = ReadCommandOutput(command, &status);
+
+  Expect(WIFEXITED(status), "expected command to exit normally");
+  Expect(WEXITSTATUS(status) == 2,
+         "expected missing native library path to exit 2");
+  Expect(output.find("No native library candidates found") !=
+             std::string::npos,
+         "expected missing native library message");
+
+  fs::remove_all(root);
+}
+
+void TestNativeExecuteStubRunsFixtureNativeActivity() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-p1-fixture-test";
+  fs::remove_all(root);
+  fs::create_directories(root / "sandbox");
+  fs::create_directories(root / "dex-cache");
+  fs::create_directories(root / "resources");
+  fs::create_directories(root / "lib");
+  {
+    std::ofstream apk(root / "base.apk");
+    apk << "fixture apk\n";
+  }
+  {
+    std::ofstream manifest(root / "activity-bootstrap.json");
+    manifest << "{}\n";
+  }
+
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path fixture_library = build_dir / "liblinuxoid_p1_fixture.so";
+  Expect(fs::exists(fixture_library),
+         "expected linuxoid p1 fixture library to exist");
+  fs::copy_file(fixture_library, root / "lib" / "libcalculator.so",
+                fs::copy_options::overwrite_existing);
+
+  const std::string command =
+      (build_dir / "compatctl").string() +
+      " native-execute-stub com.android.calculator2 com.android.calculator2/.Calculator " +
+      (root / "base.apk").string() + " " + (root / "sandbox").string() + " " +
+      (root / "dex-cache").string() + " " + (root / "resources").string() +
+      " " + (root / "lib").string() + " " +
+      (root / "activity-bootstrap.json").string();
+
+  int status = 0;
+  const std::string output = ReadCommandOutput(command, &status);
+
+  Expect(WIFEXITED(status), "expected fixture command to exit normally");
+  Expect(WEXITSTATUS(status) == 0,
+         "expected fixture native execute path to exit 0");
+  Expect(output.find("[p1] dlopen OK:") != std::string::npos,
+         "expected dlopen success line");
+  Expect(output.find("[p1] entrypoint found: ANativeActivity_onCreate") !=
+             std::string::npos,
+         "expected native entrypoint line");
+  Expect(output.find("[p1] calling ANativeActivity_onCreate") !=
+             std::string::npos,
+         "expected native call line");
+  Expect(output.find("[p1] watchdog: 5s elapsed, clean exit") !=
+             std::string::npos,
+         "expected watchdog clean-exit line");
 
   fs::remove_all(root);
 }
@@ -2500,6 +2630,8 @@ int main() {
     TestNativeLaunchPlanBuildsBundleLayout();
     TestNativeActivityBootstrapWritesArtifacts();
     TestNativeLifecycleShimWritesSessionArtifacts();
+    TestNativeExecuteStubReportsMissingNativeLibraryPayload();
+    TestNativeExecuteStubRunsFixtureNativeActivity();
     TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();
     TestDesktopLaunchArtifactsForImeApp();

@@ -1,5 +1,7 @@
 # Linuxoid P0 Stub Audit
 
+Historical note: this audit captures the baseline before the first `P1` native-runner slice landed. Some entries below are now partially resolved in later releases.
+
 This document maps the current native-execution blockers that Linuxoid must clear before `P1 NDK Execution Core` can honestly begin.
 
 ## Scope

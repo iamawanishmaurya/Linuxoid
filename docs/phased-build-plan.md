@@ -62,6 +62,8 @@ Outcome: the first real Android code runs on Linux without Waydroid or ADB.
 
 Calculator is the fastest path to direct execution because it is a pure native foreground target. Linuxoid does not need DEX, Java, or ART to start proving the execution core.
 
+Current repo note as of `2026-05-16`: the local staged `com.android.calculator2` APK in this workspace is dex-only and contains no `lib/*.so`, so Linuxoid is using it as a negative oracle while the first runner slice is verified against a fixture native library.
+
 ### Tasks
 
 #### P1.1 — Extract + `dlopen` native `.so`

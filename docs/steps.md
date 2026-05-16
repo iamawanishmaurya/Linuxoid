@@ -804,3 +804,38 @@
   Action: Rebuilt Linuxoid with `cmake --build build`, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, and reran `./build/compatctl foundation` after the phased-plan, P0 audit, and status wording changes.
   Result: The build is green, tests pass again, and the CLI now reports `scaffold 95/100` plus `execution 0/100` with `P0 -> P2` as the active critical path.
   Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: P1 target APK reality check
+  Action: Inspected `/tmp/linuxoid-native-calculator.apk`, the current Calculator bootstrap manifest, and the generated native entrypoint to validate the literal `P1` gate assumptions before writing code.
+  Result: The staged Calculator APK on disk contains `classes.dex` and resources but no `lib/*.so`, so it cannot satisfy the exact `dlopen(libcalculator.so)` path as written; Linuxoid will use it as a negative oracle while building the native runner against a fixture library first.
+  Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: P1 red-bar test setup
+  Action: Added a native fixture shared library plus new `P1` tests for the missing-library negative case and the future native-entry success path, then rebuilt and ran `ctest --test-dir build --output-on-failure`.
+  Result: The tests fail at `expected missing native library message`, which is the correct red bar showing that `native-execute-stub` still behaves like a generic scaffold instead of a real native runner.
+  Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: P1 runner first build failure
+  Action: Compiled the first native-runner implementation with `cmake --build build` and captured the compiler error before making any fix.
+  Result: The build stopped in `src/native_execute_stub.cpp` because the watchdog lambda uses `std::cout` without including `<iostream>`, which is now logged as a concrete problem instead of being fixed silently.
+  Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: P1 runner compile recovery
+  Action: Added the missing `<iostream>` include to `src/native_execute_stub.cpp`, documented the fix in `docs/solutions/native-execute-runner-missing-iostream-include.md`, and rebuilt Linuxoid.
+  Result: The native-runner slice now compiles cleanly again, which clears the way for the real behavioral verification pass.
+  Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: P1 bootstrap-entrypoint contract mismatch
+  Action: Ran `ctest --test-dir build --output-on-failure` after switching the generated bootstrap script to `native-execute-stub` and captured the next failing assertion before changing any tests.
+  Result: The suite now fails at `expected native lifecycle shim in entrypoint script`, which confirms the older bootstrap test was still bound to the pre-P1 entrypoint contract.
+  Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: P1 runner proof and repo refresh
+  Action: Updated the stale bootstrap test to the new runner contract, reran the build and test suite, manually verified the current Calculator bootstrap path now fails with `No native library candidates found`, manually verified the fixture path reaches `ANativeActivity_onCreate` and the five-second watchdog gate, and refreshed the README, phased plan, status text, and release metadata around that exact state.
+  Result: Linuxoid now has a real first `P1` native runner with fixture-backed proof, a truthful negative oracle for the current dex-only Calculator APK, and GitHub-facing docs that describe `execution 20/100` instead of pretending the native path is still purely hypothetical.
+  Timestamp: 2026-05-16T16:17:54+05:30
+
+- Step: P1 final verification
+  Action: Rebuilt Linuxoid, reran `ctest --test-dir build --output-on-failure`, reran `./build/compatctl status`, reran `./build/compatctl foundation`, regenerated the real Calculator bootstrap with `./build/compatctl bootstrap-native-spike /tmp/linuxoid-native-calculator.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike`, and executed the generated `launch-native-activity.sh`.
+  Result: The suite is green, the CLI now reports `execution 20/100`, the generated bootstrap entrypoint points at `native-execute-stub`, the current Calculator artifact fails honestly with `No native library candidates found`, and the fixture-backed native runner remains the live `P1` success proof.
+  Timestamp: 2026-05-16T16:17:54+05:30

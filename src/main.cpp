@@ -2,6 +2,7 @@
 #include "wfa/apk_loader.hpp"
 #include "wfa/desktop_integration.hpp"
 #include "wfa/manifest_assessment.hpp"
+#include "wfa/native_execute_stub.hpp"
 #include "wfa/native_lifecycle.hpp"
 #include "wfa/native_spike.hpp"
 #include "wfa/package_layout.hpp"
@@ -233,32 +234,17 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
       }
 
-      namespace fs = std::filesystem;
-      const std::string package_name = argv[2];
-      const std::string launcher_component = argv[3];
-      const std::string bundle_apk = argv[4];
-      const std::string sandbox_root = argv[5];
-      const std::string dex_cache_root = argv[6];
-      const std::string resource_root = argv[7];
-      const std::string library_root = argv[8];
-      const std::string bootstrap_manifest = argv[9];
-
-      std::cout << "Package: " << package_name << '\n';
-      std::cout << "Launcher Component: " << launcher_component << '\n';
-      std::cout << "Bundle APK: " << bundle_apk << '\n';
-      std::cout << "Sandbox Root: " << sandbox_root << '\n';
-      std::cout << "DEX Cache Root: " << dex_cache_root << '\n';
-      std::cout << "Resource Root: " << resource_root << '\n';
-      std::cout << "Library Root: " << library_root << '\n';
-      std::cout << "Bootstrap Manifest: " << bootstrap_manifest << '\n';
-      std::cout << "Bundle Present: "
-                << (fs::exists(bundle_apk) ? "yes" : "no") << '\n';
-      std::cout << "Bootstrap Manifest Present: "
-                << (fs::exists(bootstrap_manifest) ? "yes" : "no") << '\n';
-      std::cout << "Execution Engine Ready: no\n";
-      std::cout
-          << "Result: Linuxoid owns the native bootstrap path here, but DEX/class execution is not implemented yet.\n";
-      return 2;
+      const auto report = wfa::ExecuteNativeStub(
+          {.package_name = argv[2],
+           .launcher_component = argv[3],
+           .bundle_apk_path = argv[4],
+           .sandbox_root = argv[5],
+           .dex_cache_root = argv[6],
+           .resource_root = argv[7],
+           .library_root = argv[8],
+           .bootstrap_manifest_path = argv[9]});
+      std::cout << report.output;
+      return report.exit_code;
     }
 
     if (command == "discover-runtime") {
