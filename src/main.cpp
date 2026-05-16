@@ -4,6 +4,7 @@
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
+#include "wfa/waydroid_integration.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -24,6 +25,7 @@ void PrintUsage() {
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl launch-activity <serial> <component>\n"
       << "  compatctl launch-waydroid-package <package>\n"
+      << "  compatctl verify-waydroid-package <package> [desktop-entry-root] [launcher-root]\n"
       << "  compatctl adb-ime-status <serial> <package> <ime-id> [settings-component]\n"
       << "  compatctl provision-ime <serial> <apk-path> <package> <ime-id> [settings-component]\n"
       << "  compatctl desktopify-apk <serial> <apk-path> <component> [compat-root] [desktop-entry-root] [launcher-root]\n"
@@ -154,6 +156,30 @@ int main(int argc, char** argv) {
       const auto report = wfa::LaunchWaydroidApp(argv[2]);
       std::cout << wfa::RenderWaydroidAppLaunchReport(report);
       return report.launch_ok ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "verify-waydroid-package") {
+      if (argc < 3 || argc > 5) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const std::string desktop_root =
+          argc >= 4 ? argv[3] : DefaultDesktopEntryRoot();
+      const std::string launcher_root =
+          argc == 5 ? argv[4]
+                    : (argc >= 4 ? argv[3] : DefaultLauncherRoot());
+      const auto report = wfa::VerifyWaydroidPackage(
+          {.app_name = argv[2],
+           .package_name = argv[2],
+           .compatctl_path = compatctl_path,
+           .desktop_root = desktop_root,
+           .launcher_root = launcher_root});
+      std::cout << wfa::RenderWaydroidPackageVerificationReport(report);
+      return report.direct_launch_ok && report.launcher_generation_ok &&
+                     report.generated_launcher_ok
+                 ? EXIT_SUCCESS
+                 : EXIT_FAILURE;
     }
 
     if (command == "provision-ime") {

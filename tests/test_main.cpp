@@ -5,6 +5,7 @@
 #include "wfa/package_layout.hpp"
 #include "wfa/project_status.hpp"
 #include "wfa/runtime_bridge.hpp"
+#include "wfa/waydroid_integration.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -36,8 +37,8 @@ void TestPhaseProgressAverage() {
   const auto phases = wfa::BuildDefaultPhases();
 
   Expect(phases.size() == 6, "expected six implementation phases");
-  Expect(wfa::CalculateAveragePhaseProgress(phases) == 87,
-         "expected average phase progress to equal 87");
+  Expect(wfa::CalculateAveragePhaseProgress(phases) == 88,
+         "expected average phase progress to equal 88");
 }
 
 void TestPackageLayoutBuildsExpectedPaths() {
@@ -84,7 +85,7 @@ void TestStatusRenderingContainsLoadingBars() {
 
   Expect(report.find("Phase Loading") != std::string::npos,
          "expected phase loading heading");
-  Expect(report.find("87/100") != std::string::npos,
+  Expect(report.find("88/100") != std::string::npos,
          "expected average phase progress in report");
   Expect(report.find("70/100") != std::string::npos,
          "expected weighted checkpoint progress in report");
@@ -925,6 +926,55 @@ void TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage() {
   Expect(threw, "expected invalid waydroid package names to be rejected");
 }
 
+void TestWaydroidPackageVerificationSuccessPath() {
+  const auto runtime_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "waydroid app launch com.android.calculator2") {
+      return {0, ""};
+    }
+    throw std::runtime_error("unexpected runtime command in waydroid verification test");
+  };
+
+  const auto launcher_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command.find("com.android.calculator2.sh") != std::string::npos) {
+      return {0, ""};
+    }
+    throw std::runtime_error("unexpected launcher command in waydroid verification test");
+  };
+
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-waydroid-verify";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path compatctl_path = root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  const auto report = wfa::VerifyWaydroidPackageWithRunners(
+      {.app_name = "Calculator",
+       .package_name = "com.android.calculator2",
+       .compatctl_path = compatctl_path.string(),
+       .desktop_root = (root / "applications").string(),
+       .launcher_root = (root / "launchers").string()},
+      runtime_runner, launcher_runner);
+
+  Expect(report.direct_launch_ok, "expected direct waydroid launch success");
+  Expect(report.launcher_generation_ok,
+         "expected launcher generation success");
+  Expect(report.generated_launcher_ok,
+         "expected generated launcher execution success");
+
+  const auto rendered = wfa::RenderWaydroidPackageVerificationReport(report);
+  Expect(rendered.find("Verification Loading: [##########] 100/100") !=
+             std::string::npos,
+         "expected full verification loading");
+  Expect(rendered.find("Generated Launcher OK: yes") != std::string::npos,
+         "expected generated launcher success line");
+
+  fs::remove_all(root);
+}
+
 void TestImeProvisioningSuccessPath() {
   std::vector<std::string> commands;
 
@@ -1211,6 +1261,7 @@ int main() {
     TestWaydroidAppLaunchReportRendering();
     TestWaydroidDesktopLaunchArtifacts();
     TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage();
+    TestWaydroidPackageVerificationSuccessPath();
     TestImeProvisioningSuccessPath();
     TestImeProvisioningNormalizesFullyQualifiedImeIdForWaydroidStyleMutation();
     TestImeProvisioningDetectsIncompleteActivation();

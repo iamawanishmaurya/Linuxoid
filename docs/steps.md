@@ -355,7 +355,22 @@
   Result: Linuxoid now has a verified non-IME installed-package launch path on live Waydroid, and the project status advanced to `87/100` overall with checkpoint gates at `70/100`.
   Timestamp: 2026-05-16T10:36:56+05:30
 
+- Step: Direct-on-Linux mini-matrix expansion
+  Action: Used the new `verify-waydroid-package` command to verify direct Linux launch for `com.android.calculator2`, `com.android.settings`, and `org.fdroid.fdroid` on live Waydroid.
+  Result: Linuxoid now has a repeatable direct-on-Linux verification path for multiple installed Android apps, not just a single golden non-IME example.
+  Timestamp: 2026-05-16T10:45:28+05:30
+
 - Step: Linuxoid v0.1.8 release and publish
   Action: Staged the Waydroid-native installed-package launcher slice, committed it as `feat: add Waydroid package launch path`, tagged `v0.1.8`, and pushed both `main` and the new tag to the Linuxoid GitHub remote.
   Result: The new non-IME Waydroid launch capability is now published and versioned on GitHub as `v0.1.8`.
   Timestamp: 2026-05-16T10:38:05+05:30
+
+- Step: Direct-on-Linux verification surface sync
+  Action: Updated the tests, README, changelog, and release version metadata to match the new `verify-waydroid-package` command and the multi-app Waydroid verification proof.
+  Result: Linuxoid's status math, public docs, and next release metadata now reflect the repeatable direct-on-Linux verification path and the `88/100` overall progress target.
+  Timestamp: 2026-05-16T11:08:12+05:30
+
+- Step: Direct-on-Linux live verification rerun
+  Action: Rebuilt Linuxoid, reran the test suite, confirmed the `88/100` status output, and reran `verify-waydroid-package` on live Waydroid for `com.android.calculator2`, `com.android.settings`, and `org.fdroid.fdroid`.
+  Result: Linuxoid now has a repeatable, freshly re-verified direct Linux launch proof for three installed Android apps, with each app passing all three verification checks at `100/100`.
+  Timestamp: 2026-05-16T11:13:49+05:30

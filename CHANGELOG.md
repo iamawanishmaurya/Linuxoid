@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.9 - 2026-05-16
+
+- Add `verify-waydroid-package` so Linuxoid can prove a direct Linux launch path for an installed Waydroid app through three checks: runtime launch, launcher generation, and generated launcher execution.
+- Verify the new direct-on-Linux path on live Waydroid with `com.android.calculator2`, `com.android.settings`, and `org.fdroid.fdroid`.
+- Raise verified project loading to `88/100` while keeping checkpoint gates at `70/100`.
+
 ## v0.1.8 - 2026-05-16
 
 - Add `launch-waydroid-package` so Linuxoid can launch installed non-IME apps on Waydroid without requiring APK reinstall or hardcoded component selection.
