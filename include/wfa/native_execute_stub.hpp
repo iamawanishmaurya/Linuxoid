@@ -6,6 +6,14 @@
 
 namespace wfa {
 
+struct JniOnLoadResult {
+  std::string library_path;
+  bool symbol_present = false;
+  bool call_succeeded = false;
+  int return_code = 0;
+  std::string status;
+};
+
 struct NativeExecuteRequest {
   std::string package_name;
   std::string launcher_component;
@@ -37,12 +45,17 @@ struct NativeExecuteReport {
   int exit_code = 1;
   std::string selected_library_path;
   std::vector<std::string> candidate_library_paths;
+  std::vector<std::string> libraries_loaded;
+  std::vector<JniOnLoadResult> jni_onload_results;
+  std::string working_directory;
+  std::string exit_reason;
   std::string output;
 };
 
 std::vector<std::string> BuildNativeLibraryCandidates(
     const std::string& library_root);
 NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request);
+std::string RenderNativeExecuteReportJson(const NativeExecuteReport& report);
 
 }  // namespace wfa
 

@@ -23,7 +23,7 @@ flowchart TB
     Compatctl --> Loader["APK Loader and Manifest Assessor"]
     Compatctl --> NativePlanner["Native Spike Planner"]
     Compatctl --> NativeBootstrap["Native Activity Bootstrap"]
-    Compatctl --> NativeProcess["Native Process Bootstrap"]
+    Compatctl --> NativeExecute["P1 Native Execute Bootstrap"]
     Compatctl --> NativeLifecycle["Native Lifecycle and Service Shim"]
     Compatctl --> NativeRunner["P1 Native Execution Runner"]
     Compatctl --> Preflight["Runtime Discovery and Preflight"]
@@ -37,12 +37,12 @@ flowchart TB
     NativePlanner --> CompatRoot
     NativePlanner --> NativeBundle["Native Bundle Layout and Bootstrap Spec"]
     NativeBootstrap --> NativeBundle
-    NativeBootstrap --> NativeProcess
-    NativeProcess --> NativeLifecycle
-    NativeProcess --> NativeRunner
+    NativeBootstrap --> NativeExecute
+    NativeExecute --> NativeLifecycle
+    NativeExecute --> NativeRunner
     NativeRunner --> NativeStubs["JNI Stub / Asset Stub / Looper Stub / Signal Handler"]
     NativeLifecycle --> NativeStubRunner["Linuxoid-owned Native Entrypoint Stub"]
-    NativeProcess --> NativeSession["Truthful Session / Runner Logs"]
+    NativeExecute --> NativeSession["Truthful Session / Runner Logs / JSON Reports"]
     MachineSurface --> Reports["Reports / Status / Bootstrap Specs"]
     Preflight --> Runtime
     Inspector --> Runtime
@@ -104,7 +104,7 @@ This diagram is the current working architecture and should stay in sync with th
 
 Linuxoid now treats the phased execution plan as the repo-facing source of truth for the direct-runtime push:
 
-- Current state: scaffold `95/100`, execution `20/100`
+- Current state: scaffold `95/100`, execution `28/100`
 - Current focus: `P0 Freeze & Triage`
 - Critical path: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Browser work is frozen until `P5`
@@ -196,8 +196,9 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
 - A `plan-native-spike` path that stages a local APK into a compat root, assesses whether it fits the first native app slice, writes a Linuxoid-owned bundle layout, and emits a bootstrap spec for future no-runtime execution
 - A `bootstrap-native-spike` path that turns a native candidate into a Linuxoid-owned bootstrap manifest, environment script, entrypoint stub, and bootstrap report
 - A `native-lifecycle-shim` path that consumes the bootstrap manifest, creates deterministic lifecycle session artifacts, and now keeps pre-launch activity/process state truthful instead of claiming `RESUMED` before a process exists
-- A `native-process-bootstrap` path that forks a child native runner, writes runner logs plus structured session state, and turns the bootstrap manifest into a real parent/child execution handoff
-- A `native-execute-stub` path that now scans a bundle library root, tries native-library candidates with `dlopen`, resolves `ANativeActivity_onCreate`, installs crash logging, and keeps the process alive to the first five-second gate
+- A `native-execute-stub <bootstrap-manifest>` path that now owns the public Linuxoid native bootstrap surface, forks and `execve`s a controlled child runner, sets deterministic cwd plus Linuxoid-only environment variables, closes inherited file descriptors, and emits structured JSON for harnesses and replay tooling
+- A `native-process-bootstrap` compatibility alias that still resolves the same parent bootstrap flow for older local automation while the public entrypoint stays on `native-execute-stub`
+- A `native-execute-stub <package> ...` runner path that now scans a bundle library root, loads `.so` files in deterministic order, calls `JNI_OnLoad` when present, resolves `ANativeActivity_onCreate`, installs crash logging, and keeps the process alive to the first five-second gate
 - Minimal `P1` runtime surfaces for a future direct runner:
   - JNI stub
   - asset-manager stub
@@ -222,10 +223,10 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
 - A live attached-ADB proof that `verify-package-matrix` now passes `3/3` for `com.android.settings`, `com.android.calculator2`, and `org.fdroid.fdroid` without explicit components
 - A live local-APK proof that `plan-native-spike` now accepts Calculator as a native candidate, writes a native bundle plan, and emits a bootstrap spec with no blockers
 - A live local-Linux proof that `native-lifecycle-shim` creates Calculator session artifacts, keeps the pre-launch state at `NOT_CREATED`, and exposes the first Linuxoid-owned service bindings
-- A live local-Linux proof that the current dex-only Calculator bundle now fails honestly with `No native library candidates found` instead of pretending the missing execution core is generic
-- A live local-Linux proof that `native-execute-stub` now loads a fixture shared library, resolves `ANativeActivity_onCreate`, reaches the five-second watchdog gate, and exits `0`
-- A local test-backed proof that `native-process-bootstrap` forks the fixture runner, writes `runner.log` plus `session.json`, records `entrypoint_found=true`, and exits `0`
-- A generated native bootstrap entrypoint that now calls `native-process-bootstrap` instead of jumping straight to `native-execute-stub`
+- A live local-Linux proof that the current dex-only Calculator bundle now returns a structured soft failure with `exit_reason = no_native_libraries_found` instead of pretending the missing execution core is generic
+- A live local-Linux proof that `native-execute-stub` now loads a fixture shared library, calls `JNI_OnLoad`, resolves `ANativeActivity_onCreate`, reaches the five-second watchdog gate, and exits `0`
+- A local test-backed proof that `native-execute-stub <bootstrap-manifest>` forks the fixture runner, writes `runner.log` plus `runner-report.json`, records `jni_onload_results`, and exits `0`
+- A generated native bootstrap entrypoint that now calls `native-execute-stub <bootstrap-manifest>` instead of routing through a text-only parent shim
 - A local test suite that verifies the first scaffold behavior
 
 ## Current External Dependencies
@@ -246,8 +247,8 @@ Linuxoid does **not** yet run Android apps natively on Linux by itself. The curr
 
 - The new `launch-package` core path is backend-neutral, but **native Linux execution is still not implemented**.
 - The new `plan-native-spike` core path materializes Linuxoid-owned native launch assets, but **those assets are not executing Android bytecode on Linux yet**.
-- The new `bootstrap-native-spike`, `native-process-bootstrap`, and `native-execute-stub` paths now prove Linuxoid can own the local bootstrap surface, fork a real child runner, and persist truthful session state, but **real Android app execution still needs native library staging, crash-driven stub expansion, and then graphics/DEX integration**.
-- The new `native-lifecycle-shim` path proves Linuxoid can own lifecycle/session handoff and service binding artifacts locally, but **it is still a pre-DEX, pre-graphics scaffold seam**.
+- The new `bootstrap-native-spike` and `native-execute-stub` paths now prove Linuxoid can own the local bootstrap surface, `execve` a real child runner, persist truthful session state, and emit structured JNI/library results, but **DEX/ART, graphics, Binder, input, and full resource loading are still pending**.
+- The new `native-lifecycle-shim` path proves Linuxoid can own lifecycle/session handoff and service binding artifacts locally, but **it is still a pre-DEX, pre-Binder, pre-graphics scaffold seam**.
 - The current local `com.android.calculator2` APK staged for Linuxoid is **dex-only** and contains no `lib/*.so`, so it currently serves as a negative oracle rather than the literal `P1` gate app.
 - The current live proofs on GitHub are still **runtime-backed**: Waydroid handles the installed-package Linux launch path, and `attached-adb` remains a transition backend plus regression oracle.
 - `attached-adb` is now part of the core contract with target-side launcher and metadata lookup, but it is still not the final goal.
@@ -292,7 +293,7 @@ What stays frozen until then:
 
 Why the freeze exists:
 
-- Linuxoid still has only `execution 20/100` on the native path.
+- Linuxoid still has only `execution 28/100` on the native path.
 - `P1 -> P2` is the real blocker for the whole project.
 - Browser work only makes sense after Linuxoid can already host Android UI and app code directly.
 
@@ -331,7 +332,7 @@ ctest --test-dir build --output-on-failure
 ./build/compatctl plan-native-spike /path/to/app.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike
 ./build/compatctl bootstrap-native-spike /path/to/app.apk /tmp/linuxoid-native-compat /tmp/linuxoid-native-spike
 ./build/compatctl native-lifecycle-shim /tmp/linuxoid-native-spike/packages/com.example.app/vc1/bootstrap/activity-bootstrap.json
-./build/compatctl native-process-bootstrap /tmp/linuxoid-native-spike/packages/com.example.app/vc1/bootstrap/activity-bootstrap.json
+./build/compatctl native-execute-stub /tmp/linuxoid-native-spike/packages/com.example.app/vc1/bootstrap/activity-bootstrap.json
 ./build/compatctl native-execute-stub com.example.app com.example.app/.MainActivity /tmp/linuxoid-native-spike/packages/com.example.app/vc1/bundle/base.apk /tmp/linuxoid-native-spike/packages/com.example.app/vc1/sandbox /tmp/linuxoid-native-spike/packages/com.example.app/vc1/dex-cache /tmp/linuxoid-native-spike/packages/com.example.app/vc1/resources /tmp/linuxoid-native-spike/packages/com.example.app/vc1/lib /tmp/linuxoid-native-spike/packages/com.example.app/vc1/bootstrap/activity-bootstrap.json
 ./build/compatctl verify-apk-host-launch-auto emulator-5590 /path/to/app.apk /tmp/linuxoid-apk-verify /tmp/linuxoid-apk-applications /tmp/linuxoid-apk-launchers
 ./build/compatctl launch-waydroid-package com.android.calculator2

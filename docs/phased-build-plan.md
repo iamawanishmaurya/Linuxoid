@@ -1,6 +1,6 @@
 # Linuxoid — Phased Build Plan
 
-> Current state: scaffold `95/100` · execution `0/100`  
+> Current state: scaffold `95/100` · execution `28/100`  
 > Goal: Android apps on Linux. No Waydroid. No ADB. No emulator.
 
 ---
@@ -359,7 +359,7 @@ P0 (audit)
 
 - Native execution still is not implemented; `P1` fixes that.
 - `plan-native-spike` materializes assets but does not execute app code; `P1` and `P2` address that gap.
-- `bootstrap-native-spike`, `native-process-bootstrap`, and `native-execute-stub` now own the local bootstrap and child-runner surface, but they remain pre-graphics and pre-DEX until `P1.6` and beyond.
+- `bootstrap-native-spike` and `native-execute-stub` now own the local bootstrap and child-runner surface with deterministic cwd, Linuxoid-only environment variables, fd hygiene, and structured JNI reporting, but they remain pre-graphics, pre-DEX/ART, pre-Binder, pre-input, and pre-resource-loading until `P1.6` and beyond.
 - `native-lifecycle-shim` owns truthful pre-launch session handoff and process-state artifacts, but it remains a scaffold seam until `P2.4`.
 - Waydroid and attached ADB remain regression oracles through `P0-P4`.
 - All new commands must remain MCP- and harness-compatible: machine-readable output, stable artifact paths, and composable verification.

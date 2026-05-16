@@ -32,6 +32,7 @@ void PrintUsage() {
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl native-lifecycle-shim <bootstrap-manifest>\n"
       << "  compatctl native-process-bootstrap <bootstrap-manifest>\n"
+      << "  compatctl native-execute-stub <bootstrap-manifest>\n"
       << "  compatctl native-execute-stub <package> <launcher-component> <bundle-apk> <sandbox-root> <dex-cache-root> <resource-root> <library-root> <bootstrap-manifest>\n"
       << "  compatctl discover-runtime <backend>\n"
       << "  compatctl preflight-runtime <backend> [serial] [package] [component]\n"
@@ -61,6 +62,14 @@ std::string ReadFile(const std::string& path) {
   std::ostringstream buffer;
   buffer << input.rdbuf();
   return buffer.str();
+}
+
+void WriteFile(const std::string& path, const std::string& contents) {
+  std::ofstream output(path);
+  if (!output) {
+    throw std::runtime_error("unable to open file for write: " + path);
+  }
+  output << contents;
 }
 
 std::string ResolveCompatctlPath(const char* argv0) {
@@ -237,11 +246,18 @@ int main(int argc, char** argv) {
 
       const auto lifecycle =
           wfa::RunNativeProcessBootstrapFromManifest(argv[2]);
-      std::cout << wfa::RenderNativeLifecycleShimReport(lifecycle);
+      std::cout << wfa::RenderNativeProcessBootstrapJson(lifecycle);
       return lifecycle.exit_code == -1 ? EXIT_FAILURE : lifecycle.exit_code;
     }
 
     if (command == "native-execute-stub") {
+      if (argc == 3) {
+        const auto lifecycle =
+            wfa::RunNativeProcessBootstrapFromManifest(argv[2]);
+        std::cout << wfa::RenderNativeProcessBootstrapJson(lifecycle);
+        return lifecycle.exit_code == -1 ? EXIT_FAILURE : lifecycle.exit_code;
+      }
+
       if (argc != 10) {
         PrintUsage();
         return EXIT_FAILURE;
@@ -256,7 +272,14 @@ int main(int argc, char** argv) {
            .resource_root = argv[7],
            .library_root = argv[8],
            .bootstrap_manifest_path = argv[9]});
-      std::cout << report.output;
+      const std::string json = wfa::RenderNativeExecuteReportJson(report);
+      if (const char* report_path = std::getenv("LINUXOID_RUNNER_REPORT_PATH");
+          report_path != nullptr && *report_path != '\0') {
+        WriteFile(report_path, json);
+        std::cout << report.output;
+      } else {
+        std::cout << json;
+      }
       return report.exit_code;
     }
 

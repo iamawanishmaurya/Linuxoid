@@ -706,8 +706,8 @@ void TestNativeActivityBootstrapWritesArtifacts() {
   std::ifstream entrypoint_input(bootstrap.entrypoint_script_path);
   std::string entrypoint((std::istreambuf_iterator<char>(entrypoint_input)),
                          std::istreambuf_iterator<char>());
-  Expect(entrypoint.find("native-process-bootstrap") != std::string::npos,
-         "expected native process bootstrap in entrypoint script");
+  Expect(entrypoint.find("native-execute-stub") != std::string::npos,
+         "expected native execute stub in entrypoint script");
   Expect(entrypoint.find(plan.assessment.package_name) != std::string::npos,
          "expected package name in entrypoint script");
   Expect(entrypoint.find(bootstrap.bootstrap_manifest_path) !=
@@ -909,7 +909,7 @@ void TestNativeProcessBootstrapRunsFixtureAndWritesSessionState() {
                 fs::copy_options::overwrite_existing);
 
   const std::string command =
-      compatctl_path.string() + " native-process-bootstrap " +
+      compatctl_path.string() + " native-execute-stub " +
       bootstrap.bootstrap_manifest_path;
 
   int status = 0;
@@ -918,19 +918,26 @@ void TestNativeProcessBootstrapRunsFixtureAndWritesSessionState() {
   Expect(WIFEXITED(status), "expected bootstrap command to exit normally");
   Expect(WEXITSTATUS(status) == 0,
          "expected fixture native process bootstrap to exit 0");
-  Expect(output.find("Process State: EXITED") != std::string::npos,
-         "expected exited process state in bootstrap report");
-  Expect(output.find("Execution Engine Ready: yes") != std::string::npos,
-         "expected execution readiness in bootstrap report");
+  Expect(output.find("\"execution_engine_ready\": true") != std::string::npos,
+         "expected execution readiness in bootstrap json");
+  Expect(output.find("\"libraries_loaded\": [") != std::string::npos,
+         "expected libraries array in bootstrap json");
+  Expect(output.find("\"jni_onload_results\": [") != std::string::npos,
+         "expected jni results in bootstrap json");
+  Expect(output.find("\"runner_report_path\":") != std::string::npos,
+         "expected runner report path in bootstrap json");
 
   const fs::path session_root =
       fs::path(plan.package_root) / "lifecycle" / (plan.assessment.install_id + "-default");
   const fs::path session_manifest = session_root / "session.json";
   const fs::path runner_log = session_root / "runner.log";
+  const fs::path runner_report = session_root / "runner-report.json";
   Expect(fs::exists(session_manifest),
          "expected session manifest after process bootstrap");
   Expect(fs::exists(runner_log),
          "expected runner log after process bootstrap");
+  Expect(fs::exists(runner_report),
+         "expected runner report after process bootstrap");
 
   std::ifstream session_input(session_manifest);
   std::string session((std::istreambuf_iterator<char>(session_input)),
@@ -941,16 +948,32 @@ void TestNativeProcessBootstrapRunsFixtureAndWritesSessionState() {
          "expected zero exit code in session manifest");
   Expect(session.find("\"entrypoint_found\": true") != std::string::npos,
          "expected entrypoint flag in session manifest");
+  Expect(session.find("\"exit_reason\": \"native_activity_completed\"") !=
+             std::string::npos,
+         "expected exit reason in session manifest");
 
   std::ifstream runner_input(runner_log);
   std::string runner((std::istreambuf_iterator<char>(runner_input)),
                      std::istreambuf_iterator<char>());
-  Expect(runner.find("[p1] entrypoint found: ANativeActivity_onCreate") !=
+  Expect(runner.find("[p1] entrypoint found: ANativeActivity_onCreate in") !=
              std::string::npos,
          "expected native runner entrypoint line in log");
+  Expect(runner.find("[fixture] JNI_OnLoad invoked") != std::string::npos,
+         "expected fixture jni onload line in log");
   Expect(runner.find("[p1] watchdog: 5s elapsed, clean exit") !=
              std::string::npos,
          "expected native runner watchdog line in log");
+
+  std::ifstream runner_report_input(runner_report);
+  std::string runner_report_text(
+      (std::istreambuf_iterator<char>(runner_report_input)),
+      std::istreambuf_iterator<char>());
+  Expect(runner_report_text.find("\"jni_onload_results\": [") !=
+             std::string::npos,
+         "expected jni results in runner report");
+  Expect(runner_report_text.find("\"working_directory\":") !=
+             std::string::npos,
+         "expected working directory in runner report");
 
   fs::remove_all(root);
 }
@@ -986,11 +1009,16 @@ void TestNativeExecuteStubReportsMissingNativeLibraryPayload() {
   const std::string output = ReadCommandOutput(command, &status);
 
   Expect(WIFEXITED(status), "expected command to exit normally");
-  Expect(WEXITSTATUS(status) == 2,
-         "expected missing native library path to exit 2");
-  Expect(output.find("No native library candidates found") !=
+  Expect(WEXITSTATUS(status) == 0,
+         "expected missing native library path to exit 0 as a soft failure");
+  Expect(output.find("\"execution_engine_ready\": false") !=
              std::string::npos,
-         "expected missing native library message");
+         "expected false execution readiness for missing-library case");
+  Expect(output.find("\"exit_reason\": \"no_native_libraries_found\"") !=
+             std::string::npos,
+         "expected missing native library exit reason");
+  Expect(output.find("\"libraries_loaded\": []") != std::string::npos,
+         "expected empty libraries list");
 
   fs::remove_all(root);
 }
@@ -1034,17 +1062,21 @@ void TestNativeExecuteStubRunsFixtureNativeActivity() {
   Expect(WIFEXITED(status), "expected fixture command to exit normally");
   Expect(WEXITSTATUS(status) == 0,
          "expected fixture native execute path to exit 0");
-  Expect(output.find("[p1] dlopen OK:") != std::string::npos,
-         "expected dlopen success line");
-  Expect(output.find("[p1] entrypoint found: ANativeActivity_onCreate") !=
+  Expect(output.find("\"execution_engine_ready\": true") !=
              std::string::npos,
-         "expected native entrypoint line");
-  Expect(output.find("[p1] calling ANativeActivity_onCreate") !=
+         "expected execution readiness for fixture run");
+  Expect(output.find("\"libraries_loaded\": [") != std::string::npos,
+         "expected loaded libraries in fixture json");
+  Expect(output.find("libcalculator.so") != std::string::npos,
+         "expected calculator fixture library in output json");
+  Expect(output.find("\"status\": \"called\"") != std::string::npos,
+         "expected called jni onload result");
+  Expect(output.find("\"entrypoint_found\": true") !=
              std::string::npos,
-         "expected native call line");
-  Expect(output.find("[p1] watchdog: 5s elapsed, clean exit") !=
+         "expected entrypoint flag in fixture json");
+  Expect(output.find("\"activity_called\": true") !=
              std::string::npos,
-         "expected watchdog clean-exit line");
+         "expected activity flag in fixture json");
 
   fs::remove_all(root);
 }

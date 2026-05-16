@@ -25,8 +25,10 @@ struct NativeLifecycleShim {
   std::string report_path;
   std::string runner_log_path;
   std::string runner_report_path;
+  std::string runner_report_json;
   std::string current_activity_state;
   std::string process_state;
+  std::string exit_reason;
   std::string failure_reason;
   std::string selected_library_path;
   std::vector<NativeServiceBinding> services;
@@ -49,6 +51,8 @@ NativeLifecycleShim RunNativeProcessBootstrap(
 NativeLifecycleShim RunNativeProcessBootstrapFromManifest(
     const std::string& bootstrap_manifest_path);
 std::string RenderNativeLifecycleShimReport(
+    const NativeLifecycleShim& lifecycle);
+std::string RenderNativeProcessBootstrapJson(
     const NativeLifecycleShim& lifecycle);
 
 }  // namespace wfa

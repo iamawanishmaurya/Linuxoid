@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.28
+  VERSION 0.1.29
   LANGUAGES CXX
 )
 

@@ -341,7 +341,7 @@ NativeActivityBootstrap BuildNativeActivityBootstrap(
   bootstrap.execution_engine_ready = false;
 
   std::ostringstream command;
-  command << QuoteForShell(compatctl_path) << " native-process-bootstrap "
+  command << QuoteForShell(compatctl_path) << " native-execute-stub "
           << QuoteForShell(bootstrap.bootstrap_manifest_path);
   bootstrap.command_line = command.str();
 

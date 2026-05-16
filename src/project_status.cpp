@@ -67,7 +67,7 @@ std::string RenderProjectStatusReport() {
   output << "Language: C++\n";
   output << "Runtime Strategy: backend-neutral attached Android targets on the path to a native Linux compatibility layer\n";
   output << "Scaffold Readiness: " << RenderLoadingBar(phase_progress) << "\n";
-  output << "Native Execution Readiness: " << RenderLoadingBar(20) << "\n";
+  output << "Native Execution Readiness: " << RenderLoadingBar(28) << "\n";
   output << "Execution Focus: P0 Freeze & Triage -> P1 NDK Execution Core -> P2 Window + Graphics\n";
   output << "Legacy Scaffold Phases:\n";
 
@@ -106,10 +106,10 @@ std::string DescribeMvpFoundation() {
   output << "Chosen Language: C++\n";
   output << "Alternative: Rust for later helper services\n";
   output << "Runtime Direction: backend-neutral attached Android targets on the path to a native Linux compatibility layer\n";
-  output << "Current State: scaffold 95/100, execution 20/100\n";
+  output << "Current State: scaffold 95/100, execution 28/100\n";
   output << "Execution Focus: P0 Freeze & Triage -> P1 NDK Execution Core -> P2 Window + Graphics\n";
-  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, backend-neutral installed-package launch plus target discovery/preflight, attached-target package inspection and launcher resolution, Linux desktop launch artifacts with repeatable generic per-app, matrix, and APK-backed verification, the first native spike planner that writes a Linuxoid-owned bundle layout and bootstrap spec for simple APKs, a Linuxoid-owned native bootstrap surface that emits a manifest, env script, and local entrypoint stub, the first lifecycle/service shim that turns that bootstrap into deterministic session artifacts and service bindings, and the first real native runner that scans a library root, calls dlopen, resolves ANativeActivity_onCreate, and holds the process open to the five-second gate for fixture validation.\n";
-  output << "Execution Baseline: the FUTO keyboard APK still returns Ready for typing: yes through runtime-backed verification, attached-ADB still verifies a live Settings, Calculator, and F-Droid matrix, Calculator passes `plan-native-spike` with a real native bundle plan and no blockers, the generated Linuxoid-native lifecycle shim now runs locally with `Lifecycle Handoff Ready: yes`, the dex-only Calculator bundle now fails honestly with `No native library candidates found`, and the new native runner now passes the five-second gate against a fixture shared library that exports ANativeActivity_onCreate.\n";
+  output << "Current Slice: checkpoint engine, package layout planner, manifest/runtime assessor, runtime bridges, backend-neutral installed-package launch plus target discovery/preflight, attached-target package inspection and launcher resolution, Linux desktop launch artifacts with repeatable generic per-app, matrix, and APK-backed verification, the first native spike planner that writes a Linuxoid-owned bundle layout and bootstrap spec for simple APKs, a Linuxoid-owned native bootstrap surface that emits a manifest, env script, and local entrypoint stub, the first lifecycle/service shim that turns that bootstrap into deterministic session artifacts and service bindings, and a hardened native runner that now `execve`s a controlled child process, sets deterministic cwd plus Linuxoid-only environment variables, closes inherited file descriptors, loads native libraries in deterministic order, calls `JNI_OnLoad`, and emits structured JSON for harnesses.\n";
+  output << "Execution Baseline: the FUTO keyboard APK still returns Ready for typing: yes through runtime-backed verification, attached-ADB still verifies a live Settings, Calculator, and F-Droid matrix, Calculator passes `plan-native-spike` with a real native bundle plan and no blockers, the generated Linuxoid-native lifecycle shim now runs locally with `Lifecycle Handoff Ready: yes`, the dex-only Calculator bundle now fails honestly with structured `no_native_libraries_found` output, and the hardened native runner now passes the five-second gate against a fixture shared library that exports both `JNI_OnLoad` and `ANativeActivity_onCreate`.\n";
   output << "Why: this keeps the scaffold useful while turning the first direct-execution slice into something measurable instead of hypothetical.\n";
   return output.str();
 }

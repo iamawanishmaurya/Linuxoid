@@ -954,3 +954,18 @@
   Action: Reran `ctest --test-dir build --output-on-failure` and `./build/compatctl status` after the README, phased-plan, changelog, and version updates for the native process bootstrap slice.
   Result: The suite is still green, and Linuxoid still reports scaffold `95/100`, native execution `20/100`, and checkpoint gates `70/100` after the documentation refresh.
   Timestamp: 2026-05-16T21:31:28+05:30
+
+- Step: P1 hardening inspection
+  Action: Re-read the current `native-execute-stub`, `native-process-bootstrap`, lifecycle/session code, bootstrap entrypoint generation, fixture library, and native tests to align the next implementation slice with the stricter P1 contract.
+  Result: Confirmed that Linuxoid already has a parent/child bootstrap seam, but the public entrypoint, JNI_OnLoad reporting, deterministic child environment, fd hygiene, and structured JSON contract still need to be hardened around `compatctl native-execute-stub`.
+  Timestamp: 2026-05-16T22:39:02+05:30
+
+- Step: P1 native bootstrap hardening green
+  Action: Hardened `compatctl native-execute-stub` so it now accepts a bootstrap manifest as the public parent entrypoint, forks and `execve`s a controlled child runner with deterministic cwd and Linuxoid-only environment variables, closes inherited file descriptors, loads `.so` libraries in deterministic order, calls `JNI_OnLoad` when present, writes a structured runner report, and emits machine-readable JSON from the parent bootstrap path.
+  Result: `cmake --build build` and `ctest --test-dir build --output-on-failure` both pass, including updated fixture-backed gate coverage for JNI_OnLoad success, bootstrap-session artifact persistence, and soft-failure JSON when no native libraries are present.
+  Timestamp: 2026-05-16T23:03:32+05:30
+
+- Step: P1 native bootstrap docs and status refresh
+  Action: Updated the README Mermaid architecture, current-state bullets, phased build plan, changelog, and project-status output so GitHub now reflects the hardened `native-execute-stub` contract, the compatibility alias role of `native-process-bootstrap`, the honest `execution 28/100` status, and the still-pending DEX/ART, Binder, graphics, input, and full resource work.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` still passes after the status and documentation refresh, and `./build/compatctl status` now reports `Native Execution Readiness: 28/100`.
+  Timestamp: 2026-05-16T23:10:21+05:30

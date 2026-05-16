@@ -16,6 +16,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace wfa {
 
@@ -72,6 +73,35 @@ std::string ExtractJsonString(const std::string& json,
                              key);
   }
   return match[1].str();
+}
+
+std::string ExtractJsonArrayLiteral(const std::string& json,
+                                    const std::string& key) {
+  const std::string token = "\"" + key + "\"";
+  const std::size_t key_position = json.find(token);
+  if (key_position == std::string::npos) {
+    throw std::runtime_error("unable to extract array field from json: " +
+                             key);
+  }
+
+  const std::size_t array_start = json.find('[', key_position);
+  if (array_start == std::string::npos) {
+    throw std::runtime_error("unable to locate array start in json: " + key);
+  }
+
+  int depth = 0;
+  for (std::size_t index = array_start; index < json.size(); ++index) {
+    if (json[index] == '[') {
+      ++depth;
+    } else if (json[index] == ']') {
+      --depth;
+      if (depth == 0) {
+        return json.substr(array_start, index - array_start + 1);
+      }
+    }
+  }
+
+  throw std::runtime_error("unterminated array in json: " + key);
 }
 
 bool ExtractJsonBool(const std::string& json, const std::string& key) {
@@ -191,6 +221,8 @@ void WriteLifecycleArtifacts(const NativeLifecycleShim& lifecycle) {
                    << ",\n"
                    << "  \"selected_library_path\": \""
                    << EscapeJson(lifecycle.selected_library_path) << "\",\n"
+                   << "  \"exit_reason\": \""
+                   << EscapeJson(lifecycle.exit_reason) << "\",\n"
                    << "  \"failure_reason\": \""
                    << EscapeJson(lifecycle.failure_reason) << "\",\n"
                    << "  \"runner_log_path\": \""
@@ -232,60 +264,6 @@ void WriteLifecycleArtifacts(const NativeLifecycleShim& lifecycle) {
                 RenderNativeLifecycleShimReport(lifecycle));
 }
 
-NativeExecuteRequest BuildNativeExecuteRequest(
-    const NativeActivityBootstrap& bootstrap) {
-  return {.package_name = bootstrap.plan.assessment.package_name,
-          .launcher_component = bootstrap.plan.assessment.launcher_component,
-          .bundle_apk_path = bootstrap.plan.bundle_apk_path,
-          .sandbox_root = bootstrap.plan.sandbox_root,
-          .dex_cache_root = bootstrap.plan.dex_cache_root,
-          .resource_root = bootstrap.plan.resource_root,
-          .library_root = bootstrap.plan.library_root,
-          .bootstrap_manifest_path = bootstrap.bootstrap_manifest_path};
-}
-
-void WriteNativeExecuteReportFile(const fs::path& path,
-                                  const NativeExecuteReport& report) {
-  std::ostringstream output;
-  output << "{\n"
-         << "  \"package_name\": \"" << EscapeJson(report.package_name)
-         << "\",\n"
-         << "  \"launcher_component\": \""
-         << EscapeJson(report.launcher_component) << "\",\n"
-         << "  \"bundle_apk_path\": \"" << EscapeJson(report.bundle_apk_path)
-         << "\",\n"
-         << "  \"sandbox_root\": \"" << EscapeJson(report.sandbox_root)
-         << "\",\n"
-         << "  \"dex_cache_root\": \"" << EscapeJson(report.dex_cache_root)
-         << "\",\n"
-         << "  \"resource_root\": \"" << EscapeJson(report.resource_root)
-         << "\",\n"
-         << "  \"library_root\": \"" << EscapeJson(report.library_root)
-         << "\",\n"
-         << "  \"bootstrap_manifest_path\": \""
-         << EscapeJson(report.bootstrap_manifest_path) << "\",\n"
-         << "  \"bundle_present\": "
-         << (report.bundle_present ? "true" : "false") << ",\n"
-         << "  \"bootstrap_manifest_present\": "
-         << (report.bootstrap_manifest_present ? "true" : "false")
-         << ",\n"
-         << "  \"native_library_found\": "
-         << (report.native_library_found ? "true" : "false") << ",\n"
-         << "  \"dlopen_ok\": " << (report.dlopen_ok ? "true" : "false")
-         << ",\n"
-         << "  \"entrypoint_found\": "
-         << (report.entrypoint_found ? "true" : "false") << ",\n"
-         << "  \"activity_called\": "
-         << (report.activity_called ? "true" : "false") << ",\n"
-         << "  \"execution_engine_ready\": "
-         << (report.execution_engine_ready ? "true" : "false") << ",\n"
-         << "  \"exit_code\": " << report.exit_code << ",\n"
-         << "  \"selected_library_path\": \""
-         << EscapeJson(report.selected_library_path) << "\"\n"
-         << "}\n";
-  WriteTextFile(path, output.str());
-}
-
 NativeExecuteReport ReadNativeExecuteReportFile(const fs::path& path) {
   const std::string json = ReadFile(path);
   NativeExecuteReport report;
@@ -311,6 +289,8 @@ NativeExecuteReport ReadNativeExecuteReportFile(const fs::path& path) {
   report.exit_code = ExtractJsonInt(json, "exit_code");
   report.selected_library_path =
       ExtractJsonString(json, "selected_library_path");
+  report.working_directory = ExtractJsonString(json, "working_directory");
+  report.exit_reason = ExtractJsonString(json, "exit_reason");
   return report;
 }
 
@@ -323,6 +303,7 @@ void ApplyNativeExecuteReport(NativeLifecycleShim& lifecycle,
   lifecycle.execution_engine_ready = report.execution_engine_ready;
   lifecycle.selected_library_path = report.selected_library_path;
   lifecycle.exit_code = report.exit_code;
+  lifecycle.exit_reason = report.exit_reason;
   if (report.activity_called) {
     lifecycle.current_activity_state = "CREATED";
   }
@@ -334,6 +315,111 @@ void ApplyNativeExecuteReport(NativeLifecycleShim& lifecycle,
 
 int OpenRunnerLog(const std::string& path) {
   return open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+}
+
+void CloseExtraFileDescriptors() {
+  std::error_code error;
+  const fs::path proc_fd("/proc/self/fd");
+  if (fs::exists(proc_fd, error)) {
+    std::vector<int> fds_to_close;
+    for (const auto& entry : fs::directory_iterator(proc_fd, error)) {
+      if (error) {
+        break;
+      }
+      const std::string name = entry.path().filename().string();
+      try {
+        const int descriptor = std::stoi(name);
+        if (descriptor > STDERR_FILENO) {
+          fds_to_close.push_back(descriptor);
+        }
+      } catch (...) {
+      }
+    }
+    for (const int descriptor : fds_to_close) {
+      close(descriptor);
+    }
+    if (!error) {
+      return;
+    }
+  }
+
+  const long open_max = sysconf(_SC_OPEN_MAX);
+  const int fallback_max = open_max > 0 ? static_cast<int>(open_max) : 256;
+  for (int descriptor = STDERR_FILENO + 1; descriptor < fallback_max;
+       ++descriptor) {
+    close(descriptor);
+  }
+}
+
+std::vector<std::string> BuildChildArguments(
+    const std::string& compatctl_path,
+    const NativeActivityBootstrap& bootstrap) {
+  return {
+      compatctl_path,
+      "native-execute-stub",
+      bootstrap.plan.assessment.package_name,
+      bootstrap.plan.assessment.launcher_component,
+      bootstrap.plan.bundle_apk_path,
+      bootstrap.plan.sandbox_root,
+      bootstrap.plan.dex_cache_root,
+      bootstrap.plan.resource_root,
+      bootstrap.plan.library_root,
+      bootstrap.bootstrap_manifest_path,
+  };
+}
+
+std::vector<std::string> BuildChildEnvironment(
+    const NativeLifecycleShim& lifecycle,
+    const NativeActivityBootstrap& bootstrap) {
+  return {
+      "PATH=/usr/bin:/bin",
+      "HOME=" + bootstrap.plan.sandbox_root,
+      "PWD=" + bootstrap.plan.sandbox_root,
+      "LD_LIBRARY_PATH=" + bootstrap.plan.library_root,
+      "LINUXOID_PACKAGE_NAME=" + bootstrap.plan.assessment.package_name,
+      "LINUXOID_INSTALL_ID=" + bootstrap.plan.assessment.install_id,
+      "LINUXOID_LAUNCHER_COMPONENT=" +
+          bootstrap.plan.assessment.launcher_component,
+      "LINUXOID_BUNDLE_APK=" + bootstrap.plan.bundle_apk_path,
+      "LINUXOID_SANDBOX_ROOT=" + bootstrap.plan.sandbox_root,
+      "LINUXOID_DEX_CACHE_ROOT=" + bootstrap.plan.dex_cache_root,
+      "LINUXOID_RESOURCE_ROOT=" + bootstrap.plan.resource_root,
+      "LINUXOID_LIBRARY_ROOT=" + bootstrap.plan.library_root,
+      "LINUXOID_BOOTSTRAP_MANIFEST=" + bootstrap.bootstrap_manifest_path,
+      "LINUXOID_RUNNER_REPORT_PATH=" + lifecycle.runner_report_path,
+  };
+}
+
+std::vector<char*> BuildExecPointers(std::vector<std::string>& values) {
+  std::vector<char*> pointers;
+  pointers.reserve(values.size() + 1);
+  for (auto& value : values) {
+    pointers.push_back(value.data());
+  }
+  pointers.push_back(nullptr);
+  return pointers;
+}
+
+std::string BuildExitReason(const NativeLifecycleShim& lifecycle) {
+  if (!lifecycle.exit_reason.empty()) {
+    return lifecycle.exit_reason;
+  }
+  if (!lifecycle.failure_reason.empty()) {
+    return lifecycle.failure_reason;
+  }
+  if (lifecycle.execution_engine_ready) {
+    return "bootstrap_completed";
+  }
+  return "bootstrap_completed_without_engine_ready";
+}
+
+std::string ResolveCompatctlExecutablePath() {
+  std::error_code error;
+  const fs::path executable_path = fs::read_symlink("/proc/self/exe", error);
+  if (error || executable_path.empty()) {
+    throw std::runtime_error("unable to resolve compatctl executable path");
+  }
+  return executable_path.string();
 }
 
 }  // namespace
@@ -365,6 +451,7 @@ NativeLifecycleShim BuildNativeLifecycleShim(
       (fs::path(lifecycle.session_root) / "runner-report.json").string();
   lifecycle.current_activity_state = "NOT_CREATED";
   lifecycle.process_state = "BOOTSTRAPPED";
+  lifecycle.exit_reason = "bootstrap_not_started";
   lifecycle.services = BuildDefaultServiceBindings();
   lifecycle.execution_engine_ready = false;
 
@@ -388,11 +475,13 @@ NativeLifecycleShim BuildNativeLifecycleShimFromManifest(
 NativeLifecycleShim RunNativeProcessBootstrap(
     const NativeActivityBootstrap& bootstrap) {
   NativeLifecycleShim lifecycle = BuildNativeLifecycleShim(bootstrap);
+  const std::string compatctl_path = ResolveCompatctlExecutablePath();
 
   const pid_t child = fork();
   if (child < 0) {
     lifecycle.process_state = "FORK_FAILED";
-    lifecycle.exit_code = EXIT_FAILURE;
+    lifecycle.exit_code = 2;
+    lifecycle.exit_reason = "fork_failed";
     lifecycle.failure_reason =
         "fork failed: " + std::string(std::strerror(errno));
     WriteLifecycleArtifacts(lifecycle);
@@ -402,34 +491,53 @@ NativeLifecycleShim RunNativeProcessBootstrap(
   if (child == 0) {
     const int log_fd = OpenRunnerLog(lifecycle.runner_log_path);
     if (log_fd < 0) {
-      _exit(127);
+      _exit(2);
     }
 
+    const int null_fd = open("/dev/null", O_RDONLY);
+    if (null_fd >= 0) {
+      dup2(null_fd, STDIN_FILENO);
+      if (null_fd > STDERR_FILENO) {
+        close(null_fd);
+      }
+    }
     dup2(log_fd, STDOUT_FILENO);
     dup2(log_fd, STDERR_FILENO);
     if (log_fd > STDERR_FILENO) {
       close(log_fd);
     }
 
-    NativeExecuteReport report =
-        ExecuteNativeStub(BuildNativeExecuteRequest(bootstrap));
-    try {
-      WriteNativeExecuteReportFile(lifecycle.runner_report_path, report);
-    } catch (...) {
+    if (chdir(bootstrap.plan.sandbox_root.c_str()) != 0) {
+      std::cerr << "linuxoid child chdir failed: "
+                << std::strerror(errno) << "\n";
+      _exit(2);
     }
-    std::cout << report.output;
-    std::cout.flush();
-    _exit(report.exit_code);
+
+    std::vector<std::string> arguments =
+        BuildChildArguments(compatctl_path, bootstrap);
+    std::vector<char*> argv = BuildExecPointers(arguments);
+
+    std::vector<std::string> environment =
+        BuildChildEnvironment(lifecycle, bootstrap);
+    std::vector<char*> envp = BuildExecPointers(environment);
+
+    CloseExtraFileDescriptors();
+    execve(compatctl_path.c_str(), argv.data(), envp.data());
+    std::cerr << "linuxoid child execve failed: " << std::strerror(errno)
+              << "\n";
+    _exit(2);
   }
 
   lifecycle.process_id = static_cast<int>(child);
   lifecycle.process_state = "RUNNING";
+  lifecycle.exit_reason = "child_runner_active";
   WriteLifecycleArtifacts(lifecycle);
 
   int wait_status = 0;
   if (waitpid(child, &wait_status, 0) < 0) {
     lifecycle.process_state = "WAIT_FAILED";
-    lifecycle.exit_code = EXIT_FAILURE;
+    lifecycle.exit_code = 2;
+    lifecycle.exit_reason = "waitpid_failed";
     lifecycle.failure_reason =
         "waitpid failed: " + std::string(std::strerror(errno));
     WriteLifecycleArtifacts(lifecycle);
@@ -439,27 +547,39 @@ NativeLifecycleShim RunNativeProcessBootstrap(
   if (WIFEXITED(wait_status)) {
     lifecycle.process_state = "EXITED";
     lifecycle.exit_code = WEXITSTATUS(wait_status);
+    lifecycle.exit_reason = lifecycle.exit_code == 0
+                                ? "child_runner_completed"
+                                : "child_runner_nonzero_exit";
   } else if (WIFSIGNALED(wait_status)) {
     lifecycle.process_state = "SIGNALED";
     lifecycle.exit_code = 128 + WTERMSIG(wait_status);
+    lifecycle.exit_reason = "child_runner_signaled";
     lifecycle.failure_reason =
         "native runner terminated by signal " +
         std::to_string(WTERMSIG(wait_status));
   } else {
     lifecycle.process_state = "UNKNOWN_EXIT";
-    lifecycle.exit_code = EXIT_FAILURE;
+    lifecycle.exit_code = 2;
+    lifecycle.exit_reason = "child_runner_unknown_exit";
     lifecycle.failure_reason = "native runner ended in an unknown state";
   }
 
   if (FileExists(lifecycle.runner_report_path)) {
+    lifecycle.runner_report_json = ReadFile(lifecycle.runner_report_path);
     ApplyNativeExecuteReport(lifecycle,
                              ReadNativeExecuteReportFile(
                                  lifecycle.runner_report_path));
   } else if (lifecycle.failure_reason.empty()) {
+    lifecycle.exit_code = 2;
+    lifecycle.exit_reason = "runner_report_missing";
     lifecycle.failure_reason =
         "native runner exited before writing structured report";
   }
 
+  if (lifecycle.exit_code != 0 && lifecycle.failure_reason.empty()) {
+    lifecycle.failure_reason = "native runner exited before completing bootstrap";
+  }
+  lifecycle.exit_reason = BuildExitReason(lifecycle);
   WriteLifecycleArtifacts(lifecycle);
   lifecycle.lifecycle_handoff_ready =
       FileExists(lifecycle.session_manifest_path) &&
@@ -502,6 +622,7 @@ std::string RenderNativeLifecycleShimReport(
   output << "Process State: " << lifecycle.process_state << "\n";
   output << "PID: " << lifecycle.process_id << "\n";
   output << "Exit Code: " << lifecycle.exit_code << "\n";
+  output << "Exit Reason: " << BuildExitReason(lifecycle) << "\n";
   output << "Native Library Found: "
          << (lifecycle.native_library_found ? "yes" : "no") << "\n";
   output << "dlopen OK: " << (lifecycle.dlopen_ok ? "yes" : "no") << "\n";
@@ -526,6 +647,53 @@ std::string RenderNativeLifecycleShimReport(
   output << "  - Keep process state truthful and machine-readable for MCP clients and validation harnesses.\n";
   output << "  - Attach DEX/class loading, resource lookup, and Binder-compatible services.\n";
   output << "  - Grow from bootstrap truth into real Android process execution.\n";
+  return output.str();
+}
+
+std::string RenderNativeProcessBootstrapJson(
+    const NativeLifecycleShim& lifecycle) {
+  std::string libraries_loaded_json = "[]";
+  std::string jni_onload_results_json = "[]";
+  if (!lifecycle.runner_report_json.empty()) {
+    try {
+      libraries_loaded_json =
+          ExtractJsonArrayLiteral(lifecycle.runner_report_json,
+                                  "libraries_loaded");
+      jni_onload_results_json =
+          ExtractJsonArrayLiteral(lifecycle.runner_report_json,
+                                  "jni_onload_results");
+    } catch (...) {
+      libraries_loaded_json = "[]";
+      jni_onload_results_json = "[]";
+    }
+  }
+
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"execution_engine_ready\": "
+         << (lifecycle.execution_engine_ready ? "true" : "false") << ",\n"
+         << "  \"libraries_loaded\": " << libraries_loaded_json << ",\n"
+         << "  \"jni_onload_results\": " << jni_onload_results_json
+         << ",\n"
+         << "  \"exit_reason\": \""
+         << EscapeJson(BuildExitReason(lifecycle)) << "\",\n"
+         << "  \"artifact_paths\": {\n"
+         << "    \"bootstrap_manifest_path\": \""
+         << EscapeJson(lifecycle.bootstrap.bootstrap_manifest_path) << "\",\n"
+         << "    \"session_root\": \"" << EscapeJson(lifecycle.session_root)
+         << "\",\n"
+         << "    \"session_manifest_path\": \""
+         << EscapeJson(lifecycle.session_manifest_path) << "\",\n"
+         << "    \"activity_state_path\": \""
+         << EscapeJson(lifecycle.activity_state_path) << "\",\n"
+         << "    \"service_registry_path\": \""
+         << EscapeJson(lifecycle.service_registry_path) << "\",\n"
+         << "    \"runner_log_path\": \""
+         << EscapeJson(lifecycle.runner_log_path) << "\",\n"
+         << "    \"runner_report_path\": \""
+         << EscapeJson(lifecycle.runner_report_path) << "\"\n"
+         << "  }\n"
+         << "}\n";
   return output.str();
 }
 

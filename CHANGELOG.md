@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.29 - 2026-05-16
+
+- Keep `native-execute-stub` as the public P1 bootstrap entrypoint and harden it so the manifest path now forks and `execve`s a controlled Linuxoid child runner with deterministic cwd, Linuxoid-only environment variables, and inherited-fd cleanup.
+- Load native libraries in deterministic order, call `JNI_OnLoad` when present, and emit structured JSON that records `execution_engine_ready`, `libraries_loaded`, `jni_onload_results`, `exit_reason`, and stable artifact paths for replay and harness diffing.
+- Refresh the fixture native test library, bootstrap/session tests, README Mermaid architecture, phased plan, and status text so the repo now reflects the stricter P1 contract while still marking DEX/ART, Binder, graphics, input, and full resources as pending.
+
 ## v0.1.28 - 2026-05-16
 
 - Add `native-process-bootstrap` so Linuxoid now turns a bootstrap manifest into a real parent/child native runner handoff with `pid`, `process_state`, `exit_code`, runner logs, and structured session state.
