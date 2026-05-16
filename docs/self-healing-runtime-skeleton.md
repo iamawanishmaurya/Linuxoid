@@ -44,14 +44,19 @@ What that means **today**:
   - `runtime-diagnostic-replay.json`
 - The traces can now be replayed and merged without rerunning the full UI path.
 
+In plain terms, Linuxoid can now **detect, classify, explain, and replay** failure states on the native path. It can tell us why bootstrap is blocked, choose the next bounded recovery action, and preserve that decision in a machine-readable way for later diagnosis.
+
 What it **does not** mean yet:
 
+- Linuxoid does **not** yet self-heal by automatically making the app run after a failure.
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet have ART or a real `PathClassLoader`.
 - Linuxoid does **not** yet execute application classes through a real host-side ART invocation, even though it can now resolve manifest-target descriptors offline from real DEX contents.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
+
+For now, **self-healing means bounded recovery planning and replayable diagnosis**, not complete runtime autonomy.
 
 Current meaning of “self-healing” in Linuxoid:
 
@@ -61,6 +66,18 @@ Current meaning of “self-healing” in Linuxoid:
 4. Persist the diagnosis and recovery plan in replayable artifacts.
 5. Merge the existing JSONL traces back into one diagnostic replay bundle.
 6. Refuse false success when a required dependency is still missing.
+
+## Remaining Gaps Before Full Android App Execution
+
+The self-healing layer is no longer the main blocker. The remaining blockers are execution blockers:
+
+1. A real host-side ART invocation that can move beyond planning/smoke into first class resolution or app bootstrap.
+2. Real Android framework/service behavior behind the Binder-shaped local seam.
+3. A bound Wayland + EGL + `ANativeWindow` path that can carry actual Android drawing.
+4. Input that goes beyond deterministic pointer/key fixtures into real IME/text composition.
+5. Resource handling beyond manifest/assets into full Android resource-table semantics.
+
+Until those gates land, Linuxoid can diagnose and replay failures very well, but it still cannot claim full native Android app execution on Linux.
 
 Current commands:
 

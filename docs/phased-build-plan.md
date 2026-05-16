@@ -185,6 +185,8 @@ Outcome: F-Droid or Settings launches natively.
 
 Current repo note as of `2026-05-17`: Linuxoid now has a verified pre-ART APK resource bridge that can inspect plain APK/ZIP manifest metadata, list normalized asset paths, reject traversal, and emit stable readiness JSON for harnesses. Linuxoid also now has a verified self-healing runtime health skeleton that can classify staging, native-load, surface, input, Binder, and DEX/classloader readiness, select deterministic recovery actions, emit replayable JSONL traces, and materialize stable recovery-plan artifacts. Linuxoid now also has a verified ART/classloader preparation fixture that inventories staged dex entries, normalizes manifest target classes, writes deterministic classpath artifacts, a verified offline DEX class-resolution fixture that resolves manifest-target descriptors from real staged DEX contents and writes stable resolution artifacts, and a host-ART runtime smoke seam that writes invocation-plan plus runtime-log artifacts without faking real class execution. Full `resources.arsc` semantics, binary XML handling, and actual host ART or `PathClassLoader` execution are still pending.
 
+Current repo note on self-healing scope: Linuxoid can now diagnose runtime failures, classify them into deterministic subsystem states, select bounded recovery actions, and replay those traces later without rerunning the UI path. That does **not** yet mean Linuxoid can autonomously repair execution or finish Android app startup on its own. The remaining blockers are still real ART/class execution, richer Binder/framework behavior, bound Wayland+EGL rendering, full IME/text composition, and full Android resource semantics.
+
 ### Tasks
 
 #### P3.1 — Embed ART as a library

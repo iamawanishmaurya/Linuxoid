@@ -1267,3 +1267,8 @@
   Action: Rebuilt Linuxoid, reran the full test suite, and extended the changelog plus README proof list to reflect the new explicit regression coverage for no-false-success behavior when native dependencies are missing.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, and the repo now has direct test coverage for missing-native health classification, recovery-action selection, JSON stability, and replay honesty.
   Timestamp: 2026-05-17T22:55:00+05:30
+
+- Step: Self-healing docs clarity pass
+  Action: Updated the README, phased build plan, and self-healing runtime note to explain what self-healing means today, what it does not mean yet, and which blockers still stand before full native Android app execution.
+  Result: The repo now describes self-healing as bounded diagnosis, replay, and recovery planning rather than full autonomous app execution, while explicitly listing the remaining ART, Binder, graphics, input, and resource gaps.
+  Timestamp: 2026-05-17T23:02:00+05:30

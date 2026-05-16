@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.45 - 2026-05-17
+
+- Clarify in the README, phased plan, and self-healing runtime note what Linuxoid self-healing means today: deterministic diagnosis, bounded recovery planning, replayable trace artifacts, and refusal of false success.
+- Document more explicitly what still blocks full native Android app execution: real host-side ART/class execution, richer Binder/framework behavior, bound Wayland+EGL rendering, full IME/text composition, and full Android resource-table semantics.
+
 ## v0.1.44 - 2026-05-17
 
 - Add explicit regression coverage for self-healing runtime honesty when a native dependency is missing, including fixture-level health classification, command-level JSON stability, and merged diagnostic replay output.

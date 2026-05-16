@@ -172,6 +172,52 @@ Linuxoid now treats the phased execution plan as the repo-facing source of truth
 Plan document: [docs/phased-build-plan.md](/home/astra/codex/wine-for-android/docs/phased-build-plan.md)
 Detailed gap research: [docs/15-track-research-wave-2026-05-16.md](/home/astra/codex/wine-for-android/docs/15-track-research-wave-2026-05-16.md)
 
+## What Self-Healing Means Now
+
+Today, **self-healing** in Linuxoid means:
+
+- Linuxoid can classify native-runtime state into deterministic subsystem records instead of treating failures as opaque crashes.
+- Linuxoid can select bounded recovery actions for known failure classes such as missing bundle artifacts, failed native loading, unavailable display surfaces, failed local service lookup, and pending ART/classloader work.
+- Linuxoid can persist those decisions into stable artifacts for agents, harnesses, and replay tooling:
+  - `runtime-health.json`
+  - `runtime-health-trace.jsonl`
+  - `runtime-recovery-plan.json`
+  - `runtime-recovery-actions.jsonl`
+  - `runtime-diagnostic-events.jsonl`
+  - `runtime-diagnostic-replay.json`
+- Linuxoid can replay and merge those traces later without rerunning the full UI path.
+- Linuxoid refuses false success when a critical dependency is missing. A missing native library payload or missing ART runtime still leaves the runtime in `recovery_needed`, not `ready`.
+
+This is **observability and bounded recovery planning**, not autonomous app repair or full Android execution.
+
+## What Still Blocks Full Android App Execution
+
+Linuxoid is still **not** at “run Android apps directly on Linux end to end” yet. The main remaining blockers are:
+
+1. **Real ART / DEX execution**
+   - host-side `PathClassLoader` or equivalent class resolution still needs to move from planning/smoke to actual execution
+   - application code is not yet running through a real ART-owned path
+
+2. **Android framework and services**
+   - the Binder-shaped local manager is still a Linuxoid-owned seam, not full Android Binder semantics
+   - `ActivityManager`, `PackageManager`, and related behavior are still partial stubs
+
+3. **Graphics binding**
+   - Wayland and EGL proofs exist separately
+   - the real bound path from Android-style rendering into a live compositor-backed surface is still pending
+
+4. **Input and text**
+   - focused pointer/key injection is verified
+   - full IME, text composition, clipboard fidelity, and richer input routing are still pending
+
+5. **Android resources**
+   - manifest and asset readiness are in place
+   - full `resources.arsc`, binary XML, themed resource lookup, and framework-style resource semantics are still pending
+
+6. **Real app bootstrap**
+   - Linuxoid can stage, classify, plan, and replay
+   - it still needs the first successful host-side Android class execution and activity bootstrap on the native path
+
 ## Target Architecture
 
 ```mermaid
