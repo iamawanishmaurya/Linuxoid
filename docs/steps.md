@@ -1603,6 +1603,11 @@
   Result: `preflight-runtime native` and `verify-package native` no longer overstate readiness just because a package is staged locally; they now stay blocked when host ART is missing, when the probe only succeeds through the override seam without explicit opt-in, or when the staged package is not actually a native spike candidate.
   Timestamp: 2026-05-18T00:33:00+05:30
 
+- Step: Native bridge recovery action surface GREEN
+  Action: Threaded the selected recovery actions and canonical four-scenario recovery mapping from runtime health into the public native preflight and launch reports, then pinned that behavior with regression coverage across ready, override-backed, and host-ART-missing paths.
+  Result: Native bridge callers now see both the deterministic recovery policy and the currently selected bounded next steps directly in `preflight-runtime native`, `verify-package native`, and `launch-package native`.
+  Timestamp: 2026-05-18T00:41:00+05:30
+
 - Step: Backend-neutral verification preflight contract GREEN
   Action: Added red-first regression coverage for attached-ADB, Waydroid, and local `native` installed-package verification, then taught `verify-package` and `verify-package-matrix` to run runtime preflight first, expose runtime-target selection plus package visibility plus component readiness in the public report, and keep native verification on the same contract through the staged-package bridge.
   Result: Linuxoid now verifies staged native packages through the same preflight-backed installed-package surface as the other backends, including override-backed native success and honest non-candidate native failure without collapsing back to a launch-only shortcut.

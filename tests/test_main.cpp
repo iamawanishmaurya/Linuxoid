@@ -4816,6 +4816,19 @@ void TestNativeRuntimePreflightUsesStagedMetadata() {
          "expected runtime health path in native preflight");
   Expect(!report.runtime_diagnostic_replay_json_path.empty(),
          "expected diagnostic replay path in native preflight");
+  Expect(report.recovery_actions_selected == 0,
+         "expected no selected recovery actions in ready native preflight");
+  Expect(report.selected_recovery_actions.empty(),
+         "expected no selected recovery action names in ready native preflight");
+  Expect(report.canonical_recovery_scenario_count == 4,
+         "expected four canonical recovery scenarios in native preflight");
+  Expect(report.canonical_recovery_scenarios ==
+             std::vector<std::string>{
+                 "missing_artifact=>restage_apk_bundle",
+                 "failed_native_load=>retry_native_load_after_bundle_refresh",
+                 "unavailable_display=>fallback_to_headless_surface_probe",
+                 "failed_service_lookup=>rebuild_service_registry_and_retry_lookup"},
+         "expected canonical recovery scenarios in ready native preflight");
   Expect(report.component == fixture.launcher_component,
          "expected launcher component in preflight result");
 
@@ -4855,6 +4868,25 @@ void TestNativeRuntimePreflightBlocksWithoutHostArt() {
          "expected dependency block without host ART");
   Expect(report.failing_subsystem_count == 2,
          "expected dex and bootstrap execution to remain blocked in preflight");
+  Expect(report.recovery_actions_selected == 2,
+         "expected two selected recovery actions without host ART");
+  Expect(std::find(report.selected_recovery_actions.begin(),
+                   report.selected_recovery_actions.end(),
+                   "dex_classloader_readiness=>attempt_host_art_class_resolution") !=
+             report.selected_recovery_actions.end(),
+         "expected dex recovery action in native preflight");
+  Expect(std::find(report.selected_recovery_actions.begin(),
+                   report.selected_recovery_actions.end(),
+                   "bootstrap_execution_readiness=>attempt_host_bootstrap_execution") !=
+             report.selected_recovery_actions.end(),
+         "expected bootstrap execution recovery action in native preflight");
+  Expect(report.canonical_recovery_scenario_count == 4,
+         "expected four canonical recovery scenarios without host ART");
+  Expect(std::find(report.canonical_recovery_scenarios.begin(),
+                   report.canonical_recovery_scenarios.end(),
+                   "missing_artifact=>restage_apk_bundle") !=
+             report.canonical_recovery_scenarios.end(),
+         "expected missing-artifact canonical recovery scenario in native preflight");
   Expect(std::find(report.failing_subsystems.begin(),
                    report.failing_subsystems.end(),
                    "dex_classloader_readiness") !=
@@ -4947,6 +4979,12 @@ void TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution() {
          "expected no blocked runtime dependency on successful native launch");
   Expect(report.runtime_failing_subsystem_count == 0,
          "expected no failing runtime subsystems on successful native launch");
+  Expect(report.runtime_recovery_actions_selected == 0,
+         "expected no selected recovery actions on successful native launch");
+  Expect(report.runtime_selected_recovery_actions.empty(),
+         "expected no selected recovery action names on successful native launch");
+  Expect(report.runtime_canonical_recovery_scenario_count == 4,
+         "expected four canonical recovery scenarios on successful native launch");
   Expect(report.output.find("\"execution_succeeded\": true") !=
              std::string::npos,
          "expected successful bootstrap execution output");
@@ -5021,6 +5059,10 @@ void TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault() {
          "expected no blocked runtime dependency on rejected override launch");
   Expect(report.runtime_failing_subsystem_count == 0,
          "expected no failing runtime subsystems on rejected override launch");
+  Expect(report.runtime_recovery_actions_selected == 0,
+         "expected no selected recovery actions on rejected override launch");
+  Expect(report.runtime_canonical_recovery_scenario_count == 4,
+         "expected four canonical recovery scenarios on rejected override launch");
   Expect(report.output.find("\"execution_succeeded\": true") !=
              std::string::npos,
          "expected underlying bootstrap execution success in rejection output");
@@ -5108,6 +5150,25 @@ void TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt() {
          "expected complete replay trace bundle without host ART");
   Expect(report.runtime_failing_subsystem_count == 2,
          "expected dex and bootstrap execution to remain blocked without host ART");
+  Expect(report.runtime_recovery_actions_selected == 2,
+         "expected two selected recovery actions without host ART");
+  Expect(std::find(report.runtime_selected_recovery_actions.begin(),
+                   report.runtime_selected_recovery_actions.end(),
+                   "dex_classloader_readiness=>attempt_host_art_class_resolution") !=
+             report.runtime_selected_recovery_actions.end(),
+         "expected dex recovery action without host ART");
+  Expect(std::find(report.runtime_selected_recovery_actions.begin(),
+                   report.runtime_selected_recovery_actions.end(),
+                   "bootstrap_execution_readiness=>attempt_host_bootstrap_execution") !=
+             report.runtime_selected_recovery_actions.end(),
+         "expected bootstrap execution recovery action without host ART");
+  Expect(report.runtime_canonical_recovery_scenario_count == 4,
+         "expected four canonical recovery scenarios without host ART");
+  Expect(std::find(report.runtime_canonical_recovery_scenarios.begin(),
+                   report.runtime_canonical_recovery_scenarios.end(),
+                   "failed_native_load=>retry_native_load_after_bundle_refresh") !=
+             report.runtime_canonical_recovery_scenarios.end(),
+         "expected failed-native-load canonical recovery scenario without host ART");
   Expect(std::find(report.runtime_failing_subsystems.begin(),
                    report.runtime_failing_subsystems.end(),
                    "dex_classloader_readiness") !=

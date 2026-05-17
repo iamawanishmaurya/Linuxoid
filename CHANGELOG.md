@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.73 - 2026-05-18
+
+- Surface deterministic recovery policy directly in the public native bridge: `preflight-runtime native`, `verify-package native`, and `launch-package native` now expose both the currently selected recovery actions and the canonical four-scenario recovery mapping instead of hiding that detail in the deeper health JSON only.
+- Add regression coverage that pins those recovery-action summaries on ready, override-backed, and host-ART-missing native paths, so the bridge keeps distinguishing “what Linuxoid can recover in principle” from “what Linuxoid needs to do next on this run.”
+
 ## v0.1.72 - 2026-05-18
 
 - Extend the `native` runtime preflight contract so it now carries Linuxoid-owned runtime-probe readiness, bootstrap-planning readiness, blocked-subsystem summaries, bootstrap manifest paths, and health or replay artifact paths instead of stopping at staged metadata visibility.

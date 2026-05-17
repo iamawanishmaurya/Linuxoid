@@ -93,9 +93,13 @@ struct InstalledAppLaunchReport {
   bool runtime_health_ready = false;
   bool runtime_dependency_blocked = false;
   int runtime_failing_subsystem_count = 0;
+  int runtime_recovery_actions_selected = 0;
+  int runtime_canonical_recovery_scenario_count = 0;
   bool runtime_diagnostic_replay_ready = false;
   bool runtime_trace_bundle_complete = false;
   std::vector<std::string> runtime_failing_subsystems;
+  std::vector<std::string> runtime_selected_recovery_actions;
+  std::vector<std::string> runtime_canonical_recovery_scenarios;
   std::string output;
 };
 
@@ -173,7 +177,11 @@ struct RuntimePreflightReport {
   std::string package_check_output;
   std::string notes;
   int failing_subsystem_count = 0;
+  int recovery_actions_selected = 0;
+  int canonical_recovery_scenario_count = 0;
   std::vector<std::string> failing_subsystems;
+  std::vector<std::string> selected_recovery_actions;
+  std::vector<std::string> canonical_recovery_scenarios;
 };
 
 RuntimeBackendKind ParseRuntimeBackendKind(const std::string& backend_name);
