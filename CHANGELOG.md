@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.82 - 2026-05-17
+
+- Refresh the README, self-healing runtime note, and phased build plan so they explain the current self-healing contract more plainly at the public native bridge: Linuxoid can now keep blocked preflight and launch answers deterministic, replayable, and honest without implying a successful Android app start.
+- Clarify again that a successful self-healing pass today may still end in `Ready For Launch: no` or `Launch OK: no`, and that the remaining milestone is still the first default-path, no-override, host-ART-owned staged app startup.
+
 ## v0.1.81 - 2026-05-17
 
 - Add consolidated native-bridge self-healing regressions that pin four operator-facing guarantees together on the blocked host-ART path: deterministic health classification, deterministic recovery-action selection, stable repeated runtime-health JSON, and no false success when a required runtime dependency is missing.

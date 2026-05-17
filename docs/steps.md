@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Self-healing docs sharpened for public native bridge
+  Action: Updated the README, self-healing runtime note, and phased plan to explain the operator-facing self-healing contract more directly, especially that blocked native preflight or launch can still count as a successful self-healing pass when the diagnosis, bounded next step, and replay artifacts are truthful.
+  Result: The repo now draws a cleaner line between “blocked but diagnosable” and “real Android app execution,” and it states the remaining no-override host-ART startup milestone more plainly.
+  Timestamp: 2026-05-17T23:59:00+05:30
+
 - Step: Native bridge self-healing contract GREEN
   Action: Added consolidated blocked-host-ART regressions for `preflight-runtime native` and `launch-package native`, then pinned health classification, recovery selection, repeated runtime-health JSON stability, and no-false-success behavior together at the public bridge layer.
   Result: Linuxoid now proves the self-healing contract where operators actually consume it, not only inside the deeper runtime-health commands and artifacts.

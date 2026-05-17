@@ -57,6 +57,11 @@ What that means **today**:
   - direct health-trace, recovery-actions-trace, merged-diagnostic-events, and replay-completeness fields in the public report
   - detailed selected-recovery and canonical-scenario lines with rank, retry budget, and scope metadata in the public report
   - per-source replay detail lines with source name, trace path, event count, and deterministic fingerprint metadata in the public report
+- Linuxoid now also pins that bridge-level self-healing contract explicitly on the blocked host-ART path:
+  - health classification stays deterministic
+  - recovery decision selection stays deterministic
+  - repeated runtime-health JSON stays stable
+  - the public bridge does not drift into false success when ART/bootstrap is still missing
 - Linuxoid can now materialize those actions into stable plan artifacts:
   - `runtime-recovery-plan.json`
   - `runtime-recovery-actions.jsonl`
@@ -139,13 +144,15 @@ A **successful self-healing pass today** means:
 - the bounded next recovery action was selected deterministically
 - the resulting JSON and JSONL artifacts are stable and replayable
 - Linuxoid did not claim a launched app if the execution path was still blocked
+- that pass may still end with `Ready For Launch: no` or `Launch OK: no` on the public native bridge when the correct outcome is still “blocked but diagnosable”
 
 The practical command-level contract today is:
 
 1. `native-runtime-health-fixture` tells us which subsystem is blocked.
 2. `native-runtime-recovery-plan` tells us which bounded recovery action belongs to that failure class.
 3. `native-runtime-health-replay` and `native-runtime-diagnostic-replay` let us revisit that diagnosis later from artifacts alone.
-4. None of those commands claim successful Android execution unless the deeper runtime seams actually succeed.
+4. `preflight-runtime native`, `verify-package native`, and `launch-package native` surface that same diagnosis directly to operators instead of forcing them to open the deeper artifacts first.
+5. None of those commands claim successful Android execution unless the deeper runtime seams actually succeed.
 
 That summary is now explicit in the health JSON. A harness no longer has to scan every raw record to answer basic questions like:
 
@@ -161,6 +168,7 @@ What it **does not** mean yet:
 - Linuxoid does **not** yet own a full embedded ART runtime or a real in-process `PathClassLoader`.
 - Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, exercise the runner-backed execution seam through a Linuxoid-owned override probe in fixtures, separate activity-bootstrap planning from bootstrap execution, and keep deterministic execution-context, runner-state, runner-script, and per-phase log artifacts around that execution seam.
 - Linuxoid does **not** yet prove real host-side ART startup for a staged foreground app by default; even a detected host `app_process` probe is still reported as detection-only, and the strongest successful path today is still an override-backed Linuxoid fixture seam.
+- Linuxoid does **not** yet guarantee that a healthy self-healing report implies a launch-ready public bridge; the bridge can still end in a truthful blocked state with replay-ready artifacts while host ART startup remains unavailable.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
@@ -190,6 +198,7 @@ The self-healing layer is no longer the main blocker. The remaining blockers are
 4. Input that goes beyond deterministic pointer/key fixtures into real IME/text composition.
 5. Resource handling beyond manifest/assets into full Android resource-table semantics.
 6. A real staged foreground candidate app that can move through the public native runtime bridge and succeed without relying on the Linuxoid-owned ART override seam.
+7. That same staged foreground candidate app must cross the default public path itself: `preflight-runtime native`, `verify-package native`, and `launch-package native` need to stop ending in “blocked but diagnosable” and start ending in a genuine host-ART-owned success path.
 
 Until those gates land, Linuxoid can diagnose and replay failures very well, but it still cannot claim full native Android app execution on Linux. The strongest successful path today is still a Linuxoid-owned fixture seam, not the default host-side app-execution path the project is ultimately aiming for.
 

@@ -233,6 +233,11 @@ Today, **self-healing** in Linuxoid means:
   - host `app_process` probes are recorded honestly as `host_app_process_detection_only`
 - Linuxoid now also surfaces that replay contract directly through the public native bridge, so `preflight-runtime native`, `verify-package native`, and `launch-package native` name the health trace JSONL, recovery-actions JSONL, merged diagnostic events JSONL, trace index, and replay completeness counts without forcing callers to open the deeper health JSON first.
 - Those native bridge reports now also include per-source replay details, so operators can see which JSONL traces were merged, where each one lives, how many events it contributed, and which deterministic fingerprint Linuxoid computed for it.
+- Linuxoid now also pins that public native-bridge contract with explicit blocked-host-ART regressions, so the operator-facing reports stay stable on:
+  - health classification
+  - recovery decision selection
+  - repeated runtime-health JSON stability
+  - no false success when the required ART/bootstrap dependency is still missing
 - Linuxoid can persist those decisions into stable artifacts for agents, harnesses, and replay tooling:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -302,12 +307,14 @@ A **successful self-healing pass today** means something narrower than “the ap
 - Linuxoid selected the bounded next recovery action deterministically.
 - Linuxoid wrote stable JSON and JSONL artifacts that a harness or operator can replay later.
 - Linuxoid did **not** claim Android app execution success if the runtime was still blocked.
+- That successful pass can still end with `Ready For Launch: no` or `Launch OK: no` on the public native bridge, as long as the blocked state is truthful, replayable, and paired with the right bounded recovery action.
 
 The practical reading of that contract today is:
 
 - Linuxoid can tell a harness which subsystem is blocked.
 - Linuxoid can tell a harness which bounded recovery step belongs to that failure class.
 - Linuxoid can preserve enough JSON and JSONL state to replay that diagnosis later without rerunning the full UI path.
+- Linuxoid can keep that same answer stable at the bridge layer, so repeated `preflight-runtime native`, `verify-package native`, and `launch-package native` runs do not drift into a different classification or a fake success.
 - Linuxoid cannot yet convert a blocked Java or Kotlin APK into a real successful host-side Android launch on its own.
 
 This is **observability and bounded recovery planning**, not autonomous app repair or full Android execution.
@@ -340,6 +347,7 @@ Linuxoid is still **not** at “run Android apps directly on Linux end to end”
 6. **Real app bootstrap**
    - Linuxoid can now stage, classify, preflight, diagnose, replay, and materialize a deterministic application-plus-activity bootstrap planning seam plus a separate execution seam
    - it still needs the first successful host-side Android class execution and application or activity bootstrap on the native path for a real staged candidate app, not only override-backed fixture success
+   - in practice, that means the public default path still needs to cross from honest blocked reports in `preflight-runtime native`, `verify-package native`, and `launch-package native` into a genuine no-override host-ART-owned success path
 
 Put more simply: Linuxoid can now **diagnose, classify, stage, and replay** the native Android path well. It still cannot honestly claim **full Android app execution on Linux** until a real staged app crosses the current ART/bootstrap seams without relying on the Linuxoid-owned override path.
 
