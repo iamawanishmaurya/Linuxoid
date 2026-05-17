@@ -1,6 +1,7 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/art_activity_bootstrap_fixture.hpp"
+#include "wfa/art_bootstrap_execution_fixture.hpp"
 #include "wfa/art_classloader_fixture.hpp"
 #include "wfa/art_class_resolution_fixture.hpp"
 #include "wfa/art_runtime_smoke.hpp"
@@ -45,6 +46,7 @@ void PrintUsage() {
       << "  compatctl native-art-class-resolution-fixture <bootstrap-manifest>\n"
       << "  compatctl native-art-runtime-smoke <bootstrap-manifest>\n"
       << "  compatctl native-art-activity-bootstrap-fixture <bootstrap-manifest>\n"
+      << "  compatctl native-art-bootstrap-execution-fixture <bootstrap-manifest>\n"
       << "  compatctl native-service-manager-fixture <bootstrap-manifest>\n"
       << "  compatctl native-runtime-health-fixture <bootstrap-manifest> [scenario]\n"
       << "  compatctl native-runtime-recovery-plan <bootstrap-manifest> [scenario]\n"
@@ -308,6 +310,17 @@ int main(int argc, char** argv) {
       const auto report = wfa::RunNativeArtActivityBootstrapFixture(argv[2]);
       std::cout << wfa::RenderNativeArtActivityBootstrapFixtureJson(report);
       return report.runtime_bootstrap_planned ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "native-art-bootstrap-execution-fixture") {
+      if (argc != 3) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report = wfa::RunNativeArtBootstrapExecutionFixture(argv[2]);
+      std::cout << wfa::RenderNativeArtBootstrapExecutionFixtureJson(report);
+      return report.execution_attempt_planned ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "native-service-manager-fixture") {

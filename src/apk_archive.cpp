@@ -87,8 +87,11 @@ std::size_t FindEndOfCentralDirectory(const std::vector<unsigned char>& bytes) {
 
 }  // namespace
 
-std::vector<ApkArchiveEntry> ListApkArchiveEntries(const std::string& apk_path) {
-  const auto bytes = ReadBinaryFile(apk_path);
+OpenedApkArchive OpenApkArchive(const std::string& apk_path) {
+  OpenedApkArchive archive;
+  archive.apk_path = apk_path;
+  archive.bytes = ReadBinaryFile(apk_path);
+  const auto& bytes = archive.bytes;
   const std::size_t eocd_offset = FindEndOfCentralDirectory(bytes);
   const std::uint16_t entry_count = ReadLe16(bytes, eocd_offset + 10);
   const std::uint32_t central_directory_size =
@@ -101,8 +104,7 @@ std::vector<ApkArchiveEntry> ListApkArchiveEntries(const std::string& apk_path) 
         "central directory extends beyond APK archive boundary");
   }
 
-  std::vector<ApkArchiveEntry> entries;
-  entries.reserve(entry_count);
+  archive.entries.reserve(entry_count);
 
   std::size_t cursor = central_directory_offset;
   for (std::uint16_t index = 0; index < entry_count; ++index) {
@@ -133,7 +135,7 @@ std::vector<ApkArchiveEntry> ListApkArchiveEntries(const std::string& apk_path) 
                                                      file_name_length));
     path = NormalizeArchivePath(path);
 
-    entries.push_back(ApkArchiveEntry{
+    archive.entries.push_back(ApkArchiveEntry{
         .path = path,
         .compression_method = compression_method,
         .compressed_size = compressed_size,
@@ -144,23 +146,31 @@ std::vector<ApkArchiveEntry> ListApkArchiveEntries(const std::string& apk_path) 
     cursor = record_end;
   }
 
-  std::sort(entries.begin(), entries.end(),
+  std::sort(archive.entries.begin(), archive.entries.end(),
             [](const ApkArchiveEntry& left, const ApkArchiveEntry& right) {
               return left.path < right.path;
             });
-  return entries;
+  return archive;
 }
 
-ApkArchiveReadResult ReadApkArchiveEntry(const std::string& apk_path,
+std::vector<ApkArchiveEntry> ListApkArchiveEntries(const std::string& apk_path) {
+  return OpenApkArchive(apk_path).entries;
+}
+
+const std::vector<ApkArchiveEntry>& ListApkArchiveEntries(
+    const OpenedApkArchive& archive) {
+  return archive.entries;
+}
+
+ApkArchiveReadResult ReadApkArchiveEntry(const OpenedApkArchive& archive,
                                          const std::string& entry_path) {
   ApkArchiveReadResult result;
   const std::string normalized_path = NormalizeArchivePath(entry_path);
-  const auto entries = ListApkArchiveEntries(apk_path);
-  const auto it = std::find_if(entries.begin(), entries.end(),
+  const auto it = std::find_if(archive.entries.begin(), archive.entries.end(),
                                [&](const ApkArchiveEntry& entry) {
                                  return entry.path == normalized_path;
                                });
-  if (it == entries.end()) {
+  if (it == archive.entries.end()) {
     result.failure_reason = "archive entry not found";
     return result;
   }
@@ -177,7 +187,7 @@ ApkArchiveReadResult ReadApkArchiveEntry(const std::string& apk_path,
     return result;
   }
 
-  const auto bytes = ReadBinaryFile(apk_path);
+  const auto& bytes = archive.bytes;
   const std::size_t local_header_offset = it->local_header_offset;
   if (local_header_offset + kLocalFileHeaderFixedSize > bytes.size() ||
       ReadLe32(bytes, local_header_offset) != kLocalFileHeaderSignature) {
@@ -203,6 +213,11 @@ ApkArchiveReadResult ReadApkArchiveEntry(const std::string& apk_path,
   result.contents.assign(bytes.begin() + static_cast<std::ptrdiff_t>(data_offset),
                          bytes.begin() + static_cast<std::ptrdiff_t>(data_end));
   return result;
+}
+
+ApkArchiveReadResult ReadApkArchiveEntry(const std::string& apk_path,
+                                         const std::string& entry_path) {
+  return ReadApkArchiveEntry(OpenApkArchive(apk_path), entry_path);
 }
 
 }  // namespace wfa

@@ -300,6 +300,66 @@ std::vector<std::string> CollectArchiveAssets(
   return assets;
 }
 
+void PopulateManifestFromXml(ApkResourceReadinessReport* report,
+                             const std::string& manifest_xml,
+                             const std::string& manifest_source) {
+  const auto profile = ParseDecodedManifest(manifest_xml);
+  report->manifest.manifest_present = true;
+  report->manifest.manifest_ready = true;
+  report->manifest.manifest_source = manifest_source;
+  report->manifest.package_name = profile.package_name;
+  report->manifest.min_sdk =
+      ExtractManifestSdkInt(manifest_xml, "android:minSdkVersion");
+  report->manifest.target_sdk =
+      ExtractManifestSdkInt(manifest_xml, "android:targetSdkVersion");
+  report->manifest.application_name =
+      ExtractManifestApplicationName(manifest_xml);
+  report->manifest.activity_names =
+      ExtractManifestActivityNames(manifest_xml);
+}
+
+std::vector<fs::path> BuildManifestCandidates(const std::string& resource_root,
+                                              const std::string& manifest_hint) {
+  std::vector<fs::path> candidates;
+  auto append_unique = [&](const fs::path& candidate) {
+    if (candidate.empty()) {
+      return;
+    }
+    if (std::find(candidates.begin(), candidates.end(), candidate) ==
+        candidates.end()) {
+      candidates.push_back(candidate);
+    }
+  };
+
+  append_unique(fs::path(manifest_hint));
+  if (!resource_root.empty()) {
+    const fs::path resource_root_path(resource_root);
+    append_unique(resource_root_path / "AndroidManifest.xml");
+    append_unique(resource_root_path.parent_path() / "bundle" /
+                  "AndroidManifest.xml");
+    append_unique(resource_root_path.parent_path() / "AndroidManifest.xml");
+  }
+  return candidates;
+}
+
+bool TryPopulateManifestFromFilesystem(ApkResourceReadinessReport* report,
+                                       const std::string& resource_root,
+                                       const std::string& manifest_hint) {
+  for (const auto& candidate : BuildManifestCandidates(resource_root,
+                                                       manifest_hint)) {
+    if (candidate.empty() || !fs::exists(candidate) || fs::is_directory(candidate)) {
+      continue;
+    }
+    const std::string manifest_xml = ReadFile(candidate);
+    if (manifest_xml.find("<manifest") == std::string::npos) {
+      continue;
+    }
+    PopulateManifestFromXml(report, manifest_xml, "staged_bundle_manifest");
+    return true;
+  }
+  return false;
+}
+
 DecodedApkInspection InspectDecodedApk(const fs::path& apk) {
   if (!fs::exists(apk)) {
     throw std::invalid_argument("apk path does not exist: " + apk.string());
@@ -368,7 +428,8 @@ std::string InspectApkPackageName(const std::string& apk_path) {
 }
 
 ApkResourceReadinessReport InspectApkResourceReadiness(
-    const std::string& apk_path, const std::string& resource_root) {
+    const std::string& apk_path, const std::string& resource_root,
+    const std::string& manifest_hint_path) {
   const fs::path apk = apk_path;
   if (!fs::exists(apk)) {
     throw std::invalid_argument("apk path does not exist: " + apk.string());
@@ -378,13 +439,16 @@ ApkResourceReadinessReport InspectApkResourceReadiness(
   report.apk_path = apk_path;
   report.resource_root_path = resource_root;
 
-  std::vector<ApkArchiveEntry> archive_entries;
+  OpenedApkArchive archive;
+  bool archive_ready = false;
   try {
-    archive_entries = ListApkArchiveEntries(apk_path);
+    archive = OpenApkArchive(apk_path);
+    archive_ready = true;
   } catch (const std::exception& error) {
     report.errors.push_back("archive_open_failed: " + std::string(error.what()));
   }
 
+  const auto& archive_entries = archive.entries;
   const auto manifest_entry = std::find_if(
       archive_entries.begin(), archive_entries.end(),
       [](const ApkArchiveEntry& entry) {
@@ -393,22 +457,18 @@ ApkResourceReadinessReport InspectApkResourceReadiness(
   report.manifest.manifest_present = manifest_entry != archive_entries.end();
 
   if (report.manifest.manifest_present) {
-    const auto manifest_read = ReadApkArchiveEntry(apk_path, "AndroidManifest.xml");
+    const auto manifest_read = ReadApkArchiveEntry(archive, "AndroidManifest.xml");
     if (manifest_read.found && manifest_read.readable &&
         manifest_read.contents.find("<manifest") != std::string::npos) {
-      const auto profile = ParseDecodedManifest(manifest_read.contents);
-      report.manifest.manifest_ready = true;
-      report.manifest.manifest_source = "archive_plain_xml";
-      report.manifest.package_name = profile.package_name;
-      report.manifest.min_sdk =
-          ExtractManifestSdkInt(manifest_read.contents, "android:minSdkVersion");
-      report.manifest.target_sdk = ExtractManifestSdkInt(
-          manifest_read.contents, "android:targetSdkVersion");
-      report.manifest.application_name =
-          ExtractManifestApplicationName(manifest_read.contents);
-      report.manifest.activity_names =
-          ExtractManifestActivityNames(manifest_read.contents);
+      PopulateManifestFromXml(&report, manifest_read.contents,
+                              "archive_plain_xml");
     }
+  }
+
+  if (!report.manifest.manifest_ready &&
+      TryPopulateManifestFromFilesystem(&report, resource_root,
+                                        manifest_hint_path)) {
+    report.manifest.manifest_present = true;
   }
 
   if (!report.manifest.manifest_ready) {
@@ -450,7 +510,7 @@ ApkResourceReadinessReport InspectApkResourceReadiness(
     report.resources_table_present =
         fs::exists(resource_root_path / "resources.arsc") ||
         fs::exists(resource_root_path / "res");
-  } else if (!archive_entries.empty()) {
+  } else if (archive_ready && !archive_entries.empty()) {
     report.asset_source = "archive_entries";
     report.asset_root_path = "zip:" + apk_path + "!/assets";
     report.asset_paths = CollectArchiveAssets(archive_entries);

@@ -1,6 +1,6 @@
 #include "wfa/runtime_health.hpp"
 
-#include "wfa/art_activity_bootstrap_fixture.hpp"
+#include "wfa/art_bootstrap_execution_fixture.hpp"
 #include "wfa/art_class_resolution_fixture.hpp"
 #include "wfa/art_classloader_fixture.hpp"
 #include "wfa/art_runtime_smoke.hpp"
@@ -33,6 +33,7 @@ struct RuntimeObservationContext {
   NativeArtClassResolutionFixtureReport art_resolution;
   NativeArtRuntimeSmokeReport art_runtime;
   NativeArtActivityBootstrapFixtureReport activity_bootstrap;
+  NativeArtBootstrapExecutionFixtureReport bootstrap_execution;
   NativeWindowBridgeFixtureReport bridge;
   NativeInputQueueFixtureReport input;
   bool has_classes_dex = false;
@@ -388,44 +389,43 @@ RuntimeHealthRecord BuildActivityBootstrapRecord(
   if (!context.has_classes_dex) {
     return MakeHealthRecord(
         "activity_bootstrap_readiness", "not_required", true,
-        context.activity_bootstrap.result_json_path, "",
+        context.bootstrap_execution.result_json_path, "",
         "APK archive does not contain classes.dex entries.");
   }
 
-  const auto& bootstrap = context.activity_bootstrap;
+  const auto& bootstrap = context.bootstrap_execution;
   std::string state = "blocked";
   bool ready = false;
-  if (bootstrap.runtime_bootstrap_succeeded) {
+  if (bootstrap.execution_succeeded) {
     state = "ready";
     ready = true;
-  } else if (bootstrap.runtime_bootstrap_attempted) {
+  } else if (bootstrap.execution_attempted) {
     state = "blocked";
-  } else if (bootstrap.runtime_bootstrap_planned) {
+  } else if (bootstrap.execution_attempt_planned) {
     state = "pending";
   }
 
   return MakeHealthRecord(
       "activity_bootstrap_readiness", state, ready,
       bootstrap.result_json_path, bootstrap.exit_reason,
-      "launcher_component=" + bootstrap.launcher_component +
-          "; selected_application_class_name=" +
+      "selected_application_class_name=" +
           bootstrap.selected_application_class_name +
           "; selected_activity_class_name=" +
           bootstrap.selected_activity_class_name +
-          "; application_probe_attempted=" +
-          std::string(bootstrap.application_probe_attempted ? "true" : "false") +
-          "; application_probe_succeeded=" +
-          std::string(bootstrap.application_probe_succeeded ? "true" : "false") +
-          "; activity_probe_attempted=" +
-          std::string(bootstrap.activity_probe_attempted ? "true" : "false") +
-          "; activity_probe_succeeded=" +
-          std::string(bootstrap.activity_probe_succeeded ? "true" : "false") +
-          "; runtime_bootstrap_planned=" +
-          std::string(bootstrap.runtime_bootstrap_planned ? "true" : "false") +
-          "; runtime_bootstrap_attempted=" +
-          std::string(bootstrap.runtime_bootstrap_attempted ? "true" : "false") +
-          "; runtime_bootstrap_succeeded=" +
-          std::string(bootstrap.runtime_bootstrap_succeeded ? "true"
+          "; application_execution_attempted=" +
+          std::string(bootstrap.application_execution_attempted ? "true" : "false") +
+          "; application_execution_succeeded=" +
+          std::string(bootstrap.application_execution_succeeded ? "true" : "false") +
+          "; activity_execution_attempted=" +
+          std::string(bootstrap.activity_execution_attempted ? "true" : "false") +
+          "; activity_execution_succeeded=" +
+          std::string(bootstrap.activity_execution_succeeded ? "true" : "false") +
+          "; execution_attempt_planned=" +
+          std::string(bootstrap.execution_attempt_planned ? "true" : "false") +
+          "; execution_attempted=" +
+          std::string(bootstrap.execution_attempted ? "true" : "false") +
+          "; execution_succeeded=" +
+          std::string(bootstrap.execution_succeeded ? "true"
                                                             : "false") +
           "; dependency_count=" +
           std::to_string(bootstrap.dependency_count));
@@ -654,9 +654,12 @@ RuntimeHealthReport RunRuntimeHealthFixture(
       context.lifecycle.bootstrap.plan.resource_root);
   context.art_resolution =
       RunNativeArtClassResolutionFixture(bootstrap_manifest_path);
-  context.art_runtime = RunNativeArtRuntimeSmokeFixture(bootstrap_manifest_path);
+  context.art_runtime =
+      BuildNativeArtRuntimeSmokeFixture(context.art_resolution);
   context.activity_bootstrap =
-      RunNativeArtActivityBootstrapFixture(bootstrap_manifest_path);
+      BuildNativeArtActivityBootstrapFixture(context.art_runtime);
+  context.bootstrap_execution =
+      BuildNativeArtBootstrapExecutionFixture(context.activity_bootstrap);
   context.bridge = RunNativeWindowBridgeFixture(
       (fs::path(context.lifecycle.session_root) / "health" / "surface").string(),
       {.width = 48, .height = 32, .format = kNativeWindowFormatRgba8888, .stride = 48});
@@ -995,6 +998,10 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
       {"art_activity_bootstrap_trace",
        (fs::path(lifecycle.session_root) / "art" /
         "activity-bootstrap-trace.jsonl")
+           .string()},
+      {"art_bootstrap_execution_trace",
+       (fs::path(lifecycle.session_root) / "art" /
+        "bootstrap-execution-trace.jsonl")
            .string()},
   };
 

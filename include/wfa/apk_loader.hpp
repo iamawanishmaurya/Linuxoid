@@ -57,7 +57,8 @@ std::string BuildInstallId(const ApktoolMetadata& metadata);
 std::string InspectApkPackageName(const std::string& apk_path);
 std::string RenderLoadedApkReport(const LoadedApkReport& report);
 ApkResourceReadinessReport InspectApkResourceReadiness(
-    const std::string& apk_path, const std::string& resource_root = "");
+    const std::string& apk_path, const std::string& resource_root = "",
+    const std::string& manifest_hint_path = "");
 std::string RenderApkResourceReadinessJson(
     const ApkResourceReadinessReport& report);
 LoadedApkReport LoadApkToCompatRoot(const std::string& apk_path,

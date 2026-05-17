@@ -378,12 +378,11 @@ std::string BuildActivityBootstrapResultJson(
 
 }  // namespace
 
-NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
-    const std::string& bootstrap_manifest_path) {
+NativeArtActivityBootstrapFixtureReport BuildNativeArtActivityBootstrapFixture(
+    const NativeArtRuntimeSmokeReport& runtime_smoke) {
   const NativeLifecycleShim lifecycle =
-      BuildNativeLifecycleShimFromManifest(bootstrap_manifest_path);
-  const NativeArtRuntimeSmokeReport runtime_smoke =
-      RunNativeArtRuntimeSmokeFixture(bootstrap_manifest_path);
+      BuildNativeLifecycleShimFromManifest(
+          runtime_smoke.bootstrap_manifest_path);
   const ApkResourceReadinessReport resources = InspectApkResourceReadiness(
       lifecycle.bootstrap.plan.bundle_apk_path,
       lifecycle.bootstrap.plan.resource_root);
@@ -391,7 +390,7 @@ NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
   NativeArtActivityBootstrapFixtureReport report;
   report.package_name = runtime_smoke.package_name;
   report.install_id = runtime_smoke.install_id;
-  report.bootstrap_manifest_path = bootstrap_manifest_path;
+  report.bootstrap_manifest_path = runtime_smoke.bootstrap_manifest_path;
   report.session_root = lifecycle.session_root;
   report.artifact_root = runtime_smoke.artifact_root;
   report.launcher_component = lifecycle.bootstrap.plan.assessment.launcher_component;
@@ -545,6 +544,13 @@ NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
   WriteTextFile(report.result_json_path,
                 BuildActivityBootstrapResultJson(report));
   return report;
+}
+
+NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
+    const std::string& bootstrap_manifest_path) {
+  const auto runtime_smoke = RunNativeArtRuntimeSmokeFixture(
+      bootstrap_manifest_path);
+  return BuildNativeArtActivityBootstrapFixture(runtime_smoke);
 }
 
 std::string RenderNativeArtActivityBootstrapFixtureJson(

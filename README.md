@@ -39,6 +39,7 @@ flowchart TB
     Compatctl --> NativeArtResolve["P3 Offline DEX Class Resolution Fixture"]
     Compatctl --> NativeArtRuntime["P3 Host ART Runtime Smoke Fixture"]
     Compatctl --> NativeArtBootstrap["P3 Activity Bootstrap Fixture"]
+    Compatctl --> NativeArtBootstrapExec["P3 Bootstrap Execution Fixture"]
     Compatctl --> RuntimeHealth["Self-Healing Runtime Health Fixture"]
     Compatctl --> RuntimeRecovery["Self-Healing Runtime Recovery Plan Fixture"]
     Compatctl --> RuntimeDiagnostic["Self-Healing Runtime Diagnostic Replay Fixture"]
@@ -69,8 +70,10 @@ flowchart TB
     NativeArt --> NativeArtResolve
     NativeArtResolve --> NativeArtRuntime
     NativeArtRuntime --> NativeArtBootstrap
+    NativeArtBootstrap --> NativeArtBootstrapExec
     NativeBinder --> NativeArtBootstrap
     NativeLifecycle --> NativeArtBootstrap
+    NativeArtBootstrapExec --> RuntimeHealth
     RuntimeHealth --> RuntimeDiagnostic
     RuntimeRecovery --> RuntimeDiagnostic
     NativeArt --> RuntimeDiagnostic
@@ -88,6 +91,7 @@ flowchart TB
     NativeArtResolve --> NativeArtResolveArtifact["art/class-resolution-map.json / result.json / trace.jsonl"]
     NativeArtRuntime --> NativeArtRuntimeArtifact["art/runtime-smoke-result.json / invocation-plan.json / invocation.log / trace.jsonl"]
     NativeArtBootstrap --> NativeArtBootstrapArtifact["art/activity-bootstrap-plan.json / result.json / trace.jsonl"]
+    NativeArtBootstrapExec --> NativeArtBootstrapExecArtifact["art/bootstrap-execution-plan.json / result.json / trace.jsonl"]
     RuntimeHealth --> RuntimeHealthArtifact["health/runtime-health.json / trace.jsonl / replay.json / diagnostic-replay.json"]
     RuntimeRecovery --> RuntimeRecoveryArtifact["health/runtime-recovery-plan.json / runtime-recovery-actions.jsonl"]
     RuntimeDiagnostic --> RuntimeDiagnosticArtifact["health/runtime-diagnostic-trace-index.json / runtime-diagnostic-events.jsonl / runtime-diagnostic-replay.json"]
@@ -143,6 +147,7 @@ flowchart TB
   NativeArtResolve --> NativeArtResolveProof["Offline Manifest-target DEX Resolution Proof"]
   NativeArtRuntime --> NativeArtRuntimeProof["Host ART Invocation Smoke Proof"]
   NativeArtBootstrap --> NativeArtBootstrapProof["Application / Activity Bootstrap Attempt Proof"]
+  NativeArtBootstrapExec --> NativeArtBootstrapExecProof["Bootstrap Execution Attempt Proof"]
   RuntimeHealth --> RuntimeHealthProof["Self-Healing Runtime Health / Replay Proof"]
   RuntimeRecovery --> RuntimeRecoveryProof["Deterministic Runtime Recovery Plan Proof"]
   NativeResources --> NativeResourceProof["APK Manifest / Asset Readiness Proof"]
@@ -170,7 +175,7 @@ This diagram is the current working architecture and should stay in sync with th
 
 Linuxoid now treats the phased execution plan as the repo-facing source of truth for the direct-runtime push:
 
-- Current state: scaffold `96/100`, execution `97/100`
+- Current state: scaffold `96/100`, execution `98/100`
 - Current focus: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Critical path: `P1 NDK Execution Core -> P2 Window + Graphics`
 - Browser work is frozen until `P5`
@@ -216,8 +221,14 @@ Today, **self-healing** in Linuxoid means:
   - `activity_bootstrap_readiness`
   - `attempt_host_activity_bootstrap`
   - merged replay coverage through `art/activity-bootstrap-trace.jsonl`
+- Linuxoid now also upgrades that activity seam into a deterministic bootstrap-execution contract:
+  - `native-art-bootstrap-execution-fixture`
+  - `art/bootstrap-execution-plan.json`
+  - `art/bootstrap-execution-trace.jsonl`
+  - `art/bootstrap-execution-result.json`
 - Linuxoid can replay and merge those traces later without rerunning the full UI path.
 - Linuxoid can now fingerprint each trace source and record first/last event types so failures can be compared offline across runs.
+- Linuxoid now reuses one opened APK archive plus the already-staged bundle manifest while building those runtime records, so live health and replay commands stay fast enough to rerun on real staged bundles without falling back to repeated full-archive scans and repeated `apktool` decode work.
 - Linuxoid now merges the activity-bootstrap trace into that replay bundle, so launcher targeting and Binder-readiness failures stay diagnosable offline too.
 - Linuxoid refuses false success when a critical dependency is missing. A missing native library payload or missing ART runtime still leaves the runtime in `recovery_needed`, not `ready`.
 - Linuxoid now has regression coverage that checks this both structurally and behaviorally:
@@ -512,7 +523,7 @@ What stays frozen until then:
 
 Why the freeze exists:
 
-- Linuxoid still has only `execution 96/100` on the native path.
+- Linuxoid still has only `execution 98/100` on the native path.
 - `P1 -> P2` is the real blocker for the whole project.
 - Browser work only makes sense after Linuxoid can already host Android UI and app code directly.
 
@@ -555,6 +566,7 @@ ctest --test-dir build --output-on-failure
 ./build/compatctl native-art-class-resolution-fixture /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json
 ./build/compatctl native-art-runtime-smoke /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json
 ./build/compatctl native-art-activity-bootstrap-fixture /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json
+./build/compatctl native-art-bootstrap-execution-fixture /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json
 ./build/compatctl native-runtime-recovery-plan /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json baseline
 ./build/compatctl native-runtime-diagnostic-replay /tmp/linuxoid-native-spike/packages/com.android.calculator2/vc33-13/bootstrap/activity-bootstrap.json
 ./build/compatctl native-lifecycle-shim /tmp/linuxoid-native-spike/packages/com.example.app/vc1/bootstrap/activity-bootstrap.json
@@ -582,7 +594,7 @@ ctest --test-dir build --output-on-failure
 ## Current Progress
 
 - Phase loading: `96/100`
-- Native execution readiness: `96/100`
+- Native execution readiness: `98/100`
 - Runtime checkpoint gates: `70/100`
 
 These values are generated by the code, not written by hand.

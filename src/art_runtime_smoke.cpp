@@ -275,17 +275,16 @@ std::string BuildRuntimeTraceJsonl(const NativeArtRuntimeSmokeReport& report,
 
 }  // namespace
 
-NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
-    const std::string& bootstrap_manifest_path) {
-  const auto resolution_report =
-      RunNativeArtClassResolutionFixture(bootstrap_manifest_path);
+NativeArtRuntimeSmokeReport BuildNativeArtRuntimeSmokeFixture(
+    const NativeArtClassResolutionFixtureReport& resolution_report) {
   const NativeLifecycleShim lifecycle =
-      BuildNativeLifecycleShimFromManifest(bootstrap_manifest_path);
+      BuildNativeLifecycleShimFromManifest(
+          resolution_report.bootstrap_manifest_path);
 
   NativeArtRuntimeSmokeReport report;
   report.package_name = resolution_report.package_name;
   report.install_id = resolution_report.install_id;
-  report.bootstrap_manifest_path = bootstrap_manifest_path;
+  report.bootstrap_manifest_path = resolution_report.bootstrap_manifest_path;
   report.artifact_root = resolution_report.artifact_root;
   report.dex_inventory_path = resolution_report.dex_inventory_path;
   report.classloader_plan_path = resolution_report.classloader_plan_path;
@@ -332,7 +331,8 @@ NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
   }
 
   const auto classloader_report =
-      RunNativeArtClassloaderFixture(bootstrap_manifest_path);
+      RunNativeArtClassloaderFixture(
+          resolution_report.bootstrap_manifest_path);
   report.art_runtime_detected = classloader_report.art_runtime_detected;
   report.art_runtime_probe = classloader_report.art_runtime_probe;
   report.safe_runtime_probe_available =
@@ -391,6 +391,13 @@ NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
   WriteTextFile(report.result_json_path,
                 RenderNativeArtRuntimeSmokeFixtureJson(report));
   return report;
+}
+
+NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
+    const std::string& bootstrap_manifest_path) {
+  const auto resolution_report =
+      RunNativeArtClassResolutionFixture(bootstrap_manifest_path);
+  return BuildNativeArtRuntimeSmokeFixture(resolution_report);
 }
 
 std::string RenderNativeArtRuntimeSmokeFixtureJson(

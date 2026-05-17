@@ -24,8 +24,19 @@ struct ApkArchiveReadResult {
   std::string failure_reason;
 };
 
+struct OpenedApkArchive {
+  std::string apk_path;
+  std::vector<unsigned char> bytes;
+  std::vector<ApkArchiveEntry> entries;
+};
+
+OpenedApkArchive OpenApkArchive(const std::string& apk_path);
 std::vector<ApkArchiveEntry> ListApkArchiveEntries(const std::string& apk_path);
+const std::vector<ApkArchiveEntry>& ListApkArchiveEntries(
+    const OpenedApkArchive& archive);
 ApkArchiveReadResult ReadApkArchiveEntry(const std::string& apk_path,
+                                         const std::string& entry_path);
+ApkArchiveReadResult ReadApkArchiveEntry(const OpenedApkArchive& archive,
                                          const std::string& entry_path);
 
 }  // namespace wfa

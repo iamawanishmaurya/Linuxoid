@@ -1,6 +1,8 @@
 #ifndef WFA_ART_ACTIVITY_BOOTSTRAP_FIXTURE_HPP
 #define WFA_ART_ACTIVITY_BOOTSTRAP_FIXTURE_HPP
 
+#include "wfa/art_runtime_smoke.hpp"
+
 #include <string>
 #include <vector>
 
@@ -45,6 +47,8 @@ struct NativeArtActivityBootstrapFixtureReport {
   std::vector<std::string> planned_bootstrap_steps;
 };
 
+NativeArtActivityBootstrapFixtureReport BuildNativeArtActivityBootstrapFixture(
+    const NativeArtRuntimeSmokeReport& runtime_smoke_report);
 NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
     const std::string& bootstrap_manifest_path);
 std::string RenderNativeArtActivityBootstrapFixtureJson(

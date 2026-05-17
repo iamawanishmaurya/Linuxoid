@@ -293,7 +293,7 @@ void WriteTrace(const NativeArtClassloaderFixtureReport& report) {
   WriteTextFile(report.trace_jsonl_path, trace.str());
 }
 
-DexEntryMetadata InspectDexArchiveEntry(const std::string& apk_path,
+DexEntryMetadata InspectDexArchiveEntry(const OpenedApkArchive& archive,
                                         const ApkArchiveEntry& entry) {
   DexEntryMetadata metadata;
   metadata.entry_path = entry.path;
@@ -301,7 +301,7 @@ DexEntryMetadata InspectDexArchiveEntry(const std::string& apk_path,
   metadata.archive_uncompressed_size = entry.uncompressed_size;
   metadata.archive_compressed_size = entry.compressed_size;
 
-  const auto read_result = ReadApkArchiveEntry(apk_path, entry.path);
+  const auto read_result = ReadApkArchiveEntry(archive, entry.path);
   metadata.readable = read_result.readable;
   if (!read_result.readable) {
     metadata.read_failure_reason = read_result.failure_reason;
@@ -336,9 +336,12 @@ NativeArtClassloaderFixtureReport RunNativeArtClassloaderFixture(
     const std::string& bootstrap_manifest_path) {
   const NativeLifecycleShim lifecycle =
       BuildNativeLifecycleShimFromManifest(bootstrap_manifest_path);
+  const fs::path manifest_hint =
+      fs::path(lifecycle.bootstrap.plan.package_root) / "bundle" /
+      "AndroidManifest.xml";
   const ApkResourceReadinessReport resources = InspectApkResourceReadiness(
       lifecycle.bootstrap.plan.bundle_apk_path,
-      lifecycle.bootstrap.plan.resource_root);
+      lifecycle.bootstrap.plan.resource_root, manifest_hint.string());
 
   NativeArtClassloaderFixtureReport report;
   report.package_name = lifecycle.bootstrap.plan.assessment.package_name;
@@ -355,20 +358,19 @@ NativeArtClassloaderFixtureReport RunNativeArtClassloaderFixture(
 
   fs::create_directories(report.artifact_root);
 
-  std::vector<ApkArchiveEntry> archive_entries;
+  OpenedApkArchive archive;
   try {
-    archive_entries = ListApkArchiveEntries(
-        lifecycle.bootstrap.plan.bundle_apk_path);
+    archive = OpenApkArchive(lifecycle.bootstrap.plan.bundle_apk_path);
   } catch (const std::exception&) {
-    archive_entries.clear();
+    archive.entries.clear();
   }
 
-  for (const auto& entry : archive_entries) {
+  for (const auto& entry : archive.entries) {
     if (!IsDexArchiveEntry(entry.path)) {
       continue;
     }
     report.dex_entries.push_back(
-        InspectDexArchiveEntry(lifecycle.bootstrap.plan.bundle_apk_path, entry));
+        InspectDexArchiveEntry(archive, entry));
   }
   report.dex_entries_present = !report.dex_entries.empty();
 

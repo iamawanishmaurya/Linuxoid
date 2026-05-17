@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.53 - 2026-05-18
+
+- Add a Linuxoid-owned `native-art-bootstrap-execution-fixture` seam so the post-class-resolution bootstrap path now writes deterministic `art/bootstrap-execution-plan.json`, `art/bootstrap-execution-trace.jsonl`, and `art/bootstrap-execution-result.json` artifacts instead of leaving host-side bootstrap execution implied by lower-level activity probes.
+- Eliminate the live staged-bundle timeout in `native-runtime-health-fixture` by reusing one opened APK archive per command, preferring the already-staged bundle manifest before any decode fallback, and threading the new bootstrap-execution seam into runtime health plus diagnostic replay.
+- Add regression coverage for opened-archive reads, staged-manifest fallback, bootstrap-execution artifact reuse, and the stronger health/replay contract, then refresh the README Mermaid architecture, phased plan, self-healing runtime note, changelog, and status output so Linuxoid reports the faster live native diagnosis path honestly.
+
 ## v0.1.52 - 2026-05-18
 
 - Upgrade `native-art-activity-bootstrap-fixture` from an activity-only planning seam into a host-side application-plus-launcher bootstrap attempt seam: Linuxoid now normalizes a manifest application class when present, emits explicit application and launcher activity probe events, and records probe-attempt plus probe-success state separately without faking ART success on hosts that lack ART.

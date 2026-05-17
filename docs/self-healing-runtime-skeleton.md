@@ -57,6 +57,11 @@ What that means **today**:
   - `activity_bootstrap_readiness`
   - `attempt_host_activity_bootstrap`
   - replay coverage through `art/activity-bootstrap-trace.jsonl`
+- Linuxoid now also exposes a deterministic bootstrap-execution seam on top of that activity-bootstrap plan:
+  - `native-art-bootstrap-execution-fixture`
+  - `art/bootstrap-execution-plan.json`
+  - `art/bootstrap-execution-trace.jsonl`
+  - `art/bootstrap-execution-result.json`
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -66,6 +71,7 @@ What that means **today**:
   - `runtime-diagnostic-replay.json`
 - The traces can now be replayed and merged without rerunning the full UI path.
 - Linuxoid now also records per-source fingerprints plus first and last event types so replay bundles can be compared offline without reopening the UI path.
+- Linuxoid now also reuses one opened APK archive plus the already-staged bundle manifest during native runtime diagnosis, which keeps live health and replay commands fast enough to rerun on real staged bundles instead of timing out behind repeated full-archive scans and repeated decode fallback.
 
 In plain terms, Linuxoid can now **detect, classify, explain, and replay** failure states on the native path. It can tell us why bootstrap is blocked, choose the next bounded recovery action, and preserve that decision in a machine-readable way for later diagnosis.
 
@@ -82,6 +88,7 @@ What it **does not** mean yet:
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet own a full embedded ART runtime or a real in-process `PathClassLoader`.
 - Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, and write plus attempt a deterministic application/activity bootstrap probe sequence after class resolution.
+- Linuxoid does **not** yet execute full Android app startup through host-side ART even though it can now carry that evidence one seam further into a deterministic bootstrap-execution contract and keep the health plus replay system around it.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
@@ -124,6 +131,7 @@ Current commands:
 ./build/compatctl native-art-class-resolution-fixture <bootstrap-manifest>
 ./build/compatctl native-art-runtime-smoke <bootstrap-manifest>
 ./build/compatctl native-art-activity-bootstrap-fixture <bootstrap-manifest>
+./build/compatctl native-art-bootstrap-execution-fixture <bootstrap-manifest>
 ```
 
 Current deterministic scenarios:

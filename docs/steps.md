@@ -1437,3 +1437,43 @@
   Action: Rebuilt Linuxoid, reran the full test suite, reran `compatctl status`, and exercised the live Calculator activity-bootstrap fixture to confirm the manifest-driven application-class behavior stayed honest.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, status now reports native execution `97/100`, and the live Calculator probe leaves `selected_application_class_name` empty because the APK does not declare one.
   Timestamp: 2026-05-17T06:33:55+05:30
+
+- Step: Bootstrap execution fixture gate selection
+  Action: Chose the next native gate: add a dedicated host-side bootstrap execution-attempt fixture that supervises the existing application and launcher-activity probes as one execution slice and threads that evidence back into the self-healing runtime contract.
+  Result: Linuxoid will next emit deterministic bootstrap-execution plan, trace, and result artifacts instead of leaving host-side bootstrap execution implied by the lower-level activity probe seam.
+  Timestamp: 2026-05-17T06:35:50+05:30
+
+- Step: Bootstrap execution fixture red tests
+  Action: Added failing expectations for a dedicated bootstrap-execution fixture command plus runtime-health and diagnostic-replay integration before writing any production code.
+  Result: The build immediately fails because the new bootstrap-execution fixture surface does not exist yet, confirming the seam is genuinely missing.
+  Timestamp: 2026-05-17T06:38:09+05:30
+
+- Step: Bootstrap execution integration follow-up
+  Action: Wired the new fixture surface into CMake, CLI, and runtime health, then reran the full suite to expose stale expectations in the existing activity-bootstrap health test.
+  Result: The suite now fails because the runtime-health artifact contract has moved up to `bootstrap-execution-result.json` while one older regression still expected `activity-bootstrap-result.json`.
+  Timestamp: 2026-05-17T06:41:47+05:30
+
+- Step: Bootstrap execution live-runtime review
+  Action: Exercised the new execution fixture and runtime-health path against the staged Calculator bootstrap outside the tiny test fixture environment.
+  Result: The dedicated execution fixture returned quickly, but the live runtime-health command timed out because the new execution seam was recomputing lower-level bootstrap work instead of reusing the existing activity-bootstrap report.
+  Timestamp: 2026-05-17T06:45:45+05:30
+
+- Step: Runtime-health timeout root-cause research
+  Action: Timed the individual classloader, class-resolution, runtime-smoke, activity-bootstrap, and bootstrap-execution seams against the staged Calculator bundle and reviewed the APK archive and manifest-read code paths.
+  Result: The timeout is driven by repeated full-APK rereads plus repeated `apktool` manifest fallback, so the chosen fix is to reuse one opened archive per command and prefer the already-staged bundle manifest before any decode fallback.
+  Timestamp: 2026-05-17T07:14:20+05:30
+
+- Step: Runtime archive reuse and staged-manifest fallback
+  Action: Added `OpenedApkArchive` helpers, switched classloader/class-resolution work to reuse one opened archive, and taught APK resource readiness to prefer the staged bundle manifest before any `apktool` fallback.
+  Result: The live staged Calculator diagnostics now complete quickly instead of timing out, while the native bootstrap and self-healing contracts stay unchanged and honest.
+  Timestamp: 2026-05-17T07:42:10+05:30
+
+- Step: Runtime health live verification
+  Action: Rebuilt Linuxoid, reran the full test suite, and exercised the live staged Calculator health and diagnostic replay commands after the archive and manifest fixes.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` stayed green, `native-runtime-health-fixture` dropped to about 2.5 seconds on the real staged bundle, and replay now merges the new bootstrap-execution trace without rerunning the UI path.
+  Timestamp: 2026-05-17T07:46:35+05:30
+
+- Step: Bootstrap execution release sync
+  Action: Updated the README Mermaid architecture, phased plan, self-healing runtime note, project status text, changelog, and release version for the new bootstrap-execution seam plus the live runtime-health performance fix.
+  Result: GitHub-facing docs now describe the deterministic bootstrap-execution contract and the faster staged-bundle health path honestly, with release metadata bumped for the slice.
+  Timestamp: 2026-05-17T07:53:10+05:30

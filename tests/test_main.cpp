@@ -1,5 +1,7 @@
 #include "wfa/apk_host_integration.hpp"
+#include "wfa/apk_archive.hpp"
 #include "wfa/art_activity_bootstrap_fixture.hpp"
+#include "wfa/art_bootstrap_execution_fixture.hpp"
 #include "wfa/art_classloader_fixture.hpp"
 #include "wfa/art_class_resolution_fixture.hpp"
 #include "wfa/art_runtime_smoke.hpp"
@@ -1447,6 +1449,79 @@ void TestApkResourceReadinessHandlesMissingManifest() {
   fs::remove_all(root);
 }
 
+void TestOpenedApkArchiveReadsEntriesDeterministically() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-opened-apk-archive";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path apk_path = root / "fixture.apk";
+  WriteStoredZipFixture(
+      apk_path,
+      {{"AndroidManifest.xml",
+        R"(<manifest package="com.example.archive"/>)"},
+       {"assets/config/hello.txt", "hello cached archive\n"}});
+
+  const auto archive = wfa::OpenApkArchive(apk_path.string());
+  const auto& entries = wfa::ListApkArchiveEntries(archive);
+  Expect(entries.size() == 2, "expected two archive entries");
+  Expect(entries[0].path == "AndroidManifest.xml",
+         "expected sorted archive manifest entry");
+  Expect(entries[1].path == "assets/config/hello.txt",
+         "expected sorted archive asset entry");
+
+  const auto asset = wfa::ReadApkArchiveEntry(archive, "assets/config/hello.txt");
+  Expect(asset.readable, "expected archive asset read to succeed");
+  Expect(asset.contents == "hello cached archive\n",
+         "expected archive asset contents");
+
+  fs::remove_all(root);
+}
+
+void TestApkResourceReadinessUsesStagedManifestFallback() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() /
+      "linuxoid-apk-resource-staged-manifest-fallback";
+  const fs::path resource_root = root / "resources";
+  const fs::path bundle_root = root / "bundle";
+  fs::remove_all(root);
+  fs::create_directories(resource_root / "assets");
+  fs::create_directories(bundle_root);
+  const fs::path apk_path = bundle_root / "base.apk";
+  WriteStoredZipFixture(apk_path,
+                        {{"assets/config/hello.txt", "hello staged\n"},
+                         {"resources.arsc", "arsc"}});
+  {
+    std::ofstream manifest(bundle_root / "AndroidManifest.xml");
+    manifest << R"(<manifest package="com.example.staged">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
+  <application android:name="com.example.staged.App">
+    <activity android:name="com.example.staged.MainActivity"/>
+  </application>
+</manifest>
+)";
+  }
+
+  const auto report = wfa::InspectApkResourceReadiness(
+      apk_path.string(), resource_root.string());
+  Expect(report.manifest.manifest_present,
+         "expected staged manifest to count as present");
+  Expect(report.manifest.manifest_ready,
+         "expected staged manifest fallback readiness");
+  Expect(report.manifest.manifest_source == "staged_bundle_manifest",
+         "expected staged bundle manifest source");
+  Expect(report.manifest.package_name == "com.example.staged",
+         "expected package name from staged manifest");
+  Expect(report.manifest.activity_names.size() == 1,
+         "expected staged manifest activity names");
+  Expect(std::find(report.errors.begin(), report.errors.end(),
+                   "manifest_missing") == report.errors.end(),
+         "expected no manifest_missing error when staged manifest exists");
+
+  fs::remove_all(root);
+}
+
 void TestInspectApkResourcesCommandWritesStableJson() {
   namespace fs = std::filesystem;
   const fs::path root =
@@ -2408,6 +2483,99 @@ void TestNativeArtActivityBootstrapCommandWritesStableJson() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeArtBootstrapExecutionFixtureWritesStableArtifacts() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-bootstrap-execution", true, true);
+
+  const auto report = wfa::RunNativeArtBootstrapExecutionFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.execution_attempt_planned,
+         "expected bootstrap execution attempt to be planned");
+  Expect(fs::exists(report.execution_plan_path),
+         "expected bootstrap execution plan artifact");
+  Expect(fs::exists(report.trace_jsonl_path),
+         "expected bootstrap execution trace artifact");
+  Expect(fs::exists(report.result_json_path),
+         "expected bootstrap execution result artifact");
+  Expect(report.selected_activity_class_name ==
+             "com.example.runtimehealth.MainActivity",
+         "expected launcher-derived activity execution class");
+  const std::string rendered =
+      wfa::RenderNativeArtBootstrapExecutionFixtureJson(report);
+  Expect(rendered.find("\"execution_attempt_planned\": true") !=
+             std::string::npos,
+         "expected execution planned flag in bootstrap execution json");
+  Expect(rendered.find("\"activity_bootstrap_result_json_path\": \"") !=
+             std::string::npos,
+         "expected activity bootstrap result path in bootstrap execution json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtBootstrapExecutionFixtureCanReuseActivityBootstrapReport() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-bootstrap-execution-reuse", true, true);
+
+  const auto activity_report = wfa::RunNativeArtActivityBootstrapFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+  const auto report = wfa::BuildNativeArtBootstrapExecutionFixture(
+      activity_report);
+
+  Expect(report.activity_bootstrap_result_json_path ==
+             activity_report.result_json_path,
+         "expected bootstrap execution fixture to reuse activity result path");
+  Expect(fs::exists(report.result_json_path),
+         "expected reused bootstrap execution result artifact");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtBootstrapExecutionFixtureHandlesRuntimeAvailabilityHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-bootstrap-execution-runtime", true, true);
+
+  const auto report = wfa::RunNativeArtBootstrapExecutionFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  if (!report.art_runtime_detected) {
+    Expect(!report.execution_attempted,
+           "expected no bootstrap execution attempt when ART is absent");
+    Expect(!report.execution_succeeded,
+           "expected no bootstrap execution success when ART is absent");
+    Expect(report.exit_reason == "bootstrap_execution_runtime_not_detected",
+           "expected absent-art bootstrap execution exit reason");
+  }
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtBootstrapExecutionCommandWritesStableJson() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-bootstrap-execution-command", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-art-bootstrap-execution-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path,
+      &exit_code);
+  Expect(exit_code == 0,
+         "expected native-art-bootstrap-execution-fixture success");
+  Expect(output.find("\"execution_attempt_planned\": true") !=
+             std::string::npos,
+         "expected execution planned flag in bootstrap execution command json");
+  Expect(output.find("\"selected_activity_class_name\": ") !=
+             std::string::npos,
+         "expected selected activity class in bootstrap execution command json");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeArtClassResolutionFixtureResolvesManifestTargets() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -2621,11 +2789,33 @@ void TestRuntimeHealthFixtureTracksActivityBootstrapReadiness() {
   Expect(bootstrap_record != report.records.end(),
          "expected activity bootstrap readiness record");
   Expect(bootstrap_record->artifact_path.find(
-             "activity-bootstrap-result.json") != std::string::npos,
-         "expected activity bootstrap result artifact path");
+             "bootstrap-execution-result.json") != std::string::npos,
+         "expected bootstrap execution result artifact path");
   Expect(bootstrap_record->selected_recovery_action ==
              "attempt_host_activity_bootstrap",
          "expected deterministic activity bootstrap recovery action");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeHealthFixtureCarriesBootstrapExecutionEvidence() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-bootstrap-execution", true, true);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+
+  const auto bootstrap_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "activity_bootstrap_readiness";
+      });
+  Expect(bootstrap_record != report.records.end(),
+         "expected activity bootstrap readiness record");
+  Expect(bootstrap_record->artifact_path.find(
+             "bootstrap-execution-result.json") != std::string::npos,
+         "expected bootstrap execution result artifact path");
 
   fs::remove_all(fixture.root);
 }
@@ -2791,6 +2981,12 @@ void TestRuntimeDiagnosticReplayWritesStableArtifacts() {
                                "art_activity_bootstrap_trace";
                       }) != replay.trace_sources.end(),
          "expected activity bootstrap trace source in diagnostic replay");
+  Expect(std::find_if(replay.trace_sources.begin(), replay.trace_sources.end(),
+                      [](const wfa::RuntimeDiagnosticTraceSource& source) {
+                        return source.source_name ==
+                               "art_bootstrap_execution_trace";
+                      }) != replay.trace_sources.end(),
+         "expected bootstrap execution trace source in diagnostic replay");
   const std::string trace_index = ReadTextFile(replay.trace_index_json_path);
   Expect(trace_index.find("\"source_name\": \"runtime_health_trace\"") !=
              std::string::npos,
@@ -2799,6 +2995,10 @@ void TestRuntimeDiagnosticReplayWritesStableArtifacts() {
              "\"source_name\": \"art_activity_bootstrap_trace\"") !=
              std::string::npos,
          "expected activity bootstrap trace in diagnostic index");
+  Expect(trace_index.find(
+             "\"source_name\": \"art_bootstrap_execution_trace\"") !=
+             std::string::npos,
+         "expected bootstrap execution trace in diagnostic index");
   Expect(trace_index.find("\"source_fingerprint\": ") != std::string::npos,
          "expected source fingerprint in diagnostic index");
   Expect(trace_index.find("\"first_event_type\": ") != std::string::npos,
@@ -5192,6 +5392,8 @@ int main() {
     TestAssetManagerListsZipAssetsAndBlocksTraversal();
     TestApkResourceReadinessReadsManifestAndAssetsFromZipFixture();
     TestApkResourceReadinessHandlesMissingManifest();
+    TestOpenedApkArchiveReadsEntriesDeterministically();
+    TestApkResourceReadinessUsesStagedManifestFallback();
     TestInspectApkResourcesCommandWritesStableJson();
     TestHeadlessNativeWindowSurfaceTracksMetadataAndLifecycle();
     TestHeadlessFirstPixelFixtureWritesDeterministicMarker();
@@ -5211,6 +5413,7 @@ int main() {
     TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
     TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess();
     TestRuntimeHealthFixtureTracksActivityBootstrapReadiness();
+    TestRuntimeHealthFixtureCarriesBootstrapExecutionEvidence();
     TestRuntimeHealthSummaryFieldsStayDeterministic();
     TestRuntimeHealthReplaySummarizesTrace();
     TestNativeArtRuntimeSmokeWritesTraceJsonl();
@@ -5235,6 +5438,10 @@ int main() {
     TestNativeArtActivityBootstrapTraceCapturesApplicationBootstrapSequence();
     TestNativeArtActivityBootstrapFixtureHandlesRuntimeAvailabilityHonestly();
     TestNativeArtActivityBootstrapCommandWritesStableJson();
+    TestNativeArtBootstrapExecutionFixtureWritesStableArtifacts();
+    TestNativeArtBootstrapExecutionFixtureCanReuseActivityBootstrapReport();
+    TestNativeArtBootstrapExecutionFixtureHandlesRuntimeAvailabilityHonestly();
+    TestNativeArtBootstrapExecutionCommandWritesStableJson();
     TestNativeArtClassResolutionFixtureResolvesManifestTargets();
     TestNativeArtClassResolutionFixtureHandlesMissingDexTargetsHonestly();
     TestNativeArtClassResolutionCommandWritesStableJson();

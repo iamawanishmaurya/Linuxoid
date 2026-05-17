@@ -291,9 +291,24 @@ NativeArtClassResolutionFixtureReport RunNativeArtClassResolutionFixture(
   }
 
   std::unordered_map<std::string, DexDescriptorIndex> dex_indexes;
+  OpenedApkArchive archive;
+  bool archive_ready = false;
+  try {
+    archive = OpenApkArchive(lifecycle.bootstrap.plan.bundle_apk_path);
+    archive_ready = true;
+  } catch (const std::exception& error) {
+    report.exit_reason = error.what();
+  }
   for (const auto& dex_entry : classloader_report.dex_entries) {
-    const auto read_result = ReadApkArchiveEntry(
-        lifecycle.bootstrap.plan.bundle_apk_path, dex_entry.entry_path);
+    if (!archive_ready) {
+      dex_indexes.emplace(
+          dex_entry.entry_path,
+          DexDescriptorIndex{.readable = false,
+                             .descriptors = {},
+                             .failure_reason = "archive_open_failed"});
+      continue;
+    }
+    const auto read_result = ReadApkArchiveEntry(archive, dex_entry.entry_path);
     if (!read_result.readable) {
       dex_indexes.emplace(
           dex_entry.entry_path,
@@ -345,6 +360,8 @@ NativeArtClassResolutionFixtureReport RunNativeArtClassResolutionFixture(
 
   if (!report.dex_entries_present) {
     report.exit_reason = "no_dex_entries_found";
+  } else if (!archive_ready) {
+    report.exit_reason = "dex_archive_open_failed";
   } else if (!report.manifest_targets_ready) {
     report.exit_reason = "manifest_targets_missing";
   } else if (report.offline_resolution_ready) {

@@ -1,6 +1,8 @@
 #ifndef WFA_ART_RUNTIME_SMOKE_HPP
 #define WFA_ART_RUNTIME_SMOKE_HPP
 
+#include "wfa/art_class_resolution_fixture.hpp"
+
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -46,6 +48,8 @@ struct NativeArtRuntimeSmokeReport {
   std::vector<std::string> dex_entry_paths;
 };
 
+NativeArtRuntimeSmokeReport BuildNativeArtRuntimeSmokeFixture(
+    const NativeArtClassResolutionFixtureReport& resolution_report);
 NativeArtRuntimeSmokeReport RunNativeArtRuntimeSmokeFixture(
     const std::string& bootstrap_manifest_path);
 std::string RenderNativeArtRuntimeSmokeFixtureJson(
