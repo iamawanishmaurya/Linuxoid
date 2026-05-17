@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Replayable trace-bundle contract
+  Action: Extended the diagnostic replay report and JSON rendering so the seven-source replay bundle is exposed through explicit completeness, count, name, and health-replay-path fields, then pinned that surface with in-process and CLI-level tests including the missing-trace case.
+  Result: Linuxoid now exposes `health_trace_jsonl_path`, `health_replay_json_path`, `canonical_trace_source_count`, `canonical_trace_source_names`, `missing_trace_source_count`, and `trace_bundle_complete`, making offline diagnosis easier for harnesses to trust deterministically.
+  Timestamp: 2026-05-18T00:04:00+05:30
+
 - Step: Canonical recovery-scenario contract
   Action: Extended the self-healing runtime recovery-plan report and JSON rendering so the four required deterministic recovery cases are exposed as an explicit scenario contract with stable ordering, action names, ranks, retry budgets, scopes, and reasons, then pinned that surface with report-level and CLI-level tests.
   Result: Linuxoid now exposes `canonical_recovery_scenario_count` and `canonical_recovery_scenarios` in addition to selected recovery actions, making the recovery-plan contract easier for harnesses to consume deterministically.

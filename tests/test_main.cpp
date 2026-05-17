@@ -3494,12 +3494,39 @@ void TestRuntimeDiagnosticReplayWritesStableArtifacts() {
 
   Expect(health.self_healing_ready, "expected baseline health fixture");
   Expect(replay.replay_ready, "expected diagnostic replay readiness");
+  Expect(replay.trace_bundle_complete,
+         "expected complete replayable trace bundle");
   Expect(fs::exists(replay.result_json_path),
          "expected diagnostic replay json artifact");
   Expect(fs::exists(replay.merged_trace_jsonl_path),
          "expected merged diagnostic trace artifact");
   Expect(fs::exists(replay.trace_index_json_path),
          "expected diagnostic trace index artifact");
+  Expect(replay.health_trace_jsonl_path ==
+             (fs::path(replay.artifact_root) / "runtime-health-trace.jsonl")
+                 .string(),
+         "expected stable health trace path in diagnostic replay report");
+  Expect(replay.health_replay_json_path ==
+             (fs::path(replay.artifact_root) / "runtime-health-replay.json")
+                 .string(),
+         "expected stable health replay path in diagnostic replay report");
+  Expect(replay.canonical_trace_source_count == 7,
+         "expected seven canonical replay trace sources");
+  Expect(replay.trace_sources_found == replay.canonical_trace_source_count,
+         "expected full trace-source coverage in diagnostic replay");
+  Expect(replay.missing_trace_source_count == 0,
+         "expected no missing trace sources in complete replay bundle");
+  const std::vector<std::string> expected_source_names = {
+      "runtime_health_trace",
+      "runtime_recovery_actions",
+      "art_classloader_trace",
+      "art_class_resolution_trace",
+      "art_runtime_smoke_trace",
+      "art_activity_bootstrap_trace",
+      "art_bootstrap_execution_trace",
+  };
+  Expect(replay.canonical_trace_source_names == expected_source_names,
+         "expected deterministic canonical trace source ordering");
   Expect(replay.total_events_read >= replay.trace_sources_found,
          "expected trace events across diagnostic sources");
   Expect(std::find(replay.selected_actions.begin(),
@@ -3535,6 +3562,15 @@ void TestRuntimeDiagnosticReplayWritesStableArtifacts() {
          "expected source fingerprint in diagnostic index");
   Expect(trace_index.find("\"first_event_type\": ") != std::string::npos,
          "expected first event type in diagnostic index");
+  Expect(trace_index.find("\"trace_bundle_complete\": true") !=
+             std::string::npos,
+         "expected trace bundle completeness in diagnostic index");
+  Expect(trace_index.find("\"canonical_trace_source_count\": 7") !=
+             std::string::npos,
+         "expected canonical trace source count in diagnostic index");
+  Expect(trace_index.find("\"canonical_trace_source_names\": ") !=
+             std::string::npos,
+         "expected canonical trace source names in diagnostic index");
 
   fs::remove_all(fixture.root);
 }
@@ -3554,8 +3590,12 @@ void TestRuntimeDiagnosticReplayHandlesMissingTraceHonestly() {
 
   Expect(!replay.replay_ready,
          "expected replay to stay unready when a trace is missing");
+  Expect(!replay.trace_bundle_complete,
+         "expected incomplete trace bundle when a trace is missing");
   Expect(replay.exit_reason == "missing_trace_artifact",
          "expected missing-trace exit reason");
+  Expect(replay.missing_trace_source_count == 1,
+         "expected one missing trace source");
   Expect(std::find(replay.missing_trace_sources.begin(),
                    replay.missing_trace_sources.end(),
                    "runtime_health_trace") !=
@@ -3582,6 +3622,16 @@ void TestRuntimeDiagnosticReplayCommandWritesStableJson() {
   Expect(exit_code == 0, "expected native-runtime-diagnostic-replay success");
   Expect(output.find("\"replay_ready\": true") != std::string::npos,
          "expected replay readiness in diagnostic replay json");
+  Expect(output.find("\"trace_bundle_complete\": true") !=
+             std::string::npos,
+         "expected trace bundle completeness in diagnostic replay json");
+  Expect(output.find("\"canonical_trace_source_count\": 7") !=
+             std::string::npos,
+         "expected canonical trace source count in diagnostic replay json");
+  Expect(output.find("\"health_trace_jsonl_path\": ") != std::string::npos,
+         "expected health trace path in diagnostic replay json");
+  Expect(output.find("\"health_replay_json_path\": ") != std::string::npos,
+         "expected health replay path in diagnostic replay json");
   Expect(output.find("\"merged_trace_jsonl_path\": ") != std::string::npos,
          "expected merged trace path in diagnostic replay json");
   Expect(output.find("\"trace_index_json_path\": ") != std::string::npos,
@@ -3604,6 +3654,12 @@ void TestRuntimeDiagnosticFixtureCommandWritesStableJson() {
   Expect(exit_code == 0, "expected native-runtime-diagnostic-fixture success");
   Expect(output.find("\"scenario_name\": \"baseline\"") != std::string::npos,
          "expected scenario name in diagnostic fixture json");
+  Expect(output.find("\"trace_bundle_complete\": true") !=
+             std::string::npos,
+         "expected trace bundle completeness in diagnostic fixture json");
+  Expect(output.find("\"canonical_trace_source_count\": 7") !=
+             std::string::npos,
+         "expected canonical trace source count in diagnostic fixture json");
   Expect(output.find("\"trace_index_json_path\": ") != std::string::npos,
          "expected trace index path in diagnostic fixture json");
   Expect(output.find("\"replay_ready\": true") != std::string::npos,
@@ -3628,6 +3684,12 @@ void TestRuntimeDiagnosticFixtureMaterializesReplayableTraceBundle() {
   Expect(fixture_output.find("\"trace_sources_found\": 7") !=
              std::string::npos,
          "expected all replay trace sources in fixture json");
+  Expect(fixture_output.find("\"trace_bundle_complete\": true") !=
+             std::string::npos,
+         "expected complete trace bundle in fixture json");
+  Expect(fixture_output.find("\"canonical_trace_source_count\": 7") !=
+             std::string::npos,
+         "expected canonical trace source count in fixture json");
 
   const auto lifecycle =
       wfa::BuildNativeLifecycleShimFromManifest(

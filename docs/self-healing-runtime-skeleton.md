@@ -43,6 +43,13 @@ What that means **today**:
 - Every recovery-plan report now also exposes the four required deterministic recovery cases as a stable scenario contract:
   - `canonical_recovery_scenario_count`
   - `canonical_recovery_scenarios`
+- Every diagnostic replay report now also exposes the replayable trace bundle as a stable contract:
+  - `health_trace_jsonl_path`
+  - `health_replay_json_path`
+  - `canonical_trace_source_count`
+  - `canonical_trace_source_names`
+  - `missing_trace_source_count`
+  - `trace_bundle_complete`
 - Linuxoid can now materialize those actions into stable plan artifacts:
   - `runtime-recovery-plan.json`
   - `runtime-recovery-actions.jsonl`

@@ -787,14 +787,26 @@ std::string RenderRuntimeDiagnosticTraceIndexJson(
          << EscapeJson(report.bootstrap_manifest_path) << "\",\n"
          << "  \"artifact_root\": \"" << EscapeJson(report.artifact_root)
          << "\",\n"
+         << "  \"health_trace_jsonl_path\": \""
+         << EscapeJson(report.health_trace_jsonl_path) << "\",\n"
+         << "  \"health_replay_json_path\": \""
+         << EscapeJson(report.health_replay_json_path) << "\",\n"
          << "  \"trace_index_json_path\": \""
          << EscapeJson(report.trace_index_json_path) << "\",\n"
          << "  \"merged_trace_jsonl_path\": \""
          << EscapeJson(report.merged_trace_jsonl_path) << "\",\n"
          << "  \"scenario_name\": \"" << EscapeJson(report.scenario_name)
          << "\",\n"
+         << "  \"trace_bundle_complete\": "
+         << (report.trace_bundle_complete ? "true" : "false") << ",\n"
+         << "  \"canonical_trace_source_count\": "
+         << report.canonical_trace_source_count << ",\n"
          << "  \"trace_sources_found\": " << report.trace_sources_found
          << ",\n"
+         << "  \"missing_trace_source_count\": "
+         << report.missing_trace_source_count << ",\n"
+         << "  \"canonical_trace_source_names\": "
+         << RenderJsonArray(report.canonical_trace_source_names) << ",\n"
          << "  \"missing_trace_sources\": "
          << RenderJsonArray(report.missing_trace_sources) << ",\n"
          << "  \"trace_sources\": [\n";
@@ -1192,6 +1204,10 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
   report.bootstrap_manifest_path = bootstrap_manifest_path;
   report.session_root = lifecycle.session_root;
   report.artifact_root = (fs::path(lifecycle.session_root) / "health").string();
+  report.health_trace_jsonl_path =
+      (fs::path(report.artifact_root) / "runtime-health-trace.jsonl").string();
+  report.health_replay_json_path =
+      (fs::path(report.artifact_root) / "runtime-health-replay.json").string();
   report.trace_index_json_path =
       (fs::path(report.artifact_root) / "runtime-diagnostic-trace-index.json")
           .string();
@@ -1204,8 +1220,7 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
   report.scenario_name = scenario_name;
 
   const std::vector<std::pair<std::string, std::string>> source_specs = {
-      {"runtime_health_trace",
-       (fs::path(report.artifact_root) / "runtime-health-trace.jsonl").string()},
+      {"runtime_health_trace", report.health_trace_jsonl_path},
       {"runtime_recovery_actions",
        (fs::path(report.artifact_root) / "runtime-recovery-actions.jsonl")
            .string()},
@@ -1228,6 +1243,10 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
         "bootstrap-execution-trace.jsonl")
            .string()},
   };
+  report.canonical_trace_source_count = static_cast<int>(source_specs.size());
+  for (const auto& [source_name, _] : source_specs) {
+    report.canonical_trace_source_names.push_back(source_name);
+  }
 
   std::set<std::string> failing_subsystems;
   std::set<std::string> selected_actions;
@@ -1326,6 +1345,11 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
   }
 
   report.replay_ready = report.missing_trace_sources.empty();
+  report.missing_trace_source_count =
+      static_cast<int>(report.missing_trace_sources.size());
+  report.trace_bundle_complete =
+      report.trace_sources_found == report.canonical_trace_source_count &&
+      report.missing_trace_source_count == 0;
   report.failing_subsystems.assign(failing_subsystems.begin(),
                                    failing_subsystems.end());
   report.selected_actions.assign(selected_actions.begin(),
@@ -1367,6 +1391,10 @@ std::string RenderRuntimeDiagnosticReplayJson(
          << "\",\n"
          << "  \"artifact_root\": \"" << EscapeJson(report.artifact_root)
          << "\",\n"
+         << "  \"health_trace_jsonl_path\": \""
+         << EscapeJson(report.health_trace_jsonl_path) << "\",\n"
+         << "  \"health_replay_json_path\": \""
+         << EscapeJson(report.health_replay_json_path) << "\",\n"
          << "  \"trace_index_json_path\": \""
          << EscapeJson(report.trace_index_json_path) << "\",\n"
          << "  \"merged_trace_jsonl_path\": \""
@@ -1377,17 +1405,25 @@ std::string RenderRuntimeDiagnosticReplayJson(
          << "\",\n"
          << "  \"replay_ready\": "
          << (report.replay_ready ? "true" : "false") << ",\n"
+         << "  \"trace_bundle_complete\": "
+         << (report.trace_bundle_complete ? "true" : "false") << ",\n"
          << "  \"overall_state\": \"" << EscapeJson(report.overall_state)
          << "\",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
          << "\",\n"
          << "  \"total_events_read\": " << report.total_events_read << ",\n"
+         << "  \"canonical_trace_source_count\": "
+         << report.canonical_trace_source_count << ",\n"
          << "  \"trace_sources_found\": " << report.trace_sources_found
          << ",\n"
+         << "  \"missing_trace_source_count\": "
+         << report.missing_trace_source_count << ",\n"
          << "  \"runtime_probe_attempted\": "
          << (report.runtime_probe_attempted ? "true" : "false") << ",\n"
          << "  \"runtime_probe_succeeded\": "
          << (report.runtime_probe_succeeded ? "true" : "false") << ",\n"
+         << "  \"canonical_trace_source_names\": "
+         << RenderJsonArray(report.canonical_trace_source_names) << ",\n"
          << "  \"missing_trace_sources\": "
          << RenderJsonArray(report.missing_trace_sources) << ",\n"
          << "  \"failing_subsystems\": "

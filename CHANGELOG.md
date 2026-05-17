@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.68 - 2026-05-17
+
+- Strengthen the replayable-diagnostics contract by exposing the seven-source JSONL trace bundle through explicit summary fields: `health_trace_jsonl_path`, `health_replay_json_path`, `canonical_trace_source_count`, `canonical_trace_source_names`, `missing_trace_source_count`, and `trace_bundle_complete`.
+- Add regression coverage that proves both the in-process diagnostic replay report and the public `native-runtime-diagnostic-replay` / `native-runtime-diagnostic-fixture` JSON expose that trace-bundle contract deterministically, including honest incomplete-state reporting when one trace source is missing.
+- Refresh the README, self-healing runtime note, phased plan, changelog, and step log so the repo describes the stronger offline replay surface honestly.
+
 ## v0.1.67 - 2026-05-17
 
 - Strengthen the deterministic recovery-plan contract by exposing the four required recovery cases as an explicit scenario matrix: `missing_artifact`, `failed_native_load`, `unavailable_display`, and `failed_service_lookup` now surface through `canonical_recovery_scenarios` with stable action names, ranks, retry budgets, scopes, and reasons.
