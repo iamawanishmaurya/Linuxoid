@@ -26,9 +26,15 @@ struct InstalledPackageVerificationReport {
   std::string serial;
   std::string package_name;
   std::string component;
+  bool preflight_ok = false;
+  bool target_discovered = false;
+  bool package_visible = false;
+  bool component_ready = false;
   bool direct_launch_ok = false;
   bool launcher_generation_ok = false;
   bool generated_launcher_ok = false;
+  std::string preflight_output;
+  std::string preflight_notes;
   std::string direct_launch_output;
   std::string generated_launcher_output;
   InstalledPackageDesktopLaunchArtifacts artifacts;
@@ -61,10 +67,18 @@ struct WaydroidPackageVerificationSpec {
 
 struct WaydroidPackageVerificationReport {
   std::string app_name;
+  std::string serial;
   std::string package_name;
+  std::string component;
+  bool preflight_ok = false;
+  bool target_discovered = false;
+  bool package_visible = false;
+  bool component_ready = false;
   bool direct_launch_ok = false;
   bool launcher_generation_ok = false;
   bool generated_launcher_ok = false;
+  std::string preflight_output;
+  std::string preflight_notes;
   std::string direct_launch_output;
   std::string generated_launcher_output;
   WaydroidDesktopLaunchArtifacts artifacts;

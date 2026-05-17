@@ -5549,13 +5549,34 @@ void TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage() {
 void TestInstalledPackageVerificationSuccessPath() {
   const auto runtime_runner = [](const std::string& command)
       -> wfa::CommandResult {
+    if (command == "timeout 5s adb devices") {
+      return {0, "List of devices attached\ndevice-01\tdevice\n"};
+    }
+    if (command.find("adb -s 'device-01' shell getprop") != std::string::npos &&
+        command.find("ro.product.model") != std::string::npos) {
+      return {0, "Pixel 9\n"};
+    }
+    if (command.find("adb -s 'device-01' shell getprop") != std::string::npos &&
+        command.find("ro.build.version.release") != std::string::npos) {
+      return {0, "15\n"};
+    }
+    if (command.find("adb -s 'device-01' shell getprop") != std::string::npos &&
+        command.find("ro.product.cpu.abi") != std::string::npos) {
+      return {0, "x86_64\n"};
+    }
+    if (command.find(
+            "adb -s 'device-01' shell pm list packages 'com.example.demo'") !=
+        std::string::npos) {
+      return {0, "package:com.example.demo\n"};
+    }
     if (command ==
         "adb -s 'device-01' shell am start -W -n 'com.example.demo/.MainActivity'") {
       return {0,
               "Starting: Intent { cmp=com.example.demo/.MainActivity }\nStatus: ok\nComplete\n"};
     }
     throw std::runtime_error(
-        "unexpected runtime command in installed package verification test");
+        "unexpected runtime command in installed package verification test: " +
+        command);
   };
 
   const auto launcher_runner = [](const std::string& command)
@@ -5600,6 +5621,14 @@ void TestInstalledPackageVerificationSuccessPath() {
   const auto rendered = wfa::RenderInstalledPackageVerificationReport(report);
   Expect(rendered.find("Runtime Backend: attached-adb") != std::string::npos,
          "expected backend name in generic verification report");
+  Expect(rendered.find("Runtime Target: device-01") != std::string::npos,
+         "expected target label in generic verification report");
+  Expect(rendered.find("Preflight OK: yes") != std::string::npos,
+         "expected preflight success line in generic verification report");
+  Expect(rendered.find("Package Visible: yes") != std::string::npos,
+         "expected package visibility line in generic verification report");
+  Expect(rendered.find("Component Ready: yes") != std::string::npos,
+         "expected component readiness line in generic verification report");
   Expect(rendered.find("Verification Loading: [##########] 100/100") !=
              std::string::npos,
          "expected full generic verification loading");
@@ -5610,6 +5639,30 @@ void TestInstalledPackageVerificationSuccessPath() {
 void TestInstalledPackageMatrixSuccessPath() {
   const auto runtime_runner = [](const std::string& command)
       -> wfa::CommandResult {
+    if (command == "timeout 5s adb devices") {
+      return {0, "List of devices attached\ndevice-01\tdevice\n"};
+    }
+    if (command.find("adb -s 'device-01' shell getprop") != std::string::npos &&
+        command.find("ro.product.model") != std::string::npos) {
+      return {0, "Pixel 9\n"};
+    }
+    if (command.find("adb -s 'device-01' shell getprop") != std::string::npos &&
+        command.find("ro.build.version.release") != std::string::npos) {
+      return {0, "15\n"};
+    }
+    if (command.find("adb -s 'device-01' shell getprop") != std::string::npos &&
+        command.find("ro.product.cpu.abi") != std::string::npos) {
+      return {0, "x86_64\n"};
+    }
+    if (command ==
+            "timeout 5s adb -s 'device-01' shell pm list packages 'com.example.demo'" ||
+        command ==
+            "timeout 5s adb -s 'device-01' shell pm list packages 'com.example.tools'") {
+      if (command.find("com.example.demo") != std::string::npos) {
+        return {0, "package:com.example.demo\n"};
+      }
+      return {0, "package:com.example.tools\n"};
+    }
     if (command ==
             "adb -s 'device-01' shell am start -W -n 'com.example.demo/.MainActivity'" ||
         command ==
@@ -5621,7 +5674,9 @@ void TestInstalledPackageMatrixSuccessPath() {
       return {0,
               "Starting: Intent { cmp=com.example.tools/.HomeActivity }\nStatus: ok\nComplete\n"};
     }
-    return {1, "unexpected package"};
+    throw std::runtime_error(
+        "unexpected runtime command in installed package matrix test: " +
+        command);
   };
 
   const auto launcher_runner = [](const std::string& command)
@@ -5630,7 +5685,9 @@ void TestInstalledPackageMatrixSuccessPath() {
         command.find("com.example.tools.sh") != std::string::npos) {
       return {0, "launcher ok\n"};
     }
-    return {1, "unexpected launcher"};
+    throw std::runtime_error(
+        "unexpected launcher command in installed package matrix test: " +
+        command);
   };
 
   namespace fs = std::filesystem;
@@ -5659,6 +5716,12 @@ void TestInstalledPackageMatrixSuccessPath() {
       root.string(), runtime_runner, launcher_runner);
 
   Expect(report.entries.size() == 2, "expected two generic matrix entries");
+  if (!report.entries[0].verification_ok) {
+    throw std::runtime_error(
+        "first matrix verification failed:\n" +
+        wfa::RenderInstalledPackageVerificationReport(
+            report.entries[0].verification));
+  }
   Expect(report.entries[0].verification_ok,
          "expected first generic matrix package to pass");
   Expect(report.entries[1].verification_ok,
@@ -5668,6 +5731,8 @@ void TestInstalledPackageMatrixSuccessPath() {
   Expect(rendered.find("Runtime Backend: attached-adb") !=
              std::string::npos,
          "expected backend name in generic matrix report");
+  Expect(rendered.find("Runtime Target: device-01") != std::string::npos,
+         "expected target label in generic matrix report");
   Expect(rendered.find("Packages Passed: 2/2") != std::string::npos,
          "expected generic matrix pass count");
 
@@ -5676,6 +5741,9 @@ void TestInstalledPackageMatrixSuccessPath() {
 
 void TestWaydroidPackageVerificationSuccessPath() {
   const auto runtime_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "waydroid status") {
+      return {0, "Session:\tRUNNING\n"};
+    }
     if (command == "waydroid app launch com.android.calculator2") {
       return {0, ""};
     }
@@ -5714,6 +5782,8 @@ void TestWaydroidPackageVerificationSuccessPath() {
          "expected generated launcher execution success");
 
   const auto rendered = wfa::RenderWaydroidPackageVerificationReport(report);
+  Expect(rendered.find("Preflight OK: yes") != std::string::npos,
+         "expected waydroid preflight success line");
   Expect(rendered.find("Verification Loading: [##########] 100/100") !=
              std::string::npos,
          "expected full verification loading");
@@ -5725,6 +5795,9 @@ void TestWaydroidPackageVerificationSuccessPath() {
 
 void TestWaydroidPackageMatrixSuccessPath() {
   const auto runtime_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "waydroid status") {
+      return {0, "Session:\tRUNNING\n"};
+    }
     if (command == "waydroid app launch com.android.calculator2" ||
         command == "waydroid app launch com.android.settings") {
       return {0, ""};
@@ -5770,8 +5843,145 @@ void TestWaydroidPackageMatrixSuccessPath() {
   fs::remove_all(root);
 }
 
+void TestNativeInstalledPackageVerificationUsesPreflightAndOverrideBackedLaunch() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-installed-package-verify");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path runtime_probe = fixture.root / "linuxoid-art-runtime-probe";
+  {
+    std::ofstream output(runtime_probe);
+    output << "#!/bin/sh\n";
+    output << "case \"$*\" in\n";
+    output << "  *linuxoid.bootstrap.mode=application*) printf '%s\\n' "
+              "'application-runtime-ok'; exit 0 ;;\n";
+    output << "  *linuxoid.bootstrap.mode=activity*) printf '%s\\n' "
+              "'activity-runtime-ok'; exit 0 ;;\n";
+    output << "  *) printf '%s\\n' 'runtime-fixture-ok'; exit 0 ;;\n";
+    output << "esac\n";
+  }
+  fs::permissions(runtime_probe,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+  const fs::path compatctl_path = fixture.root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable runtime_override(
+      "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+
+  const auto report = wfa::VerifyInstalledPackageWithRunners(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .app_name = "Native Bridge",
+       .package_name = fixture.package_name,
+       .compatctl_path = compatctl_path.string(),
+       .desktop_root = (fixture.root / "applications").string(),
+       .launcher_root = (fixture.root / "launchers").string()},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native verification should not shell out through runtime bridge runner");
+      },
+      [](const std::string& command) -> wfa::CommandResult {
+        if (command.find("com.example.nativebridge.sh") != std::string::npos) {
+          return {0, "launcher ok\n"};
+        }
+        throw std::runtime_error(
+            "unexpected launcher command in native verification test");
+      });
+
+  Expect(report.direct_launch_ok,
+         "expected override-backed native verification launch success");
+  Expect(report.launcher_generation_ok,
+         "expected native verification launcher generation success");
+  Expect(report.generated_launcher_ok,
+         "expected native verification generated launcher success");
+
+  const auto rendered = wfa::RenderInstalledPackageVerificationReport(report);
+  Expect(rendered.find("Runtime Backend: native") != std::string::npos,
+         "expected native backend in verification report");
+  Expect(rendered.find("Runtime Target: linuxoid-native") != std::string::npos,
+         "expected native target label in verification report");
+  Expect(rendered.find("Preflight OK: yes") != std::string::npos,
+         "expected native preflight success line");
+  Expect(rendered.find("Package Visible: yes") != std::string::npos,
+         "expected native package visibility line");
+  Expect(rendered.find("Component Ready: yes") != std::string::npos,
+         "expected native component readiness line");
+  Expect(rendered.find("Component: com.example.nativebridge/.MainActivity") !=
+             std::string::npos,
+         "expected native launcher component in verification report");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeInstalledPackageVerificationReportsNonCandidateFailureHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-installed-package-verify-noncandidate", true, true);
+  const fs::path native_root = fixture.root / "native";
+  const fs::path compatctl_path = fixture.root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+
+  const auto report = wfa::VerifyInstalledPackageWithRunners(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .app_name = "Native Bridge",
+       .package_name = fixture.package_name,
+       .compatctl_path = compatctl_path.string(),
+       .desktop_root = (fixture.root / "applications").string(),
+       .launcher_root = (fixture.root / "launchers").string()},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native verification should not shell out through runtime bridge runner");
+      },
+      [](const std::string& command) -> wfa::CommandResult {
+        if (command.find("com.example.nativebridge.sh") != std::string::npos) {
+          return {0, "launcher ok\n"};
+        }
+        throw std::runtime_error(
+            "unexpected launcher command in native verification failure test");
+      });
+
+  Expect(!report.direct_launch_ok,
+         "expected native verification to fail for non-candidate bundle");
+  Expect(report.launcher_generation_ok,
+         "expected native verification launcher generation success");
+  Expect(report.generated_launcher_ok,
+         "expected native verification generated launcher success");
+  Expect(report.direct_launch_output.find("native spike candidate") !=
+             std::string::npos,
+         "expected native candidate failure reason in verification output");
+
+  const auto rendered = wfa::RenderInstalledPackageVerificationReport(report);
+  Expect(rendered.find("Preflight OK: yes") != std::string::npos,
+         "expected native preflight success even on non-candidate bundle");
+  Expect(rendered.find("Direct Launch OK: no") != std::string::npos,
+         "expected native direct launch failure line");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestWaydroidPackageMatrixCapturesFailure() {
   const auto runtime_runner = [](const std::string& command) -> wfa::CommandResult {
+    if (command == "waydroid status") {
+      return {0, "Session:\tRUNNING\n"};
+    }
     if (command == "waydroid app launch com.android.calculator2") {
       return {0, ""};
     }
@@ -6378,6 +6588,8 @@ int main() {
     TestInstalledPackageMatrixSuccessPath();
     TestWaydroidPackageVerificationSuccessPath();
     TestWaydroidPackageMatrixSuccessPath();
+    TestNativeInstalledPackageVerificationUsesPreflightAndOverrideBackedLaunch();
+    TestNativeInstalledPackageVerificationReportsNonCandidateFailureHonestly();
     TestWaydroidPackageMatrixCapturesFailure();
     TestApkHostVerificationImeSuccessPath();
     TestApkHostVerificationAppSuccessPath();

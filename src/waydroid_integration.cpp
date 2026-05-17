@@ -31,15 +31,17 @@ std::string QuoteForShell(const std::string& value) {
 int CalculateInstalledVerificationProgress(
     const InstalledPackageVerificationReport& report) {
   int satisfied = 0;
+  satisfied += report.preflight_ok ? 1 : 0;
   satisfied += report.direct_launch_ok ? 1 : 0;
   satisfied += report.launcher_generation_ok ? 1 : 0;
   satisfied += report.generated_launcher_ok ? 1 : 0;
   return static_cast<int>(
-      std::lround((static_cast<double>(satisfied) / 3.0) * 100.0));
+      std::lround((static_cast<double>(satisfied) / 4.0) * 100.0));
 }
 
 bool VerificationPassed(const InstalledPackageVerificationReport& report) {
-  return report.direct_launch_ok && report.launcher_generation_ok &&
+  return report.preflight_ok && report.direct_launch_ok &&
+         report.launcher_generation_ok &&
          report.generated_launcher_ok;
 }
 
@@ -98,32 +100,59 @@ InstalledPackageVerificationReport VerifyInstalledPackageWithRunners(
   report.package_name = spec.package_name;
   report.component = spec.component;
 
-  const auto direct_report = LaunchInstalledAppWithRunner(
+  const auto preflight = PreflightRuntimeWithRunner(
       {.backend = spec.backend,
        .serial = spec.serial,
        .package_name = spec.package_name,
        .component = spec.component},
       runtime_runner);
-  const std::string effective_component =
-      direct_report.component.empty() ? spec.component : direct_report.component;
-  report.component = effective_component;
-  report.direct_launch_ok = direct_report.launch_ok;
-  report.direct_launch_output = direct_report.output;
+  report.serial = preflight.serial.empty() ? spec.serial : preflight.serial;
+  report.component = preflight.component.empty() ? spec.component : preflight.component;
+  report.preflight_ok = preflight.ready_for_launch;
+  report.target_discovered = preflight.target_discovered;
+  report.package_visible = preflight.package_visible;
+  report.component_ready = preflight.component_ready;
+  report.preflight_output = RenderRuntimePreflightReport(preflight);
+  report.preflight_notes = preflight.notes;
 
-  report.artifacts = CreateInstalledPackageDesktopLaunchArtifacts(
-      {.backend = spec.backend,
-       .app_name = report.app_name,
-       .serial = spec.serial,
-       .package_name = spec.package_name,
-       .component = effective_component,
-       .compatctl_path = spec.compatctl_path,
-       .desktop_root = spec.desktop_root,
-       .launcher_root = spec.launcher_root});
-  report.launcher_generation_ok = report.artifacts.host_launch_ready;
+  if (preflight.ready_for_launch) {
+    const auto direct_report = LaunchInstalledAppWithRunner(
+        {.backend = spec.backend,
+         .serial = report.serial,
+         .package_name = spec.package_name,
+         .component = report.component},
+        runtime_runner);
+    if (!direct_report.component.empty()) {
+      report.component = direct_report.component;
+    }
+    report.direct_launch_ok = direct_report.launch_ok;
+    report.direct_launch_output = direct_report.output;
+  } else {
+    report.direct_launch_ok = false;
+    report.direct_launch_output = report.preflight_output;
+  }
 
-  const auto launcher_result = launcher_runner(report.artifacts.script_path);
-  report.generated_launcher_ok = launcher_result.exit_code == 0;
-  report.generated_launcher_output = launcher_result.output;
+  try {
+    report.artifacts = CreateInstalledPackageDesktopLaunchArtifacts(
+        {.backend = spec.backend,
+         .app_name = report.app_name,
+         .serial = report.serial,
+         .package_name = spec.package_name,
+         .component = report.component,
+         .compatctl_path = spec.compatctl_path,
+         .desktop_root = spec.desktop_root,
+         .launcher_root = spec.launcher_root});
+    report.launcher_generation_ok = report.artifacts.host_launch_ready;
+    if (report.launcher_generation_ok) {
+      const auto launcher_result = launcher_runner(report.artifacts.script_path);
+      report.generated_launcher_ok = launcher_result.exit_code == 0;
+      report.generated_launcher_output = launcher_result.output;
+    }
+  } catch (const std::exception& error) {
+    report.launcher_generation_ok = false;
+    report.generated_launcher_ok = false;
+    report.generated_launcher_output = std::string(error.what()) + "\n";
+  }
   return report;
 }
 
@@ -172,6 +201,9 @@ InstalledPackageMatrixReport VerifyInstalledPackageMatrixWithRunners(
            .launcher_root = launcher_root},
           runtime_runner, launcher_runner);
       entry.verification_ok = VerificationPassed(entry.verification);
+      if (report.serial.empty() && !entry.verification.serial.empty()) {
+        report.serial = entry.verification.serial;
+      }
     } catch (const std::exception& error) {
       entry.error = error.what();
       entry.verification.backend_name = entry.backend_name;
@@ -206,8 +238,16 @@ std::string RenderInstalledPackageVerificationReport(
   output << "Runtime Backend: " << report.backend_name << '\n';
   output << "App Name: " << report.app_name << '\n';
   output << "Package: " << report.package_name << '\n';
-  output << "ADB Serial: " << report.serial << '\n';
+  output << "Runtime Target: " << report.serial << '\n';
   output << "Component: " << report.component << '\n';
+  output << "Target Discovered: " << (report.target_discovered ? "yes" : "no")
+         << '\n';
+  output << "Preflight OK: " << (report.preflight_ok ? "yes" : "no") << '\n';
+  output << "Package Visible: " << (report.package_visible ? "yes" : "no")
+         << '\n';
+  output << "Component Ready: " << (report.component_ready ? "yes" : "no")
+         << '\n';
+  output << "Preflight Notes: " << report.preflight_notes << '\n';
   output << "Direct Launch OK: " << (report.direct_launch_ok ? "yes" : "no")
          << '\n';
   output << "Launcher Generation OK: "
@@ -216,6 +256,7 @@ std::string RenderInstalledPackageVerificationReport(
          << (report.generated_launcher_ok ? "yes" : "no") << '\n';
   output << "Launcher Script: " << report.artifacts.script_path << '\n';
   output << "Desktop Entry: " << report.artifacts.desktop_file_path << '\n';
+  output << "Preflight Output:\n" << report.preflight_output;
   output << "Direct Launch Output:\n" << report.direct_launch_output;
   output << "Generated Launcher Output:\n" << report.generated_launcher_output;
   return output.str();
@@ -234,7 +275,7 @@ std::string RenderInstalledPackageMatrixReport(
          << '\n';
   output << "Runtime Backend: " << report.backend_name << '\n';
   output << "Artifact Root: " << report.artifact_root << '\n';
-  output << "ADB Serial: " << report.serial << '\n';
+  output << "Runtime Target: " << report.serial << '\n';
   output << "Packages Passed: " << passed << "/" << report.entries.size()
          << '\n';
   for (const auto& entry : report.entries) {
@@ -242,6 +283,8 @@ std::string RenderInstalledPackageMatrixReport(
            << RenderLoadingBar(
                   CalculateInstalledVerificationProgress(entry.verification), 10)
            << " " << (entry.verification_ok ? "pass" : "fail")
+           << " preflight="
+           << (entry.verification.preflight_ok ? "yes" : "no")
            << " direct="
            << (entry.verification.direct_launch_ok ? "yes" : "no")
            << " launcher="
@@ -280,7 +323,15 @@ WaydroidPackageVerificationReport VerifyWaydroidPackageWithRunners(
 
   WaydroidPackageVerificationReport report;
   report.app_name = generic.app_name;
+  report.serial = generic.serial;
   report.package_name = generic.package_name;
+  report.component = generic.component;
+  report.preflight_ok = generic.preflight_ok;
+  report.target_discovered = generic.target_discovered;
+  report.package_visible = generic.package_visible;
+  report.component_ready = generic.component_ready;
+  report.preflight_output = generic.preflight_output;
+  report.preflight_notes = generic.preflight_notes;
   report.direct_launch_ok = generic.direct_launch_ok;
   report.launcher_generation_ok = generic.launcher_generation_ok;
   report.generated_launcher_ok = generic.generated_launcher_ok;
@@ -372,10 +423,18 @@ std::string RenderWaydroidPackageVerificationReport(
   return RenderInstalledPackageVerificationReport(
       {.backend_name = "waydroid",
        .app_name = report.app_name,
+       .serial = report.serial,
        .package_name = report.package_name,
+       .component = report.component,
+       .preflight_ok = report.preflight_ok,
+       .target_discovered = report.target_discovered,
+       .package_visible = report.package_visible,
+       .component_ready = report.component_ready,
        .direct_launch_ok = report.direct_launch_ok,
        .launcher_generation_ok = report.launcher_generation_ok,
        .generated_launcher_ok = report.generated_launcher_ok,
+       .preflight_output = report.preflight_output,
+       .preflight_notes = report.preflight_notes,
        .direct_launch_output = report.direct_launch_output,
        .generated_launcher_output = report.generated_launcher_output,
        .artifacts = {.backend_name = "waydroid",
@@ -403,11 +462,19 @@ std::string RenderWaydroidMatrixReport(const WaydroidMatrixReport& report) {
          .verification =
              {.backend_name = "waydroid",
               .app_name = entry.verification.app_name,
+              .serial = entry.verification.serial,
               .package_name = entry.verification.package_name,
+              .component = entry.verification.component,
+              .preflight_ok = entry.verification.preflight_ok,
+              .target_discovered = entry.verification.target_discovered,
+              .package_visible = entry.verification.package_visible,
+              .component_ready = entry.verification.component_ready,
               .direct_launch_ok = entry.verification.direct_launch_ok,
               .launcher_generation_ok =
                   entry.verification.launcher_generation_ok,
               .generated_launcher_ok = entry.verification.generated_launcher_ok,
+              .preflight_output = entry.verification.preflight_output,
+              .preflight_notes = entry.verification.preflight_notes,
               .direct_launch_output = entry.verification.direct_launch_output,
               .generated_launcher_output =
                   entry.verification.generated_launcher_output,

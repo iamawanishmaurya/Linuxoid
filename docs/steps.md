@@ -1567,3 +1567,8 @@
   Action: Refreshed the README, self-healing runtime note, and phased plan to explain the public self-healing command surface, the Linuxoid-owned local `native` runtime bridge, and the exact line between override-backed fixture success and real host-side Android app execution.
   Result: The repo now says more plainly what self-healing means today and what still blocks full Android app startup on Linux.
   Timestamp: 2026-05-18T00:01:40+05:30
+
+- Step: Backend-neutral verification preflight contract GREEN
+  Action: Added red-first regression coverage for attached-ADB, Waydroid, and local `native` installed-package verification, then taught `verify-package` and `verify-package-matrix` to run runtime preflight first, expose runtime-target selection plus package visibility plus component readiness in the public report, and keep native verification on the same contract through the staged-package bridge.
+  Result: Linuxoid now verifies staged native packages through the same preflight-backed installed-package surface as the other backends, including override-backed native success and honest non-candidate native failure without collapsing back to a launch-only shortcut.
+  Timestamp: 2026-05-18T00:08:00+05:30

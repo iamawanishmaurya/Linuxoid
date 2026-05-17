@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.64 - 2026-05-17
+
+- Upgrade the backend-neutral installed-package verification seam so `verify-package` and `verify-package-matrix` now run runtime preflight first, report runtime-target selection plus package visibility plus component readiness explicitly, and avoid treating the local `native` backend as a launch-only special case.
+- Add regression coverage for attached-ADB, Waydroid, and local `native` verification paths, including override-backed native success and honest non-candidate native failure through the same verification contract.
+- Refresh the README, phased plan, changelog, and step log so the repo explains that backend-neutral verification now reuses the staged native preflight contract before launch.
+
 ## v0.1.63 - 2026-05-17
 
 - Refresh the README, self-healing runtime note, and phased plan so the repo explains more directly what self-healing means now at the public command surface, what the Linuxoid-owned local `native` runtime bridge contributes, and what still remains before real host-side Android app execution on Linux.
