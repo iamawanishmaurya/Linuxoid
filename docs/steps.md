@@ -1588,6 +1588,11 @@
   Result: Linuxoid now proves the self-healing health surface stays honest and stable where harnesses actually consume it, not only through in-process fixture helpers.
   Timestamp: 2026-05-18T00:01:10+05:30
 
+- Step: Self-healing meaning docs GREEN
+  Action: Tightened the README, self-healing runtime note, and phased plan so they explain in plain terms what counts as a successful self-healing pass today and where the real Android execution line still is.
+  Result: The repo now says more directly that self-healing currently means truthful diagnosis, bounded recovery choice, and replayable artifacts, while full Android app execution still needs the first default-path host-ART-owned staged app startup.
+  Timestamp: 2026-05-18T02:34:00+05:30
+
 - Step: Self-healing CLI replay honesty GREEN
   Action: Added a higher-level self-healing CLI contract regression that exercises baseline health, failed-native-load recovery planning, repeated missing-native health output, and missing-native diagnostic replay in one matrix.
   Result: Linuxoid now proves at the command surface that health classification stays deterministic, recovery decision selection stays deterministic, repeated JSON output stays stable, and missing dependencies do not drift into false success even after replay.

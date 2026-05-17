@@ -118,6 +118,13 @@ What that means **today**:
 
 In plain terms, Linuxoid can now **detect, classify, explain, and replay** failure states on the native path. It can tell us why bootstrap is blocked, choose the next bounded recovery action, and preserve that decision in a machine-readable way for later diagnosis.
 
+A **successful self-healing pass today** means:
+
+- the runtime state was classified truthfully
+- the bounded next recovery action was selected deterministically
+- the resulting JSON and JSONL artifacts are stable and replayable
+- Linuxoid did not claim a launched app if the execution path was still blocked
+
 The practical command-level contract today is:
 
 1. `native-runtime-health-fixture` tells us which subsystem is blocked.
@@ -170,6 +177,8 @@ The self-healing layer is no longer the main blocker. The remaining blockers are
 6. A real staged foreground candidate app that can move through the public native runtime bridge and succeed without relying on the Linuxoid-owned ART override seam.
 
 Until those gates land, Linuxoid can diagnose and replay failures very well, but it still cannot claim full native Android app execution on Linux. The strongest successful path today is still a Linuxoid-owned fixture seam, not the default host-side app-execution path the project is ultimately aiming for.
+
+The short version is: self-healing is already a good **diagnosis and bounded-recovery** layer, but it is not yet the thing that makes a staged Android app fully run. The next real milestone is still the first **default-path, no-override, host-ART-owned** startup of a staged foreground candidate app.
 
 Current commands:
 

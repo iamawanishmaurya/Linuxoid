@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.76 - 2026-05-18
+
+- Refresh the self-healing docs so they say more plainly what a successful self-healing pass means today: truthful diagnosis, bounded next-step selection, replayable artifacts, and no fake launch claims while execution is still blocked.
+- Clarify again that full Android app execution is still blocked on the first default-path, no-override, host-ART-owned staged app startup, plus richer Binder/framework behavior, bound Wayland+EGL rendering, fuller IME, and fuller Android resource semantics.
+
 ## v0.1.75 - 2026-05-18
 
 - Strengthen the self-healing CLI contract regression again by adding one end-to-end matrix that proves health classification, deterministic recovery selection, stable repeated JSON output, and no false success when a dependency is missing all the way through the diagnostic replay surface.

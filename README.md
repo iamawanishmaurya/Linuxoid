@@ -279,6 +279,13 @@ Today, **self-healing** in Linuxoid means:
   - repeated command JSON stays stable
   - missing dependencies do not flip the runtime into false success
 
+A **successful self-healing pass today** means something narrower than “the app launched”:
+
+- Linuxoid identified the blocked subsystem truthfully.
+- Linuxoid selected the bounded next recovery action deterministically.
+- Linuxoid wrote stable JSON and JSONL artifacts that a harness or operator can replay later.
+- Linuxoid did **not** claim Android app execution success if the runtime was still blocked.
+
 The practical reading of that contract today is:
 
 - Linuxoid can tell a harness which subsystem is blocked.
@@ -318,6 +325,8 @@ Linuxoid is still **not** at “run Android apps directly on Linux end to end”
    - it still needs the first successful host-side Android class execution and application or activity bootstrap on the native path for a real staged candidate app, not only override-backed fixture success
 
 Put more simply: Linuxoid can now **diagnose, classify, stage, and replay** the native Android path well. It still cannot honestly claim **full Android app execution on Linux** until a real staged app crosses the current ART/bootstrap seams without relying on the Linuxoid-owned override path.
+
+That is the current line in the sand: Linuxoid is already good at telling us **why** startup is blocked and **what bounded next step** belongs to that failure, but it still needs the first **default-path, no-override, host-ART-owned** staged app startup before we can say Android apps are genuinely running natively on Linux.
 
 ## Target Architecture
 
