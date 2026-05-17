@@ -113,6 +113,13 @@ What that means **today**:
 
 In plain terms, Linuxoid can now **detect, classify, explain, and replay** failure states on the native path. It can tell us why bootstrap is blocked, choose the next bounded recovery action, and preserve that decision in a machine-readable way for later diagnosis.
 
+The practical command-level contract today is:
+
+1. `native-runtime-health-fixture` tells us which subsystem is blocked.
+2. `native-runtime-recovery-plan` tells us which bounded recovery action belongs to that failure class.
+3. `native-runtime-health-replay` and `native-runtime-diagnostic-replay` let us revisit that diagnosis later from artifacts alone.
+4. None of those commands claim successful Android execution unless the deeper runtime seams actually succeed.
+
 That summary is now explicit in the health JSON. A harness no longer has to scan every raw record to answer basic questions like:
 
 - Is the runtime blocked on a real dependency?
@@ -157,7 +164,7 @@ The self-healing layer is no longer the main blocker. The remaining blockers are
 5. Resource handling beyond manifest/assets into full Android resource-table semantics.
 6. A real staged foreground candidate app that can move through the public native runtime bridge and succeed without relying on the Linuxoid-owned ART override seam.
 
-Until those gates land, Linuxoid can diagnose and replay failures very well, but it still cannot claim full native Android app execution on Linux.
+Until those gates land, Linuxoid can diagnose and replay failures very well, but it still cannot claim full native Android app execution on Linux. The strongest successful path today is still a Linuxoid-owned fixture seam, not the default host-side app-execution path the project is ultimately aiming for.
 
 Current commands:
 

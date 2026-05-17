@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Self-healing docs clarification
+  Action: Updated the README, self-healing runtime note, and phased plan to state the current self-healing command contract more plainly and to sharpen the line between bounded diagnosis/recovery planning and actual Android app execution.
+  Result: The repo now says more directly that Linuxoid can diagnose, classify, choose bounded recovery, and replay failures well, but it still needs a real staged foreground app to cross the ART and bootstrap seams on the default host-side path before it can claim full Android execution.
+  Timestamp: 2026-05-18T00:14:00+05:30
+
 - Step: CLI self-healing contract matrix
   Action: Added one end-to-end CLI regression that exercises baseline health classification, the four deterministic recovery scenarios, repeated JSON stability, and missing-dependency no-false-success behavior through `native-runtime-health-fixture` and `native-runtime-recovery-plan`.
   Result: Linuxoid now pins the self-healing contract at the command surface harnesses actually consume, not only across scattered in-process assertions.

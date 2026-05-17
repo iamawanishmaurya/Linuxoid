@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.70 - 2026-05-18
+
+- Refresh the self-healing documentation so the repo explains the current public command contract more plainly: Linuxoid can diagnose, classify, choose bounded recovery, and replay failures, but it still cannot honestly claim full Android app execution on Linux.
+- Clarify in the README, self-healing runtime note, and phased plan that the strongest successful path today is still a Linuxoid-owned fixture seam, while the remaining blocker is a real staged foreground app crossing the ART and bootstrap seams on the default host-side path.
+
 ## v0.1.69 - 2026-05-17
 
 - Add a consolidated CLI-level self-healing contract regression that proves, in one end-to-end matrix, deterministic health classification, deterministic recovery decision selection, stable repeated JSON output, and no false success when a dependency is missing.
