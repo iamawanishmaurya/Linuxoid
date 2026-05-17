@@ -1377,3 +1377,33 @@
   Action: Rebuilt Linuxoid, reran the full test suite, exercised `bootstrap-native-spike`, exercised `native-art-activity-bootstrap-fixture` against the staged Calculator bootstrap, and refreshed the docs/version/status metadata for the new activity bootstrap seam.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the new activity bootstrap fixture returned a deterministic launcher-derived target with `runtime_bootstrap_planned: true`, and Linuxoid now reports `execution 96/100` while still leaving real host ART execution pending.
   Timestamp: 2026-05-17T05:50:03+05:30
+
+- Step: Activity runtime-attempt seam selection
+  Action: Inspected the current ART classloader, class-resolution, runtime-smoke, activity-bootstrap, and runtime-health seams to choose the next smallest honest execution slice.
+  Result: Linuxoid will next make activity bootstrap a first-class runtime-attempt surface in health, recovery, trace, and replay flows instead of leaving it as a side artifact.
+  Timestamp: 2026-05-17T05:52:39+05:30
+
+- Step: Activity runtime-attempt red tests
+  Action: Added failing tests that require runtime health to classify `activity_bootstrap_readiness` explicitly and diagnostic replay to index the activity-bootstrap trace as a first-class source.
+  Result: Linuxoid now has a red target that forces the self-healing runtime to carry post-class-resolution activity bootstrap through health and replay instead of stopping at class resolution alone.
+  Timestamp: 2026-05-17T05:53:40+05:30
+
+- Step: Activity runtime-attempt failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the new activity-bootstrap health and replay tests.
+  Result: `wfa_tests` failed because runtime health does not yet emit an `activity_bootstrap_readiness` record or include the activity-bootstrap trace in diagnostic replay.
+  Timestamp: 2026-05-17T05:54:05+05:30
+
+- Step: Activity runtime-attempt integration red follow-up
+  Action: Wired activity bootstrap into runtime health and diagnostic replay, then reran the full build and test pass.
+  Result: The suite moved forward to stale count assertions: Linuxoid now emits the new subsystem, but older tests still expect the pre-integration health-record totals.
+  Timestamp: 2026-05-17T05:55:15+05:30
+
+- Step: Activity bootstrap health integration
+  Action: Threaded the existing activity-bootstrap fixture into runtime health, added the new `activity_bootstrap_readiness` subsystem record, added the deterministic recovery action `attempt_host_activity_bootstrap`, and merged the activity-bootstrap trace into diagnostic replay.
+  Result: Linuxoid now treats post-class-resolution activity bootstrap as a first-class self-healing runtime surface instead of a side artifact.
+  Timestamp: 2026-05-17T06:01:55+05:30
+
+- Step: Activity bootstrap health verification
+  Action: Updated stale regression expectations, rebuilt Linuxoid, reran the full test suite, and refreshed the docs/version/status metadata for the expanded self-healing runtime contract.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, and the runtime health plus replay surfaces now include activity-bootstrap readiness and trace coverage.
+  Timestamp: 2026-05-17T06:01:55+05:30

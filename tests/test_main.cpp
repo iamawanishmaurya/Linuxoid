@@ -2033,7 +2033,7 @@ void TestRuntimeHealthFixtureWritesStableArtifacts() {
          "expected dex/classloader gap to prevent false overall success");
   Expect(report.overall_state == "recovery_needed",
          "expected recovery-needed overall state");
-  Expect(report.records.size() == 6, "expected six subsystem health records");
+  Expect(report.records.size() == 7, "expected seven subsystem health records");
   Expect(fs::exists(report.health_json_path), "expected health json artifact");
   Expect(fs::exists(report.trace_jsonl_path), "expected trace jsonl artifact");
   Expect(fs::exists(report.replay_json_path), "expected replay json artifact");
@@ -2050,6 +2050,17 @@ void TestRuntimeHealthFixtureWritesStableArtifacts() {
   Expect(!dex_record->ready, "expected pending dex/classloader readiness");
   Expect(dex_record->selected_recovery_action == "attempt_host_art_class_resolution",
          "expected deterministic dex recovery action");
+
+  const auto activity_bootstrap_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "activity_bootstrap_readiness";
+      });
+  Expect(activity_bootstrap_record != report.records.end(),
+         "expected activity bootstrap health record");
+  Expect(activity_bootstrap_record->selected_recovery_action ==
+             "attempt_host_activity_bootstrap",
+         "expected deterministic activity bootstrap recovery action");
 
   const auto native_record = std::find_if(
       report.records.begin(), report.records.end(),
@@ -2550,6 +2561,31 @@ void TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess()
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeHealthFixtureTracksActivityBootstrapReadiness() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-activity-bootstrap", true, true);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+
+  const auto bootstrap_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "activity_bootstrap_readiness";
+      });
+  Expect(bootstrap_record != report.records.end(),
+         "expected activity bootstrap readiness record");
+  Expect(bootstrap_record->artifact_path.find(
+             "activity-bootstrap-result.json") != std::string::npos,
+         "expected activity bootstrap result artifact path");
+  Expect(bootstrap_record->selected_recovery_action ==
+             "attempt_host_activity_bootstrap",
+         "expected deterministic activity bootstrap recovery action");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeHealthSummaryFieldsStayDeterministic() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -2560,23 +2596,25 @@ void TestRuntimeHealthSummaryFieldsStayDeterministic() {
 
   Expect(report.dependency_blocked,
          "expected missing native dependency to mark the runtime as dependency blocked");
-  Expect(report.failing_subsystem_count == 2,
-         "expected native and dex subsystems to be counted as failing");
-  Expect(report.recovery_actions_selected == 2,
-         "expected two bounded recovery actions in summary fields");
-  Expect(report.failing_subsystems.size() == 2,
+  Expect(report.failing_subsystem_count == 3,
+         "expected native, dex, and activity bootstrap subsystems to be counted as failing");
+  Expect(report.recovery_actions_selected == 3,
+         "expected three bounded recovery actions in summary fields");
+  Expect(report.failing_subsystems.size() == 3,
          "expected stable failing subsystem list size");
-  Expect(report.failing_subsystems[0] == "dex_classloader_readiness",
+  Expect(report.failing_subsystems[0] == "activity_bootstrap_readiness",
          "expected deterministic sorted failing subsystem order");
-  Expect(report.failing_subsystems[1] == "native_loading",
+  Expect(report.failing_subsystems[1] == "dex_classloader_readiness",
+         "expected deterministic sorted failing subsystem order");
+  Expect(report.failing_subsystems[2] == "native_loading",
          "expected deterministic sorted failing subsystem order");
 
   const auto rendered = wfa::RenderRuntimeHealthReportJson(report);
   Expect(rendered.find("\"dependency_blocked\": true") != std::string::npos,
          "expected dependency_blocked in runtime health json");
-  Expect(rendered.find("\"failing_subsystem_count\": 2") != std::string::npos,
+  Expect(rendered.find("\"failing_subsystem_count\": 3") != std::string::npos,
          "expected failing subsystem count in runtime health json");
-  Expect(rendered.find("\"recovery_actions_selected\": 2") != std::string::npos,
+  Expect(rendered.find("\"recovery_actions_selected\": 3") != std::string::npos,
          "expected recovery action count in runtime health json");
 
   fs::remove_all(fixture.root);
@@ -2591,19 +2629,29 @@ void TestRuntimeHealthReplaySummarizesTrace() {
       fixture.bootstrap.bootstrap_manifest_path, "baseline");
   const auto replay = wfa::ReplayRuntimeHealthTrace(report.trace_jsonl_path);
 
-  Expect(replay.events_read >= 6, "expected runtime health trace events");
-  Expect(replay.subsystems_observed == 6,
-         "expected six subsystems in replay");
+  Expect(replay.events_read >= 7, "expected runtime health trace events");
+  Expect(replay.subsystems_observed == 7,
+         "expected seven subsystems in replay");
   Expect(std::find(replay.failing_subsystems.begin(),
                    replay.failing_subsystems.end(),
                    "dex_classloader_readiness") !=
              replay.failing_subsystems.end(),
          "expected dex classloader replay failure");
+  Expect(std::find(replay.failing_subsystems.begin(),
+                   replay.failing_subsystems.end(),
+                   "activity_bootstrap_readiness") !=
+             replay.failing_subsystems.end(),
+         "expected activity bootstrap replay failure");
   Expect(std::find(replay.selected_actions.begin(),
                    replay.selected_actions.end(),
                    "attempt_host_art_class_resolution") !=
              replay.selected_actions.end(),
          "expected dex recovery action in replay");
+  Expect(std::find(replay.selected_actions.begin(),
+                   replay.selected_actions.end(),
+                   "attempt_host_activity_bootstrap") !=
+             replay.selected_actions.end(),
+         "expected activity bootstrap recovery action in replay");
 
   const auto rendered = wfa::RenderRuntimeHealthReplayJson(replay);
   Expect(rendered.find("\"overall_state\": \"recovery_needed\"") !=
@@ -2635,6 +2683,11 @@ void TestRuntimeDiagnosticReplayReportsMissingNativeDependencyHonestly() {
                    "retry_native_load_after_bundle_refresh") !=
              replay.selected_actions.end(),
          "expected native recovery action in diagnostic replay");
+  Expect(std::find(replay.selected_actions.begin(),
+                   replay.selected_actions.end(),
+                   "attempt_host_activity_bootstrap") !=
+             replay.selected_actions.end(),
+         "expected activity bootstrap recovery action in diagnostic replay");
 
   fs::remove_all(fixture.root);
 }
@@ -2688,10 +2741,20 @@ void TestRuntimeDiagnosticReplayWritesStableArtifacts() {
                    "attempt_host_art_class_resolution") !=
              replay.selected_actions.end(),
          "expected dex recovery action in diagnostic replay");
+  Expect(std::find_if(replay.trace_sources.begin(), replay.trace_sources.end(),
+                      [](const wfa::RuntimeDiagnosticTraceSource& source) {
+                        return source.source_name ==
+                               "art_activity_bootstrap_trace";
+                      }) != replay.trace_sources.end(),
+         "expected activity bootstrap trace source in diagnostic replay");
   const std::string trace_index = ReadTextFile(replay.trace_index_json_path);
   Expect(trace_index.find("\"source_name\": \"runtime_health_trace\"") !=
              std::string::npos,
          "expected runtime health trace in diagnostic index");
+  Expect(trace_index.find(
+             "\"source_name\": \"art_activity_bootstrap_trace\"") !=
+             std::string::npos,
+         "expected activity bootstrap trace in diagnostic index");
   Expect(trace_index.find("\"source_fingerprint\": ") != std::string::npos,
          "expected source fingerprint in diagnostic index");
   Expect(trace_index.find("\"first_event_type\": ") != std::string::npos,
@@ -5103,6 +5166,7 @@ int main() {
     TestRuntimeHealthFixtureSelectsUnavailableDisplayRecovery();
     TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
     TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess();
+    TestRuntimeHealthFixtureTracksActivityBootstrapReadiness();
     TestRuntimeHealthSummaryFieldsStayDeterministic();
     TestRuntimeHealthReplaySummarizesTrace();
     TestNativeArtRuntimeSmokeWritesTraceJsonl();

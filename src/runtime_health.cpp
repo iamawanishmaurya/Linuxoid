@@ -1,5 +1,6 @@
 #include "wfa/runtime_health.hpp"
 
+#include "wfa/art_activity_bootstrap_fixture.hpp"
 #include "wfa/art_class_resolution_fixture.hpp"
 #include "wfa/art_classloader_fixture.hpp"
 #include "wfa/art_runtime_smoke.hpp"
@@ -31,6 +32,7 @@ struct RuntimeObservationContext {
   ApkResourceReadinessReport resources;
   NativeArtClassResolutionFixtureReport art_resolution;
   NativeArtRuntimeSmokeReport art_runtime;
+  NativeArtActivityBootstrapFixtureReport activity_bootstrap;
   NativeWindowBridgeFixtureReport bridge;
   NativeInputQueueFixtureReport input;
   bool has_classes_dex = false;
@@ -188,6 +190,14 @@ RecoveryActionTemplate BuildRecoveryActionTemplate(
             .action_rank = 50,
             .retry_budget = 0,
             .recovery_scope = "art_bridge"};
+  }
+  if (subsystem_name == "activity_bootstrap_readiness") {
+    return {.action_name = "attempt_host_activity_bootstrap",
+            .action_reason =
+                "Launcher activity targeting, Binder readiness, and class-resolution evidence are in place, so the next step is to attempt the first host-side activity bootstrap probe against the staged bundle.",
+            .action_rank = 60,
+            .retry_budget = 0,
+            .recovery_scope = "activity_bootstrap"};
   }
   if (subsystem_name == "input_queue_readiness") {
     return {.action_name = "recreate_input_queue_after_surface_ready",
@@ -371,6 +381,42 @@ RuntimeHealthRecord BuildDexRecord(const RuntimeObservationContext& context) {
           std::string(context.art_runtime.runtime_class_resolution_succeeded
                           ? "true"
                           : "false"));
+}
+
+RuntimeHealthRecord BuildActivityBootstrapRecord(
+    const RuntimeObservationContext& context) {
+  if (!context.has_classes_dex) {
+    return MakeHealthRecord(
+        "activity_bootstrap_readiness", "not_required", true,
+        context.activity_bootstrap.result_json_path, "",
+        "APK archive does not contain classes.dex entries.");
+  }
+
+  const auto& bootstrap = context.activity_bootstrap;
+  std::string state = "blocked";
+  bool ready = false;
+  if (bootstrap.runtime_bootstrap_succeeded) {
+    state = "ready";
+    ready = true;
+  } else if (bootstrap.runtime_bootstrap_planned) {
+    state = "pending";
+  }
+
+  return MakeHealthRecord(
+      "activity_bootstrap_readiness", state, ready,
+      bootstrap.result_json_path, bootstrap.exit_reason,
+      "launcher_component=" + bootstrap.launcher_component +
+          "; selected_activity_class_name=" +
+          bootstrap.selected_activity_class_name +
+          "; runtime_bootstrap_planned=" +
+          std::string(bootstrap.runtime_bootstrap_planned ? "true" : "false") +
+          "; runtime_bootstrap_attempted=" +
+          std::string(bootstrap.runtime_bootstrap_attempted ? "true" : "false") +
+          "; runtime_bootstrap_succeeded=" +
+          std::string(bootstrap.runtime_bootstrap_succeeded ? "true"
+                                                            : "false") +
+          "; dependency_count=" +
+          std::to_string(bootstrap.dependency_count));
 }
 
 RuntimeHealthReplayReport BuildReplayReportFromEvents(
@@ -597,6 +643,8 @@ RuntimeHealthReport RunRuntimeHealthFixture(
   context.art_resolution =
       RunNativeArtClassResolutionFixture(bootstrap_manifest_path);
   context.art_runtime = RunNativeArtRuntimeSmokeFixture(bootstrap_manifest_path);
+  context.activity_bootstrap =
+      RunNativeArtActivityBootstrapFixture(bootstrap_manifest_path);
   context.bridge = RunNativeWindowBridgeFixture(
       (fs::path(context.lifecycle.session_root) / "health" / "surface").string(),
       {.width = 48, .height = 32, .format = kNativeWindowFormatRgba8888, .stride = 48});
@@ -632,6 +680,7 @@ RuntimeHealthReport RunRuntimeHealthFixture(
   report.records.push_back(BuildInputRecord(context, scenario_name));
   report.records.push_back(BuildBinderRecord(context, scenario_name));
   report.records.push_back(BuildDexRecord(context));
+  report.records.push_back(BuildActivityBootstrapRecord(context));
 
   report.overall_ready = true;
   report.self_healing_ready = true;
@@ -930,6 +979,10 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
            .string()},
       {"art_runtime_smoke_trace",
        (fs::path(lifecycle.session_root) / "art" / "runtime-smoke-trace.jsonl")
+           .string()},
+      {"art_activity_bootstrap_trace",
+       (fs::path(lifecycle.session_root) / "art" /
+        "activity-bootstrap-trace.jsonl")
            .string()},
   };
 

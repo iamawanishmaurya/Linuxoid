@@ -17,6 +17,7 @@ What that means **today**:
   - unavailable display
   - failed service lookup
   - pending DEX/classloader bootstrap
+  - pending post-class-resolution activity bootstrap
 - Every selected recovery action now carries deterministic machine-facing metadata:
   - `action_rank`
   - `retry_budget`
@@ -52,6 +53,10 @@ What that means **today**:
   - `art/activity-bootstrap-trace.jsonl`
   - `art/activity-bootstrap-result.json`
   - a manifest-derived launcher activity target plus Binder-readiness evidence for the first post-class-resolution bootstrap attempt
+- Linuxoid now also folds that activity-bootstrap seam back into self-healing runtime health and replay:
+  - `activity_bootstrap_readiness`
+  - `attempt_host_activity_bootstrap`
+  - replay coverage through `art/activity-bootstrap-trace.jsonl`
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -93,6 +98,7 @@ Current meaning of “self-healing” in Linuxoid:
 6. Refuse false success when a required dependency is still missing.
 7. Expose the self-healing summary directly so repeated runs produce stable machine-facing answers.
 8. Carry class-resolution evidence forward into a deterministic activity-bootstrap plan without pretending host ART already executed the target.
+9. Treat post-class-resolution activity bootstrap as a first-class health and replay subsystem instead of leaving it as a side artifact.
 
 ## Remaining Gaps Before Full Android App Execution
 

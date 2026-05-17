@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.51 - 2026-05-18
+
+- Thread the existing `native-art-activity-bootstrap-fixture` seam into `native-runtime-health-fixture` and diagnostic replay so Linuxoid now records `activity_bootstrap_readiness`, selects the deterministic recovery action `attempt_host_activity_bootstrap`, and merges `art/activity-bootstrap-trace.jsonl` into the replay bundle.
+- Add regression coverage that proves activity bootstrap is now a first-class health subsystem and diagnostic trace source instead of a side artifact.
+- Refresh the README Mermaid architecture, phased plan, self-healing runtime note, changelog, and status output so the repo now reflects the stronger post-class-resolution health and replay contract honestly.
+
 ## v0.1.50 - 2026-05-18
 
 - Add a Linuxoid-owned `native-art-activity-bootstrap-fixture` seam so launcher resolution, Binder-readiness evidence, and host-ART runtime-smoke artifacts now flow into deterministic `art/activity-bootstrap-plan.json`, `art/activity-bootstrap-trace.jsonl`, and `art/activity-bootstrap-result.json` outputs for the first post-class-resolution activity bootstrap step.
