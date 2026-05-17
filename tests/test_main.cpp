@@ -3132,9 +3132,22 @@ void TestRuntimeHealthFixtureIncludesCoreSubsystemRecords() {
 
   Expect(report.records.size() >= expected_prefix.size(),
          "expected runtime health records to include the core subsystem set");
+  Expect(report.core_subsystems == expected_prefix,
+         "expected explicit core subsystem list in runtime health report");
+  Expect(report.core_subsystem_count ==
+             static_cast<int>(expected_prefix.size()),
+         "expected deterministic core subsystem count");
+  Expect(report.core_records.size() == expected_prefix.size(),
+         "expected explicit core subsystem records in runtime health report");
+  Expect(report.core_ready_subsystem_count == 5,
+         "expected five ready core subsystems before dex/classloader startup");
+  Expect(!report.core_subsystems_ready,
+         "expected core subsystem summary to stay blocked on dex/classloader");
   for (std::size_t index = 0; index < expected_prefix.size(); ++index) {
     Expect(report.records[index].subsystem_name == expected_prefix[index],
            "expected deterministic core subsystem ordering in runtime health");
+    Expect(report.core_records[index].subsystem_name == expected_prefix[index],
+           "expected deterministic core subsystem ordering in core summary");
     Expect(!report.records[index].artifact_path.empty(),
            "expected core runtime health record artifact path");
     Expect(!report.records[index].state.empty(),
@@ -3147,6 +3160,16 @@ void TestRuntimeHealthFixtureIncludesCoreSubsystemRecords() {
                std::string::npos,
            "expected core subsystem name in runtime health json");
   }
+  Expect(rendered.find("\"core_subsystem_count\": 6") != std::string::npos,
+         "expected core subsystem count in runtime health json");
+  Expect(rendered.find("\"core_ready_subsystem_count\": 5") !=
+             std::string::npos,
+         "expected core ready subsystem count in runtime health json");
+  Expect(rendered.find("\"core_subsystems_ready\": false") !=
+             std::string::npos,
+         "expected blocked core subsystem summary in runtime health json");
+  Expect(rendered.find("\"core_subsystem_records\": [") != std::string::npos,
+         "expected explicit core subsystem record array in runtime health json");
 
   fs::remove_all(fixture.root);
 }
@@ -3658,6 +3681,14 @@ void TestRuntimeHealthCommandWritesStableJson() {
          "expected scenario name in runtime health json");
   Expect(output.find("\"self_healing_ready\": true") != std::string::npos,
          "expected self-healing ready flag in runtime health json");
+  Expect(output.find("\"core_subsystems\": [\"apk_staging\", \"native_loading\", "
+                     "\"surface_readiness\", \"input_queue_readiness\", "
+                     "\"binder_service_readiness\", "
+                     "\"dex_classloader_readiness\"]") !=
+             std::string::npos,
+         "expected explicit core subsystem list in runtime health command json");
+  Expect(output.find("\"core_subsystem_records\": [") != std::string::npos,
+         "expected core subsystem record array in runtime health command json");
 
   fs::remove_all(fixture.root);
 }

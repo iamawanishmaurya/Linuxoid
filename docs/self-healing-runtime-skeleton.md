@@ -34,6 +34,12 @@ What that means **today**:
   - `failing_subsystem_count`
   - `recovery_actions_selected`
   - `failing_subsystems`
+- Every health report now also exposes the six required runtime-health areas as a stable core projection:
+  - `core_subsystems`
+  - `core_subsystem_count`
+  - `core_ready_subsystem_count`
+  - `core_subsystems_ready`
+  - `core_subsystem_records`
 - Linuxoid can now materialize those actions into stable plan artifacts:
   - `runtime-recovery-plan.json`
   - `runtime-recovery-actions.jsonl`

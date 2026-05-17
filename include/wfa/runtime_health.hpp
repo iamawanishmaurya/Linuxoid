@@ -49,8 +49,13 @@ struct RuntimeHealthReport {
   bool self_healing_ready = false;
   bool overall_ready = false;
   bool dependency_blocked = false;
+  bool core_subsystems_ready = false;
+  int core_subsystem_count = 0;
+  int core_ready_subsystem_count = 0;
   int failing_subsystem_count = 0;
   int recovery_actions_selected = 0;
+  std::vector<std::string> core_subsystems;
+  std::vector<RuntimeHealthRecord> core_records;
   std::vector<std::string> failing_subsystems;
   std::vector<RuntimeHealthRecord> records;
   std::vector<RuntimeRecoveryAction> recovery_actions;

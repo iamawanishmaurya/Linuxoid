@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Core runtime-health projection contract
+  Action: Extended the self-healing runtime-health report and JSON rendering so the six required subsystem areas are exposed as an explicit core projection with stable ordering, counts, readiness, and structured record entries, then pinned that surface with report-level and CLI-level tests.
+  Result: Linuxoid now exposes `core_subsystems`, `core_subsystem_count`, `core_ready_subsystem_count`, `core_subsystems_ready`, and `core_subsystem_records` in addition to the deeper full `records` list, making the runtime-health contract easier for harnesses to consume deterministically.
+  Timestamp: 2026-05-17T23:55:00+05:30
+
 - Step: Workspace inspection
   Action: Checked the workspace contents, attempted to enumerate files, and checked Git status.
   Result: Confirmed the workspace was empty and not initialized as a Git repository.

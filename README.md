@@ -205,6 +205,12 @@ Today, **self-healing** in Linuxoid means:
   - `failing_subsystem_count`
   - `recovery_actions_selected`
   - `failing_subsystems`
+- Linuxoid now also exposes the six required runtime-health areas as an explicit core projection instead of leaving callers to recover them from the larger record list:
+  - `core_subsystems`
+  - `core_subsystem_count`
+  - `core_ready_subsystem_count`
+  - `core_subsystems_ready`
+  - `core_subsystem_records`
 - Linuxoid can persist those decisions into stable artifacts for agents, harnesses, and replay tooling:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`

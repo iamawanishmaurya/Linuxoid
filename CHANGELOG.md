@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.66 - 2026-05-17
+
+- Strengthen the self-healing runtime-health contract by exposing the six required core subsystems through an explicit summary projection: `core_subsystems`, `core_subsystem_count`, `core_ready_subsystem_count`, `core_subsystems_ready`, and `core_subsystem_records`, while keeping the full ordered `records` list intact for deeper diagnosis.
+- Add regression coverage that proves both the in-process report and the public `native-runtime-health-fixture` JSON expose that core six-subsystem contract deterministically for APK staging, native loading, surface readiness, input queue readiness, Binder/service readiness, and DEX/classloader readiness.
+- Refresh the README, self-healing runtime note, phased plan, changelog, and step log so the repo describes the stronger core-runtime-health surface honestly.
+
 ## v0.1.65 - 2026-05-17
 
 - Teach the native launch bridge to distinguish Linuxoid fixture override success from genuine host ART launch success: override-backed bootstrap execution still produces stable artifacts and can still be used in tests, but `launch-package native` now rejects that path by default unless `LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE=1` is set explicitly.

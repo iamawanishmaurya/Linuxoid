@@ -47,6 +47,23 @@ struct RecoveryActionTemplate {
   std::string recovery_scope;
 };
 
+const std::vector<std::string>& CoreRuntimeSubsystemNames() {
+  static const std::vector<std::string> names = {
+      "apk_staging",
+      "native_loading",
+      "surface_readiness",
+      "input_queue_readiness",
+      "binder_service_readiness",
+      "dex_classloader_readiness",
+  };
+  return names;
+}
+
+bool IsCoreRuntimeSubsystemName(const std::string& subsystem_name) {
+  const auto& names = CoreRuntimeSubsystemNames();
+  return std::find(names.begin(), names.end(), subsystem_name) != names.end();
+}
+
 void WriteTextFile(const fs::path& path, const std::string& contents) {
   std::ofstream output(path);
   if (!output) {
@@ -123,6 +140,26 @@ std::string RenderJsonArray(const std::vector<std::string>& values) {
   }
   output << "]";
   return output.str();
+}
+
+void AppendRuntimeHealthRecordJson(std::ostringstream& output,
+                                   const RuntimeHealthRecord& record,
+                                   const std::string& indent) {
+  output << indent << "{"
+         << "\"subsystem_name\": \"" << EscapeJson(record.subsystem_name)
+         << "\", "
+         << "\"state\": \"" << EscapeJson(record.state) << "\", "
+         << "\"ready\": " << (record.ready ? "true" : "false") << ", "
+         << "\"artifact_path\": \"" << EscapeJson(record.artifact_path)
+         << "\", "
+         << "\"failure_reason\": \"" << EscapeJson(record.failure_reason)
+         << "\", "
+         << "\"evidence\": \"" << EscapeJson(record.evidence) << "\", "
+         << "\"selected_recovery_action\": \""
+         << EscapeJson(record.selected_recovery_action) << "\", "
+         << "\"recovery_reason\": \"" << EscapeJson(record.recovery_reason)
+         << "\""
+         << "}";
 }
 
 std::string BuildTraceEventJson(int sequence, const std::string& event_type,
@@ -791,6 +828,19 @@ RuntimeHealthReport RunRuntimeHealthFixture(
   report.records.push_back(BuildActivityBootstrapRecord(context));
   report.records.push_back(BuildBootstrapExecutionRecord(context));
 
+  report.core_subsystems = CoreRuntimeSubsystemNames();
+  for (const auto& record : report.records) {
+    if (IsCoreRuntimeSubsystemName(record.subsystem_name)) {
+      report.core_records.push_back(record);
+      if (record.ready) {
+        ++report.core_ready_subsystem_count;
+      }
+    }
+  }
+  report.core_subsystem_count = static_cast<int>(report.core_subsystems.size());
+  report.core_subsystems_ready =
+      report.core_ready_subsystem_count == report.core_subsystem_count;
+
   report.overall_ready = true;
   report.self_healing_ready = true;
   report.overall_state = "ready";
@@ -895,36 +945,37 @@ std::string RenderRuntimeHealthReportJson(const RuntimeHealthReport& report) {
          << ",\n"
          << "  \"dependency_blocked\": "
          << (report.dependency_blocked ? "true" : "false") << ",\n"
+         << "  \"core_subsystems_ready\": "
+         << (report.core_subsystems_ready ? "true" : "false") << ",\n"
          << "  \"overall_state\": \"" << EscapeJson(report.overall_state)
          << "\",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason) << "\",\n"
+         << "  \"core_subsystem_count\": " << report.core_subsystem_count
+         << ",\n"
+         << "  \"core_ready_subsystem_count\": "
+         << report.core_ready_subsystem_count << ",\n"
          << "  \"failing_subsystem_count\": " << report.failing_subsystem_count
          << ",\n"
          << "  \"recovery_actions_selected\": "
          << report.recovery_actions_selected << ",\n"
+         << "  \"core_subsystems\": "
+         << RenderJsonArray(report.core_subsystems) << ",\n"
          << "  \"failing_subsystems\": "
          << RenderJsonArray(report.failing_subsystems) << ",\n"
-         << "  \"records\": [\n";
-  for (std::size_t index = 0; index < report.records.size(); ++index) {
-    const auto& record = report.records[index];
+         << "  \"core_subsystem_records\": [\n";
+  for (std::size_t index = 0; index < report.core_records.size(); ++index) {
     if (index != 0) {
       output << ",\n";
     }
-    output << "    {"
-           << "\"subsystem_name\": \"" << EscapeJson(record.subsystem_name)
-           << "\", "
-           << "\"state\": \"" << EscapeJson(record.state) << "\", "
-           << "\"ready\": " << (record.ready ? "true" : "false") << ", "
-           << "\"artifact_path\": \"" << EscapeJson(record.artifact_path)
-           << "\", "
-           << "\"failure_reason\": \"" << EscapeJson(record.failure_reason)
-           << "\", "
-           << "\"evidence\": \"" << EscapeJson(record.evidence) << "\", "
-           << "\"selected_recovery_action\": \""
-           << EscapeJson(record.selected_recovery_action) << "\", "
-           << "\"recovery_reason\": \"" << EscapeJson(record.recovery_reason)
-           << "\""
-           << "}";
+    AppendRuntimeHealthRecordJson(output, report.core_records[index], "    ");
+  }
+  output << "\n  ],\n"
+         << "  \"records\": [\n";
+  for (std::size_t index = 0; index < report.records.size(); ++index) {
+    if (index != 0) {
+      output << ",\n";
+    }
+    AppendRuntimeHealthRecordJson(output, report.records[index], "    ");
   }
   output << "\n  ],\n"
          << "  \"recovery_actions\": [\n";
