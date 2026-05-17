@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -490,6 +491,7 @@ std::string DetermineRecommendedRecoveryAction(
   if (report.launch_ready &&
       (!report.surface_proof_requested || report.surface_proof_ready) &&
       (!report.window_proof_requested || report.window_manager.ready) &&
+      (!report.runtime_proof_requested || report.runtime_bridge.ready) &&
       (!report.asset_proof_requested || report.asset_bridge.ready) &&
       (!report.asset_proof_requested || report.resource_bridge.ready) &&
       (!report.storage_proof_requested || report.storage.ready) &&
@@ -624,6 +626,12 @@ std::string DetermineRecommendedRecoveryAction(
                ? "rebuild_window_manager_state"
                : report.window_manager.recommended_recovery_action;
   }
+  if (report.runtime_proof_requested &&
+      (report.runtime_health != "ready" || !report.runtime_bridge.ready)) {
+    return report.runtime_bridge.recommended_recovery_action == "none"
+               ? "retry_runtime_bootstrap"
+               : report.runtime_bridge.recommended_recovery_action;
+  }
   if (report.surface_proof_requested && !report.surface_proof_ready) {
     return "recreate_native_surface_session";
   }
@@ -634,6 +642,7 @@ bool DetermineRecoverable(const NativeApkLaunchReport& report) {
   if (report.launch_ready &&
       (!report.surface_proof_requested || report.surface_proof_ready) &&
       (!report.window_proof_requested || report.window_manager.ready) &&
+      (!report.runtime_proof_requested || report.runtime_bridge.ready) &&
       (!report.asset_proof_requested || report.asset_bridge.ready) &&
       (!report.asset_proof_requested || report.resource_bridge.ready) &&
       (!report.storage_proof_requested || report.storage.ready) &&
@@ -941,6 +950,116 @@ NativeApkWindowManagerSession BuildWindowManagerBridgeSession(
        .allow_persisted_contract_repair = allow_persisted_contract_repair});
 }
 
+NativeApkRuntimeBridgeSession BuildRuntimeBridgeSession(
+    const NativeApkLaunchReport& report, bool allow_persisted_contract_repair,
+    bool bootstrap_recovered = false,
+    bool simulate_bootstrap_failure = false) {
+  const fs::path app_data_dir =
+      !report.storage.app_data_dir.empty()
+          ? fs::path(report.storage.app_data_dir)
+          : (fs::path(report.sandbox_root) / "data" / "data" /
+             report.package_name);
+  const fs::path artifact_root = app_data_dir / "runtime-manager";
+  std::vector<std::string> dex_files;
+  for (const auto& dex_file : report.dex.files) {
+    if (!dex_file.staged_path.empty()) {
+      dex_files.push_back(dex_file.staged_path);
+    }
+  }
+  if (dex_files.empty()) {
+    dex_files = report.art_bootstrap.dex_files;
+  }
+  const char* runtime_root_override_env =
+      std::getenv("LINUXOID_ART_RUNTIME_ROOT_OVERRIDE");
+  const char* runtime_probe_override_env =
+      std::getenv("LINUXOID_ART_RUNTIME_PROBE_OVERRIDE");
+  return NativeApkRuntimeBridgeSession(
+      {.session_id =
+           report.package_name + ":" + report.install_id + ":art-runtime",
+       .package_name = report.package_name,
+       .requested_package_name = report.requested_package_name,
+       .requested_component = report.requested_component,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .sandbox_root = report.sandbox_root,
+       .app_data_dir = app_data_dir.string(),
+       .artifact_root = artifact_root.string(),
+       .install_id = report.install_id,
+       .version_name = report.version_name,
+       .version_code = report.version_code,
+       .user_id = report.permissions.user_id,
+       .app_id = report.permissions.app_id,
+       .uid_placeholder = report.storage.uid_placeholder,
+       .gid_placeholder = report.storage.gid_placeholder,
+       .launch_status = report.launch_status,
+       .launch_ready = report.launch_ready,
+       .recoverable = report.recoverable,
+       .launcher_component = report.launcher_component,
+       .resolved_component = report.intent_resolution.resolved_component,
+       .activity_launch_status = report.activity_launch.activity_launch_status,
+       .activity_launch_blocking_reason =
+           report.activity_launch.blocking_reason,
+       .activity_launch_recovery_action =
+           report.activity_launch.recommended_recovery_action,
+       .intent_action = report.intent_resolution.action.empty()
+                            ? "android.intent.action.MAIN"
+                            : report.intent_resolution.action,
+       .intent_categories = report.intent_resolution.categories.empty()
+                                ? std::vector<std::string>{
+                                      "android.intent.category.LAUNCHER"}
+                                : report.intent_resolution.categories,
+       .lifecycle_state = report.lifecycle.current_state,
+       .process_session_id = report.activity_manager.session_id,
+       .process_identity = report.process_manager.process_identity,
+       .process_name = report.process_manager.process_name,
+       .pid_value = report.process_manager.pid_value,
+       .pid_source = report.process_manager.pid_source,
+       .window_session_id = report.window_manager.session_id,
+       .window_id = report.window_manager.window_id,
+       .surface_session_id = report.surface.session_id,
+       .surface_state = report.surface.state,
+       .surface_backend = report.surface.backend,
+       .surface_backing_mode = report.surface.backing_mode,
+       .surface_first_frame_presented = report.surface.first_frame_presented,
+       .surface_created = report.surface.surface_created,
+       .wayland_surface_available = report.surface.wayland_surface_available,
+       .egl_surface_available = report.surface.egl_surface_available,
+       .runtime_root_override =
+           runtime_root_override_env == nullptr ? "" : runtime_root_override_env,
+       .runtime_probe_override =
+           runtime_probe_override_env == nullptr ? "" : runtime_probe_override_env,
+       .storage_health = report.storage_health,
+       .sandbox_health = report.sandbox_health,
+       .permission_health = report.permission_health,
+       .app_ops_health = report.app_ops_health,
+       .binder_health = report.binder_health,
+       .surface_health = report.surface_health,
+       .window_health = report.window_health,
+       .lifecycle_health = report.lifecycle_health,
+       .looper_health = report.looper_health,
+       .input_health = report.input_health,
+       .dex_health = report.dex_health,
+       .art_health = report.art_health,
+       .activity_health = report.activity_health,
+       .activity_manager_health = report.activity_manager_health,
+       .process_health = report.process_health,
+       .package_manager_ready = report.package_manager.ready,
+       .intent_resolution_ready = report.intent_resolution.ready,
+       .activity_launch_ready = report.activity_launch.ready,
+       .activity_manager_ready = report.activity_manager.ready,
+       .process_ready = report.process_manager.ready,
+       .window_ready = report.window_manager.ready,
+       .dex_bootstrap_ready = report.art_bootstrap.dex_bootstrap_ready,
+       .class_loader_ready = report.art_bootstrap.class_loader_ready,
+       .java_execution_supported =
+           report.art_bootstrap.java_execution_supported,
+       .persisted_artifact_root_preexisting = fs::exists(artifact_root),
+       .allow_persisted_contract_repair = allow_persisted_contract_repair,
+       .simulate_bootstrap_failure = simulate_bootstrap_failure,
+       .bootstrap_recovered = bootstrap_recovered,
+       .dex_files = dex_files});
+}
+
 NativeApkActivityLaunchBridgeSession BuildActivityLaunchBridgeSession(
     const NativeApkLaunchReport& report, const ParsedManifestMetadata& manifest) {
   return NativeApkActivityLaunchBridgeSession(
@@ -1065,6 +1184,12 @@ void PopulateRequestedProofFailures(NativeApkLaunchReport* report) {
     report->window_health = "blocked";
   } else {
     report->window_health = "not_requested";
+  }
+  if (report->runtime_proof_requested) {
+    report->runtime_bridge.errors = report->errors;
+    report->runtime_health = "blocked";
+  } else {
+    report->runtime_health = "not_requested";
   }
   if (report->activity_proof_requested) {
     report->binder_health = "blocked";
@@ -1409,8 +1534,11 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
   report.requested_package_name = options.requested_package_name;
   report.requested_component = options.requested_component;
   report.self_heal_proof_requested = options.self_heal_proof_requested;
+  report.runtime_proof_requested =
+      options.runtime_proof_requested || options.simulate_failed_runtime_bootstrap;
   report.window_proof_requested =
-      options.window_proof_requested || options.self_heal_proof_requested;
+      options.window_proof_requested || report.runtime_proof_requested ||
+      options.self_heal_proof_requested;
   report.process_proof_requested =
       options.process_proof_requested || report.window_proof_requested ||
       options.self_heal_proof_requested;
@@ -1418,10 +1546,12 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       options.activity_proof_requested || report.process_proof_requested ||
       options.self_heal_proof_requested;
   report.storage_proof_requested =
-      options.storage_proof_requested || report.process_proof_requested ||
+      options.storage_proof_requested || report.runtime_proof_requested ||
+      report.process_proof_requested ||
       options.self_heal_proof_requested;
   report.permissions_proof_requested =
-      options.permissions_proof_requested || report.process_proof_requested ||
+      options.permissions_proof_requested || report.runtime_proof_requested ||
+      report.process_proof_requested ||
       options.self_heal_proof_requested;
   report.surface_proof_requested =
       options.surface_proof_requested || report.activity_proof_requested ||
@@ -1432,7 +1562,8 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       options.lifecycle_proof_requested || report.activity_proof_requested ||
       options.self_heal_proof_requested;
   report.dex_proof_requested =
-      options.dex_proof_requested || report.activity_proof_requested ||
+      options.dex_proof_requested || report.runtime_proof_requested ||
+      report.activity_proof_requested ||
       options.self_heal_proof_requested;
   report.surface.state = "not_requested";
   report.limitations = {
@@ -1469,6 +1600,12 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
                 "local_window_manager_contract_only");
     AppendError(&report.limitations,
                 "wayland_egl_best_effort_probe_only");
+  }
+  if (report.runtime_proof_requested) {
+    AppendError(&report.limitations,
+                "local_art_runtime_bootstrap_contract_only");
+    AppendError(&report.limitations,
+                "future_java_execution_requires_real_art_runtime");
   }
   if (report.self_heal_proof_requested) {
     AppendError(&report.limitations,
@@ -1857,6 +1994,20 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
     report.window_health = "not_requested";
   }
 
+  if (report.runtime_proof_requested) {
+    report.runtime_bridge = BuildRuntimeBridgeSession(
+                               report, !report.self_heal_proof_requested,
+                               false, options.simulate_failed_runtime_bootstrap)
+                               .BuildReport();
+    report.runtime_health =
+        report.runtime_bridge.ready ? "ready" : "blocked";
+    for (const auto& error : report.runtime_bridge.errors) {
+      AppendError(&report.errors, error);
+    }
+  } else {
+    report.runtime_health = "not_requested";
+  }
+
   const bool asset_contract_ready =
       !report.asset_proof_requested ||
       (report.asset_bridge.ready && report.resource_bridge.ready);
@@ -1880,10 +2031,13 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       (report.activity_manager.ready && report.process_manager.ready);
   const bool window_contract_ready =
       !report.window_proof_requested || report.window_manager.ready;
+  const bool runtime_contract_ready =
+      !report.runtime_proof_requested || report.runtime_bridge.ready;
   report.launch_health =
       report.launch_ready &&
               (!report.surface_proof_requested || report.surface_proof_ready) &&
               window_contract_ready &&
+              runtime_contract_ready &&
               asset_contract_ready &&
               storage_contract_ready &&
               permissions_contract_ready &&
@@ -1937,6 +2091,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << (report.process_proof_requested ? "true" : "false") << ",\n"
          << "  \"window_proof_requested\": "
          << (report.window_proof_requested ? "true" : "false") << ",\n"
+         << "  \"runtime_proof_requested\": "
+         << (report.runtime_proof_requested ? "true" : "false") << ",\n"
          << "  \"storage_proof_requested\": "
          << (report.storage_proof_requested ? "true" : "false") << ",\n"
          << "  \"permissions_proof_requested\": "
@@ -1982,6 +2138,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "  \"surface_health\": \"" << EscapeJson(report.surface_health)
          << "\",\n"
          << "  \"window_health\": \"" << EscapeJson(report.window_health)
+         << "\",\n"
+         << "  \"runtime_health\": \"" << EscapeJson(report.runtime_health)
          << "\",\n"
          << "  \"asset_health\": \"" << EscapeJson(report.asset_health)
          << "\",\n"
@@ -2722,6 +2880,127 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"errors\": "
          << RenderJsonArray(report.window_manager.errors) << "\n"
          << "  },\n"
+         << "  \"runtime_bridge\": {\n"
+         << "    \"schema_version\": \""
+         << EscapeJson(report.runtime_bridge.schema_version) << "\",\n"
+         << "    \"ready\": "
+         << (report.runtime_bridge.ready ? "true" : "false") << ",\n"
+         << "    \"contract_ready\": "
+         << (report.runtime_bridge.contract_ready ? "true" : "false")
+         << ",\n"
+         << "    \"session_id\": \""
+         << EscapeJson(report.runtime_bridge.session_id) << "\",\n"
+         << "    \"artifact_root\": \""
+         << EscapeJson(report.runtime_bridge.artifact_root) << "\",\n"
+         << "    \"report_json_path\": \""
+         << EscapeJson(report.runtime_bridge.report_json_path)
+         << "\",\n"
+         << "    \"session_map_path\": \""
+         << EscapeJson(report.runtime_bridge.session_map_path)
+         << "\",\n"
+         << "    \"event_log_path\": \""
+         << EscapeJson(report.runtime_bridge.event_log_path) << "\",\n"
+         << "    \"package_name\": \""
+         << EscapeJson(report.runtime_bridge.package_name) << "\",\n"
+         << "    \"user_id\": " << report.runtime_bridge.user_id << ",\n"
+         << "    \"app_id\": " << report.runtime_bridge.app_id << ",\n"
+         << "    \"uid_placeholder\": "
+         << report.runtime_bridge.uid_placeholder << ",\n"
+         << "    \"gid_placeholder\": "
+         << report.runtime_bridge.gid_placeholder << ",\n"
+         << "    \"sandbox_root\": \""
+         << EscapeJson(report.runtime_bridge.sandbox_root) << "\",\n"
+         << "    \"app_data_dir\": \""
+         << EscapeJson(report.runtime_bridge.app_data_dir) << "\",\n"
+         << "    \"apk_path\": \""
+         << EscapeJson(report.runtime_bridge.apk_path) << "\",\n"
+         << "    \"staged_dir\": \""
+         << EscapeJson(report.runtime_bridge.staged_dir) << "\",\n"
+         << "    \"updated_at_unix_ms\": "
+         << report.runtime_bridge.updated_at_unix_ms << ",\n"
+         << "    \"runtime_handle\": \""
+         << EscapeJson(report.runtime_bridge.runtime_handle) << "\",\n"
+         << "    \"process_session_id\": \""
+         << EscapeJson(report.runtime_bridge.process_session_id)
+         << "\",\n"
+         << "    \"process_identity\": \""
+         << EscapeJson(report.runtime_bridge.process_identity) << "\",\n"
+         << "    \"process_name\": \""
+         << EscapeJson(report.runtime_bridge.process_name) << "\",\n"
+         << "    \"pid_value\": " << report.runtime_bridge.pid_value
+         << ",\n"
+         << "    \"pid_source\": \""
+         << EscapeJson(report.runtime_bridge.pid_source) << "\",\n"
+         << "    \"window_session_id\": \""
+         << EscapeJson(report.runtime_bridge.window_session_id)
+         << "\",\n"
+         << "    \"window_id\": \""
+         << EscapeJson(report.runtime_bridge.window_id) << "\",\n"
+         << "    \"activity_component\": \""
+         << EscapeJson(report.runtime_bridge.activity_component)
+         << "\",\n"
+         << "    \"launch_component\": \""
+         << EscapeJson(report.runtime_bridge.launch_component) << "\",\n"
+         << "    \"runtime_root\": \""
+         << EscapeJson(report.runtime_bridge.runtime_root) << "\",\n"
+         << "    \"discovery_source\": \""
+         << EscapeJson(report.runtime_bridge.discovery_source)
+         << "\",\n"
+         << "    \"boot_classpath\": \""
+         << EscapeJson(report.runtime_bridge.boot_classpath) << "\",\n"
+         << "    \"boot_classpath_entries\": "
+         << RenderJsonArray(report.runtime_bridge.boot_classpath_entries)
+         << ",\n"
+         << "    \"native_library_dirs\": "
+         << RenderJsonArray(report.runtime_bridge.native_library_dirs)
+         << ",\n"
+         << "    \"dex_files\": "
+         << RenderJsonArray(report.runtime_bridge.dex_files) << ",\n"
+         << "    \"art_runtime_required\": "
+         << (report.runtime_bridge.art_runtime_required ? "true" : "false")
+         << ",\n"
+         << "    \"art_runtime_available\": "
+         << (report.runtime_bridge.art_runtime_available ? "true" : "false")
+         << ",\n"
+         << "    \"class_loader_ready\": "
+         << (report.runtime_bridge.class_loader_ready ? "true" : "false")
+         << ",\n"
+         << "    \"bytecode_execution_ready\": "
+         << (report.runtime_bridge.bytecode_execution_ready ? "true"
+                                                            : "false")
+         << ",\n"
+         << "    \"java_execution_supported\": "
+         << (report.runtime_bridge.java_execution_supported ? "true"
+                                                            : "false")
+         << ",\n"
+         << "    \"headless_safe\": "
+         << (report.runtime_bridge.headless_safe ? "true" : "false")
+         << ",\n"
+         << "    \"wayland_surface_available\": "
+         << (report.runtime_bridge.wayland_surface_available ? "true"
+                                                             : "false")
+         << ",\n"
+         << "    \"egl_surface_available\": "
+         << (report.runtime_bridge.egl_surface_available ? "true"
+                                                         : "false")
+         << ",\n"
+         << "    \"bootstrap_state\": \""
+         << EscapeJson(report.runtime_bridge.bootstrap_state) << "\",\n"
+         << "    \"blocking_reason\": \""
+         << EscapeJson(report.runtime_bridge.blocking_reason) << "\",\n"
+         << "    \"recommended_recovery_action\": \""
+         << EscapeJson(report.runtime_bridge.recommended_recovery_action)
+         << "\",\n"
+         << "    \"states_visited\": "
+         << RenderJsonArray(report.runtime_bridge.states_visited) << ",\n"
+         << "    \"healing_actions\": "
+         << RenderJsonArray(report.runtime_bridge.healing_actions)
+         << ",\n"
+         << "    \"diagnostics\": "
+         << RenderJsonArray(report.runtime_bridge.diagnostics) << ",\n"
+         << "    \"errors\": "
+         << RenderJsonArray(report.runtime_bridge.errors) << "\n"
+         << "  },\n"
          << "  \"storage\": {\n"
          << "    \"ready\": " << (report.storage.ready ? "true" : "false")
          << ",\n"
@@ -2920,6 +3199,9 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "    \"window_health\": \""
          << EscapeJson(report.self_healing_android_device.window_health)
+         << "\",\n"
+         << "    \"runtime_health\": \""
+         << EscapeJson(report.self_healing_android_device.runtime_health)
          << "\",\n"
          << "    \"recoverable\": "
          << (report.self_healing_android_device.recoverable ? "true"

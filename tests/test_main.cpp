@@ -80,6 +80,7 @@ std::string ReadTextFile(const std::filesystem::path& path) {
 
 void WriteTextFile(const std::filesystem::path& path,
                    const std::string& contents) {
+  std::filesystem::create_directories(path.parent_path());
   std::ofstream output(path);
   if (!output) {
     throw std::runtime_error("unable to open file for write: " + path.string());
@@ -168,6 +169,24 @@ std::filesystem::path ResolveBuildDirFromTestBinary() {
     throw std::runtime_error("unable to resolve test binary path");
   }
   return self.parent_path();
+}
+
+std::filesystem::path CreateArtRuntimeRootFixture(
+    const std::filesystem::path& root) {
+  namespace fs = std::filesystem;
+  fs::create_directories(root / "bin");
+  fs::create_directories(root / "lib64");
+  fs::create_directories(root / "framework");
+
+  WriteTextFile(root / "bin" / "dalvikvm64", "#!/bin/sh\nexit 0\n");
+  WriteTextFile(root / "lib64" / "libart.so", "linuxoid-art-placeholder");
+  WriteTextFile(root / "lib64" / "libandroid_runtime.so",
+                "linuxoid-android-runtime-placeholder");
+  WriteTextFile(root / "framework" / "core-oj.jar", "jar-placeholder");
+  WriteTextFile(root / "framework" / "core-libart.jar", "jar-placeholder");
+  WriteTextFile(root / "framework" / "bootclasspath.txt",
+                "framework/core-oj.jar:framework/core-libart.jar\n");
+  return root;
 }
 
 std::uint32_t ComputeCrc32(const std::string& contents);
@@ -8172,6 +8191,206 @@ void TestLaunchApkSelfHealProofRebuildsWindowManagerStateAfterSurfaceFailure() {
   fs::remove_all(fixture.root);
 }
 
+void TestLaunchApkRuntimeProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-runtime-valid", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  CreateArtRuntimeRootFixture(fixture.root / "art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE",
+      (fixture.root / "art-runtime").string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --runtime-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected launch-apk runtime proof command to succeed");
+  Expect(output.find("\"runtime_proof_requested\": true") != std::string::npos,
+         "expected runtime proof request flag in json");
+  Expect(output.find("\"runtime_health\": \"ready\"") != std::string::npos,
+         "expected ready runtime health in json");
+  Expect(output.find("\"runtime_bridge\": {") != std::string::npos,
+         "expected runtime_bridge section in json");
+  Expect(output.find("\"bootstrap_state\": \"ready\"") != std::string::npos,
+         "expected ready runtime bootstrap state in json");
+  Expect(output.find("\"java_execution_supported\": false") !=
+             std::string::npos,
+         "expected honest no-java-execution flag in runtime proof json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkRuntimeProofTracksSessionArtifacts() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-runtime-artifacts", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  CreateArtRuntimeRootFixture(fixture.root / "art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE",
+      (fixture.root / "art-runtime").string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  ReadCommandOutput(compatctl.string() + " launch-apk --runtime-proof " +
+                        fixture.apk_path.string() + " " +
+                        fixture.staging_root.string(),
+                    &exit_code);
+
+  Expect(exit_code == 0, "expected launch-apk runtime proof command to succeed");
+  const fs::path runtime_root =
+      fixture.staging_root / "users/0/packages/com.example.launchapk/vc1-1.0.0" /
+      "launch-apk/default/sandbox/data/data/com.example.launchapk/runtime-manager";
+  Expect(fs::exists(runtime_root / "runtime-state.json"),
+         "expected runtime-state artifact");
+  Expect(fs::exists(runtime_root / "runtime-session-map.json"),
+         "expected runtime-session-map artifact");
+  Expect(fs::exists(runtime_root / "runtime-events.jsonl"),
+         "expected runtime-events artifact");
+
+  const std::string session_map =
+      ReadTextFile(runtime_root / "runtime-session-map.json");
+  Expect(session_map.find("com.example.launchapk:vc1-1.0.0:process-manager") !=
+             std::string::npos,
+         "expected runtime session map to reference process session");
+  Expect(session_map.find("com.example.launchapk:vc1-1.0.0:window-manager") !=
+             std::string::npos,
+         "expected runtime session map to reference window session");
+
+  const std::string event_log =
+      ReadTextFile(runtime_root / "runtime-events.jsonl");
+  Expect(event_log.find("\"state\": \"discovered\"") != std::string::npos,
+         "expected discovered state in runtime event log");
+  Expect(event_log.find("\"state\": \"ready\"") != std::string::npos,
+         "expected ready state in runtime event log");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestInspectApkRuntimeCommandReportsReadyContracts() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-inspect-apk-runtime-ready", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  CreateArtRuntimeRootFixture(fixture.root / "art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE",
+      (fixture.root / "art-runtime").string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-runtime " + fixture.apk_path.string() +
+          " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected inspect-apk-runtime command to succeed");
+  Expect(!output.empty() && output.front() == '{',
+         "expected structured json from inspect-apk-runtime");
+  Expect(output.find("\"runtime_health\": \"ready\"") != std::string::npos,
+         "expected ready runtime health in inspect-apk-runtime json");
+  Expect(output.find("\"runtime_bridge\": {") != std::string::npos,
+         "expected runtime_bridge section in inspect-apk-runtime json");
+  Expect(output.find("\"bootstrap_state\": \"ready\"") != std::string::npos,
+         "expected ready runtime state in inspect-apk-runtime json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkRuntimeProofHealsMalformedFiles() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-runtime-heal-malformed", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  CreateArtRuntimeRootFixture(fixture.root / "art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE",
+      (fixture.root / "art-runtime").string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  ReadCommandOutput(compatctl.string() + " launch-apk --runtime-proof " +
+                        fixture.apk_path.string() + " " +
+                        fixture.staging_root.string(),
+                    &exit_code);
+  Expect(exit_code == 0, "expected initial runtime proof command to succeed");
+
+  const fs::path runtime_root =
+      fixture.staging_root / "users/0/packages/com.example.launchapk/vc1-1.0.0" /
+      "launch-apk/default/sandbox/data/data/com.example.launchapk/runtime-manager";
+  WriteTextFile(runtime_root / "runtime-state.json", "{malformed");
+
+  const std::string healed_output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-runtime " + fixture.apk_path.string() +
+          " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected malformed runtime state to heal on inspect");
+  Expect(healed_output.find("rebuild_malformed_runtime_bridge_state") !=
+             std::string::npos,
+         "expected runtime malformed healing action in json");
+  Expect(healed_output.find("\"runtime_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready runtime health after healing");
+  Expect(healed_output.find("Self-Healing Android Device") !=
+             std::string::npos,
+         "expected Self-Healing Android Device wording in runtime healing json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRetriesRuntimeBootstrapAfterFailure() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-self-heal-runtime", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  CreateArtRuntimeRootFixture(fixture.root / "art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE",
+      (fixture.root / "art-runtime").string());
+
+  const auto healed = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true,
+       .simulate_failed_runtime_bootstrap = true});
+
+  Expect(healed.self_healing_android_device.ready,
+         "expected self-heal report for failed runtime bootstrap");
+  Expect(healed.self_healing_android_device.final_health == "recovered",
+         "expected runtime self-heal recovery to converge");
+  Expect(healed.self_healing_android_device.runtime_health == "ready",
+         "expected runtime health to recover");
+  Expect(std::any_of(
+             healed.self_healing_android_device.actions.begin(),
+             healed.self_healing_android_device.actions.end(),
+             [](const wfa::SelfHealingAndroidDeviceRecoveryAction& action) {
+               return action.action == "retry_runtime_bootstrap" &&
+                      action.result == "attempted_succeeded";
+             }),
+         "expected successful retry_runtime_bootstrap action");
+  Expect(fs::exists(healed.self_healing_android_device.journal_path),
+         "expected runtime recovery journal path");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeBridgeOutputParsers() {
   Expect(wfa::OutputContainsInstalledPackage("package:org.futo.inputmethod.latin\n",
                                              "org.futo.inputmethod.latin"),
@@ -12463,6 +12682,11 @@ int main() {
     TestInspectApkWindowCommandReportsReadyContracts();
     TestLaunchApkWindowProofHealsMalformedFiles();
     TestLaunchApkSelfHealProofRebuildsWindowManagerStateAfterSurfaceFailure();
+    TestLaunchApkRuntimeProofCommandRunsFixture();
+    TestLaunchApkRuntimeProofTracksSessionArtifacts();
+    TestInspectApkRuntimeCommandReportsReadyContracts();
+    TestLaunchApkRuntimeProofHealsMalformedFiles();
+    TestLaunchApkSelfHealProofRetriesRuntimeBootstrapAfterFailure();
     TestLaunchApkPermissionsProofEmitsDeniedAudioCaptureDiagnostics();
   TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();

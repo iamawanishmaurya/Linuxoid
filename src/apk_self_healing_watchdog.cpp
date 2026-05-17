@@ -8,11 +8,13 @@
 #include "wfa/apk_native_launch.hpp"
 #include "wfa/apk_permission_bridge.hpp"
 #include "wfa/apk_process_bridge.hpp"
+#include "wfa/apk_runtime_bridge.hpp"
 #include "wfa/apk_storage_bridge.hpp"
 #include "wfa/binder_service_manager.hpp"
 #include "wfa/native_window_surface.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -30,6 +32,7 @@ struct WorkingHealthState {
   bool launch_ready = false;
   bool surface_ready = false;
   bool window_ready = false;
+  bool runtime_ready = false;
   bool asset_ready = false;
   bool resource_ready = false;
   bool lifecycle_ready = false;
@@ -145,6 +148,8 @@ WorkingHealthState BuildWorkingHealthState(
                            report.surface_proof_ready,
           .window_ready = !report.window_proof_requested ||
                           report.window_manager.ready,
+          .runtime_ready = !report.runtime_proof_requested ||
+                           report.runtime_bridge.ready,
           .asset_ready =
               !report.asset_proof_requested || report.asset_bridge.ready,
           .resource_ready = !report.asset_proof_requested ||
@@ -186,6 +191,7 @@ WorkingHealthState BuildWorkingHealthState(
 bool AllContractsReady(const NativeApkLaunchReport& report,
                        const WorkingHealthState& state) {
   return state.launch_ready && state.surface_ready && state.window_ready &&
+         state.runtime_ready &&
          state.asset_ready &&
          state.resource_ready && state.lifecycle_ready && state.looper_ready &&
          state.input_ready && state.binder_ready && state.dex_ready &&
@@ -211,6 +217,7 @@ std::string ClassifyHealth(const NativeApkLaunchReport& report,
   }
   const bool blocking_issue =
       !state.launch_ready || !state.surface_ready || !state.window_ready ||
+      !state.runtime_ready ||
       !state.lifecycle_ready || !state.looper_ready || !state.input_ready || !state.binder_ready ||
       !state.dex_ready || !state.art_ready || !state.package_manager_ready ||
       !state.intent_resolution_ready || !state.activity_launch_ready ||
@@ -270,6 +277,9 @@ std::string DetermineRecommendedNextAction(
   }
   if (!state.window_ready) {
     return "rebuild_window_manager_state";
+  }
+  if (!state.runtime_ready) {
+    return "retry_runtime_bootstrap";
   }
   if (!state.launch_ready) {
     return "safe_mode_launch";
@@ -608,6 +618,126 @@ NativeApkWindowManagerSession BuildWindowSession(
        .allow_persisted_contract_repair = true});
 }
 
+NativeApkRuntimeBridgeSession BuildRuntimeSession(
+    const NativeApkLaunchReport& report, const WorkingHealthState& state,
+    bool bootstrap_recovered, bool simulate_bootstrap_failure) {
+  const fs::path app_data_dir =
+      !report.storage.app_data_dir.empty()
+          ? fs::path(report.storage.app_data_dir)
+          : (fs::path(report.sandbox_root) / "data" / "data" /
+             report.package_name);
+  std::vector<std::string> dex_files;
+  for (const auto& dex_file : report.dex.files) {
+    if (!dex_file.staged_path.empty()) {
+      dex_files.push_back(dex_file.staged_path);
+    }
+  }
+  if (dex_files.empty()) {
+    dex_files = report.art_bootstrap.dex_files;
+  }
+
+  const char* runtime_root_override_env =
+      std::getenv("LINUXOID_ART_RUNTIME_ROOT_OVERRIDE");
+  const char* runtime_probe_override_env =
+      std::getenv("LINUXOID_ART_RUNTIME_PROBE_OVERRIDE");
+
+  return NativeApkRuntimeBridgeSession(
+      {.session_id = report.package_name + ":" + report.install_id +
+                     ":self-heal-art-runtime",
+       .package_name = report.package_name,
+       .requested_package_name = report.requested_package_name,
+       .requested_component = report.requested_component,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .sandbox_root = report.sandbox_root,
+       .app_data_dir = app_data_dir.string(),
+       .artifact_root = (app_data_dir / "runtime-manager").string(),
+       .install_id = report.install_id,
+       .version_name = report.version_name,
+       .version_code = report.version_code,
+       .user_id = report.permissions.user_id,
+       .app_id = report.permissions.app_id,
+       .uid_placeholder = report.storage.uid_placeholder,
+       .gid_placeholder = report.storage.gid_placeholder,
+       .launch_status = report.launch_status,
+       .launch_ready = report.launch_ready,
+       .recoverable = report.recoverable,
+       .launcher_component = report.launcher_component,
+       .resolved_component = report.intent_resolution.resolved_component,
+       .activity_launch_status = report.activity_launch.activity_launch_status,
+       .activity_launch_blocking_reason =
+           report.activity_launch.blocking_reason,
+       .activity_launch_recovery_action =
+           report.activity_launch.recommended_recovery_action,
+       .intent_action = report.intent_resolution.action.empty()
+                            ? "android.intent.action.MAIN"
+                            : report.intent_resolution.action,
+       .intent_categories = report.intent_resolution.categories.empty()
+                                ? std::vector<std::string>{
+                                      "android.intent.category.LAUNCHER"}
+                                : report.intent_resolution.categories,
+       .lifecycle_state = report.lifecycle.current_state,
+       .process_session_id = report.activity_manager.session_id,
+       .process_identity = report.process_manager.process_identity,
+       .process_name = report.process_manager.process_name,
+       .pid_value = report.process_manager.pid_value,
+       .pid_source = report.process_manager.pid_source,
+       .window_session_id = report.window_manager.session_id,
+       .window_id = report.window_manager.window_id,
+       .surface_session_id = report.surface.session_id,
+       .surface_state = state.surface_ready ? "recovered" : report.surface.state,
+       .surface_backend = report.surface.backend,
+       .surface_backing_mode = report.surface.backing_mode,
+       .surface_first_frame_presented = state.surface_ready,
+       .surface_created = state.surface_ready,
+       .wayland_surface_available = report.surface.wayland_surface_available,
+       .egl_surface_available = report.surface.egl_surface_available,
+       .runtime_root_override =
+           runtime_root_override_env == nullptr ? "" : runtime_root_override_env,
+       .runtime_probe_override =
+           runtime_probe_override_env == nullptr ? "" : runtime_probe_override_env,
+       .storage_health = state.storage_ready ? "ready" : report.storage_health,
+       .sandbox_health = state.sandbox_ready ? "ready" : report.sandbox_health,
+       .permission_health =
+           state.permission_ready ? "ready" : report.permission_health,
+       .app_ops_health = state.app_ops_ready ? "ready" : report.app_ops_health,
+       .binder_health = state.binder_ready ? "ready" : report.binder_health,
+       .surface_health = state.surface_ready ? "ready" : report.surface_health,
+       .window_health = state.window_ready ? "ready" : report.window_health,
+       .lifecycle_health =
+           state.lifecycle_ready ? "ready" : report.lifecycle_health,
+       .looper_health = state.looper_ready ? "ready" : report.looper_health,
+       .input_health = state.input_ready ? "ready" : report.input_health,
+       .dex_health = state.dex_ready ? "ready" : report.dex_health,
+       .art_health = state.art_ready ? "ready" : report.art_health,
+       .activity_health =
+           state.activity_launch_ready ? "ready" : report.activity_health,
+       .activity_manager_health = state.activity_manager_ready
+                                      ? "ready"
+                                      : report.activity_manager_health,
+       .process_health =
+           state.process_ready ? "ready" : report.process_health,
+       .package_manager_ready = state.package_manager_ready,
+       .intent_resolution_ready = state.intent_resolution_ready,
+       .activity_launch_ready = state.activity_launch_ready,
+       .activity_manager_ready = state.activity_manager_ready,
+       .process_ready = state.process_ready,
+       .window_ready = state.window_ready,
+       .dex_bootstrap_ready = state.dex_ready && state.art_ready
+                                  ? true
+                                  : report.art_bootstrap.dex_bootstrap_ready,
+       .class_loader_ready = state.dex_ready && state.art_ready
+                                 ? true
+                                 : report.art_bootstrap.class_loader_ready,
+       .java_execution_supported = false,
+       .persisted_artifact_root_preexisting =
+           fs::exists(app_data_dir / "runtime-manager"),
+       .allow_persisted_contract_repair = true,
+       .simulate_bootstrap_failure = simulate_bootstrap_failure,
+       .bootstrap_recovered = bootstrap_recovered,
+       .dex_files = dex_files});
+}
+
 bool AttemptRestageAssets(const NativeApkLaunchReport& report,
                           WorkingHealthState* state,
                           std::vector<std::string>* errors) {
@@ -708,6 +838,20 @@ bool AttemptRebuildWindowManagerState(const NativeApkLaunchReport& report,
   }
   state->window_ready = window_manager.ready;
   return state->window_ready;
+}
+
+bool AttemptRetryRuntimeBootstrap(const NativeApkLaunchReport& report,
+                                  WorkingHealthState* state,
+                                  std::vector<std::string>* errors) {
+  const auto runtime_bridge = BuildRuntimeSession(
+                                  report, *state, true,
+                                  false)
+                                  .BuildReport();
+  for (const auto& error : runtime_bridge.errors) {
+    AppendError(errors, error);
+  }
+  state->runtime_ready = runtime_bridge.ready;
+  return state->runtime_ready;
 }
 
 bool AttemptRestartSurface(const NativeApkLaunchReport& report,
@@ -941,6 +1085,8 @@ void WriteRecoveryReport(const SelfHealingAndroidDeviceReport& report) {
          << "\",\n"
          << "  \"window_health\": \"" << EscapeJson(report.window_health)
          << "\",\n"
+         << "  \"runtime_health\": \"" << EscapeJson(report.runtime_health)
+         << "\",\n"
          << "  \"recoverable\": " << (report.recoverable ? "true" : "false")
          << ",\n"
          << "  \"actions_attempted\": " << report.actions_attempted << ",\n"
@@ -1005,6 +1151,7 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
   watchdog.activity_manager_health = report_.activity_manager_health;
   watchdog.process_health = report_.process_health;
   watchdog.window_health = report_.window_health;
+  watchdog.runtime_health = report_.runtime_health;
 
   auto attempt_action = [&](const std::string& subsystem,
                             const std::string& reason,
@@ -1140,6 +1287,14 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
                                                                errors);
                      });
     }
+    if (report_.runtime_proof_requested && !state.runtime_ready) {
+      attempt_action("art_runtime_bridge", "runtime_health_blocked",
+                     "retry_runtime_bootstrap",
+                     [&](std::vector<std::string>* errors) {
+                       return AttemptRetryRuntimeBootstrap(report_, &state,
+                                                           errors);
+                     });
+    }
     if (!state.launch_ready && watchdog.actions.empty()) {
       attempt_action("launch", "launch_not_ready", "safe_mode_launch",
                      [&](std::vector<std::string>* errors) {
@@ -1176,6 +1331,8 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
       state.process_ready ? "ready" : report_.process_health;
   watchdog.window_health =
       state.window_ready ? "ready" : report_.window_health;
+  watchdog.runtime_health =
+      state.runtime_ready ? "ready" : report_.runtime_health;
   watchdog.recoverable = state.recoverable;
   watchdog.recommended_next_action =
       DetermineRecommendedNextAction(report_, state);

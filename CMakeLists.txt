@@ -51,6 +51,7 @@ add_library(
   src/apk_native_launch.cpp
   src/apk_permission_bridge.cpp
   src/apk_process_bridge.cpp
+  src/apk_runtime_bridge.cpp
   src/apk_self_healing_watchdog.cpp
   src/apk_storage_bridge.cpp
   src/apk_window_bridge.cpp

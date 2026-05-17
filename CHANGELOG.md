@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.106 - 2026-05-18
+
+- Implement **P13 Real ART Runtime Path / Java VM Bootstrap Contract** on the direct `launch-apk` path through `--runtime-proof` and `inspect-apk-runtime`, extending the staged APK session into a Linuxoid-owned `runtime_bridge` contract that models runtime-root discovery, boot classpath assembly, native runtime library directories, staged dex inputs, package/activity/process/window identity, and a deterministic runtime handle without Waydroid, emulator, or ADB.
+- Persist deterministic runtime-manager artifacts under `sandbox/data/data/<package>/runtime-manager/runtime-state.json`, `runtime-session-map.json`, and `runtime-events.jsonl`, and validate or heal missing, malformed, incomplete, stale, or incompatible runtime-manager state without claiming full ART bytecode execution.
+- Extend the Self-Healing Android Device watchdog so it now consumes `runtime_health`, records deterministic `retry_runtime_bootstrap` recovery attempts in `self-healing-android-device/recovery-journal.jsonl`, and can retry blocked or failed runtime bootstrap after upstream package/activity/process/window/storage/permission/AppOps/Binder/DEX repairs converge.
+- Add regression coverage for direct runtime-proof success, deterministic runtime artifact emission, focused `inspect-apk-runtime` operator output, CLI healing of malformed runtime-manager artifacts, watchdog retry of failed runtime bootstrap, and preservation of the existing P2 through P12 behavior.
+- Update repo docs and status output to make **P13 Real ART Runtime Path / Java VM Bootstrap Contract** the current direct-runtime slice and point the next handoff at **P14 Runtime Process Handoff + Resume Contract**.
+
 ## v0.1.105 - 2026-05-18
 
 - Implement **P12 WindowManager + Wayland/EGL Surface Contract** on the direct `launch-apk` path through `--window-proof` and `inspect-apk-window`, extending the staged APK session into a Linuxoid-owned `window_manager` contract that maps activity/process identity onto the existing native surface proof without Waydroid, emulator, or ADB.

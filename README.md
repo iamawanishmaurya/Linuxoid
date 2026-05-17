@@ -239,7 +239,11 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 
 `inspect-apk-window` now gives that P12 contract a focused operator surface. It reuses the same sandbox-backed session data, heals missing, malformed, stale, incompatible, or incomplete window-manager artifacts before trusting them, and returns stable JSON that exposes `window_manager`, `window_health`, current package/activity/process/surface mappings, and the current recovery guidance for the Self-Healing Android Device path.
 
-`--self-heal-proof` now runs the existing Self-Healing Android Device watchdog on top of that same staged APK session, and **P12 WindowManager + Wayland/EGL Surface Contract** extends the inputs it consumes with `window_health` alongside `activity_manager_health` and `process_health`. The watchdog can now record and replay deterministic `rebuild_window_manager_state` attempts for missing, malformed, incomplete, stale, or incompatible sandbox-backed window-manager files alongside `rebuild_process_manager_state`, `rebuild_permission_state`, `repair_app_storage`, `restage_assets`, `restart_surface`, `refresh_binder_services`, `rebuild_dex_bootstrap`, and `rerun_intent_resolution`, without pretending real Android framework recovery already exists.
+`--runtime-proof` now implements **P13 Real ART Runtime Path / Java VM Bootstrap Contract** for the same direct APK session path. It binds the staged session to a Linuxoid-owned `runtime_bridge` contract, discovers runtime roots plus boot classpath inputs plus native library directories, stages a deterministic runtime handle that ties package, activity, process, window, dex, and sandbox identity together, persists `runtime-state.json`, `runtime-session-map.json`, and `runtime-events.jsonl` under `sandbox/data/data/<package>/runtime-manager`, and exposes explicit `unavailable`, `discovered`, `configured`, `bootstrapping`, `ready`, `failed`, `degraded`, and `recovered` state transitions without pretending full Java/Kotlin bytecode execution already exists.
+
+`inspect-apk-runtime` now gives that P13 contract a focused operator surface. It reuses the same sandbox-backed session data, heals missing, malformed, stale, incompatible, or incomplete runtime-manager artifacts before trusting them, and returns stable JSON that exposes `runtime_bridge`, `runtime_health`, current package/activity/process/window/runtime mappings, and the current recovery guidance for the Self-Healing Android Device path.
+
+`--self-heal-proof` now runs the existing Self-Healing Android Device watchdog on top of that same staged APK session, and **P13 Real ART Runtime Path / Java VM Bootstrap Contract** extends the inputs it consumes with `runtime_health` alongside `window_health`, `activity_manager_health`, and `process_health`. The watchdog can now record and replay deterministic `retry_runtime_bootstrap` attempts for blocked or failed runtime-bridge sessions and `rebuild_window_manager_state` attempts for missing, malformed, incomplete, stale, or incompatible sandbox-backed window-manager files alongside `rebuild_process_manager_state`, `rebuild_permission_state`, `repair_app_storage`, `restage_assets`, `restart_surface`, `refresh_binder_services`, `rebuild_dex_bootstrap`, and `rerun_intent_resolution`, without pretending real Android framework recovery already exists.
 
 Current P10 inspection flow:
 
@@ -250,23 +254,34 @@ Current P10 inspection flow:
   - `sandbox/data/data/<package>/permissions/permission-state.json`
   - `sandbox/data/data/<package>/permissions/app-ops.json`
 
-What remains blocked after P12:
+Current P13 inspection flow:
+
+- `compatctl launch-apk --runtime-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`
+- `compatctl inspect-apk-runtime <apk-path> [staging-root]`
+- inspect nested `runtime_bridge` JSON in stdout
+- inspect persisted sandbox-backed artifacts under:
+  - `sandbox/data/data/<package>/runtime-manager/runtime-state.json`
+  - `sandbox/data/data/<package>/runtime-manager/runtime-session-map.json`
+  - `sandbox/data/data/<package>/runtime-manager/runtime-events.jsonl`
+
+What remains blocked after P13:
 
 - real host-side process creation and liveness beyond the current Linuxoid placeholder process identity
-- real Java/Kotlin ART execution
+- real Java/Kotlin ART bytecode execution
 - real Android WindowManagerService / SurfaceFlinger behavior and production compositor compatibility
 - full Android `ActivityManagerService` / `ProcessList` behavior
 - full Android framework permission manager and AppOps service semantics
+- real ART/dex2oat/classloader execution against a discovered runtime root
 
-Next phase: **P13 Runtime Process Handoff + Resume Contract**
+Next phase: **P14 Runtime Process Handoff + Resume Contract**
 
-P13 handoff from P12:
+P14 handoff from P13:
 
 - reuse the existing sandbox-backed `package_manager`, `intent_resolution`, `activity_launch`, `storage`, `permissions`, `app_ops`, `activity_manager`, `process_manager`, and `window_manager` session contracts as the stable inputs for real process handoff and resume sequencing
-- treat `activity_manager_health`, `process_health`, `window_health`, `permission_health`, `app_ops_health`, `storage_health`, `sandbox_health`, `binder_health`, `dex_health`, and `activity_health` as first-class gating signals for Linuxoid runtime start, stop, and restart decisions
+- add the new `runtime_bridge` contract and treat `runtime_health`, `activity_manager_health`, `process_health`, `window_health`, `permission_health`, `app_ops_health`, `storage_health`, `sandbox_health`, `binder_health`, `dex_health`, and `activity_health` as first-class gating signals for Linuxoid runtime start, stop, and restart decisions
 - keep the current Self-Healing Android Device recovery loop honest by distinguishing:
-  - contract-ready metadata and process planning
-  - real process creation, supervision, and resume ownership
+  - contract-ready runtime discovery and bootstrap planning
+  - real process creation, supervision, resume ownership, and future bytecode execution
 - preserve the current no-Waydroid, no-emulator, no-ADB constraint on the direct native Linuxoid runtime path
 
 Git/GitHub update path: use normal git remotes from this environment; if direct authentication is unavailable in a later environment, record `GitHub update blocked: direct GitHub authentication not available from this environment`.

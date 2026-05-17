@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: P13 Real ART Runtime Path Java VM Bootstrap Contract GREEN
+  Action: Added `launch-apk --runtime-proof` and `inspect-apk-runtime`, persisted deterministic sandbox-backed `runtime-state.json`, `runtime-session-map.json`, and `runtime-events.jsonl` artifacts, modeled runtime-root discovery plus boot classpath plus runtime-library inputs, validated or healed malformed/incomplete/stale/incompatible runtime-manager state, and threaded `runtime_health` back into the Self-Healing Android Device watchdog with deterministic `retry_runtime_bootstrap` recovery.
+  Result: Linuxoid now has a Linuxoid-owned ART/runtime bootstrap contract for direct APK sessions, plus an honest Self-Healing Android Device repair loop that can retry blocked or failed runtime bootstrap after upstream package, activity, process, window, storage, permission/AppOps, Binder, or DEX/bootstrap repairs converge without claiming full Java/Kotlin bytecode execution yet.
+  Timestamp: 2026-05-18T23:59:30+05:30
+
 - Step: P12 WindowManager + Wayland/EGL Surface Contract GREEN
   Action: Added `launch-apk --window-proof` and `inspect-apk-window`, persisted deterministic sandbox-backed `window-state.json`, `window-session-map.json`, and `window-events.jsonl` artifacts, mapped resolved activity plus process identity onto the existing native surface proof, validated or healed malformed/incomplete/stale/incompatible window-manager state, and threaded `window_health` back into the Self-Healing Android Device watchdog with deterministic `rebuild_window_manager_state` recovery.
   Result: Linuxoid now has a Linuxoid-owned WindowManager/surface contract for direct APK sessions, plus an honest Self-Healing Android Device repair loop that can rebuild blocked or malformed window-manager state after upstream surface, process, storage, permission/AppOps, Binder, lifecycle, or DEX/bootstrap repairs converge.
