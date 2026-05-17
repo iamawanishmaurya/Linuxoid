@@ -1,5 +1,126 @@
 # Changelog
 
+## v0.1.103 - 2026-05-18
+
+- Implement **P10 Android Permissions + AppOps Contract** on the direct `launch-apk` path through `--permissions-proof`, extending the earlier proof slice into a real sandbox-backed contract that persists deterministic permission and AppOps state under `sandbox/data/data/<package>/permissions/permission-state.json` and `sandbox/data/data/<package>/permissions/app-ops.json`.
+- Add a minimal Linuxoid permission registry and AppOps policy layer for direct APK sessions, including deterministic `requested_permissions`, `granted_permissions`, `denied_permissions`, `schema_version`, `user_id`, `app_id`, `sandbox_root`, `contract_ready`, `updated_at_unix_ms`, `healing_actions`, `diagnostics`, and stable AppOps records for `storage_private_access`, `storage_sensitive_access`, `audio_capture_access`, `network_placeholder_access`, `binder_service_access`, `activity_launch_access`, and `dex_runtime_access`.
+- Validate and self-heal missing, malformed, stale, or incompatible permission/AppOps files across repeated launches, while staying honest about dangerous permissions: Linuxoid now rebuilds bad contract files deterministically but still does not silently grant unsupported or dangerous permissions like `android.permission.RECORD_AUDIO`.
+- Extend the Self-Healing Android Device watchdog so it now consumes `permission_health` plus `app_ops_health`, records deterministic `rebuild_permission_state` recovery attempts in `self-healing-android-device/recovery-journal.jsonl`, and reports permission/AppOps health directly inside both the direct launch JSON and the watchdog artifacts.
+- Add regression coverage for default permission extraction, persistence round-trip stability, AppOps mode decisions, missing-file healing, malformed JSON recovery, denied-audio diagnostics, and preservation of the existing P2 through P9 behavior.
+- Add `compatctl inspect-apk-permissions <apk-path> [staging-root]` as a focused developer/operator surface for the durable P10 contract, and extend regression coverage to prove deterministic healing for incompatible and stale sandbox-backed permission/AppOps files without silently granting dangerous permissions.
+- Next phase: **P11 Minimal ActivityManager/ProcessManager Contract**
+- GitHub update blocked: direct GitHub authentication not available from this environment
+
+- Implement **P9 Android App Storage + Sandbox Contract** on the direct `launch-apk` path through `--storage-proof`, adding a session-bound storage model that materializes deterministic `sandbox/data/data/<package>`-style app directories, `files` plus `cache` plus native-lib plus asset/resource roots, placeholder uid/gid plus permission metadata, `isolation_level: path_sandbox_only`, safe app-relative path resolution, marker write/read proof, and nested `storage` JSON with `storage_health` plus `sandbox_health`.
+- Extend the Self-Healing Android Device watchdog so it now consumes storage/sandbox health, records deterministic `repair_app_storage` recovery attempts in `self-healing-android-device/recovery-journal.jsonl`, and reports storage/sandbox health directly inside `self_healing_android_device` and watchdog-report artifacts.
+- Add regression coverage for deterministic storage directory materialization, safe path acceptance and traversal/absolute/symlink escape rejection, storage marker checksum proof, and a simulated storage failure that the watchdog repairs through `repair_app_storage`, while preserving the existing P2 through P8 behavior.
+- GitHub update blocked: direct GitHub authentication not available from this environment
+
+## v0.1.102 - 2026-05-18
+
+- Implement **P8 Self-Healing Android Device Watchdog + Recovery Loop** on the direct `launch-apk` path through `--self-heal-proof [--package <package>] [--component <component>]`, adding a session-bound watchdog that consumes existing launch, surface, asset/resource, lifecycle, looper, input, Binder, DEX/bootstrap, package-manager, intent-resolution, and activity-launch health fields and emits nested `self_healing_android_device` JSON.
+- Add deterministic local recovery actions for the direct APK session path, including `no_action`, `restage_assets`, `rebuild_resource_metadata`, `restart_surface`, `reset_input_queue`, `restart_lifecycle`, `refresh_binder_services`, `rebuild_dex_bootstrap`, `rerun_intent_resolution`, and `safe_mode_launch`, with explicit attempted/succeeded/failed reporting instead of silent recovery claims.
+- Persist watchdog artifacts under the staged APK session root as `self-healing-android-device/watchdog-report.json` and `self-healing-android-device/recovery-journal.jsonl`, and add regression coverage for healthy sessions plus deterministic simulated failures in the asset bridge, surface proof, Binder/service registry, DEX/bootstrap, and intent/activity resolution seams while preserving the existing P2 through P7 behavior.
+- GitHub update blocked: GitHub CLI not authenticated.
+
+## v0.1.101 - 2026-05-18
+
+- Extend the direct `launch-apk` slice with `--activity-proof [--package <package>] [--component <component>]`, adding a session-bound Linuxoid `package_manager`, `intent_resolution`, and `activity_launch` contract that writes deterministic `activity-launch/package-record.json`, `intent-resolution.json`, and `activity-launch.json` artifacts under the staged APK session root.
+- Expand that package-manager contract so it now records labels, exported/enabled flags, and manifest intent filters for staged activity components, resolves either `ACTION_MAIN` plus `CATEGORY_LAUNCHER` or explicit component launches, and emits deterministic blocked reasons like `package_not_found`, `no_launcher_activity`, `ambiguous_launcher_activities`, `component_disabled`, `component_not_exported`, `unsupported_component_type`, and `unresolved_activity_class`.
+- Tie that activity-launch contract back to existing lifecycle, surface, input, Binder/service-registry, and DEX/bootstrap readiness, exposing explicit `binder_health` plus `activity_health` fields while still reporting `art_runtime_available: false` and `java_execution_supported: false` honestly instead of claiming full Android framework startup.
+- Add regression coverage for successful activity-proof launch, session-bound artifact materialization, package-registry metadata, missing launcher, ambiguous launcher, explicit component resolution, package-not-found, unsupported explicit component, deterministic repeated JSON output, truthful blocked behavior when DEX/bootstrap readiness is missing, and preservation of the existing P2 through P6 direct-APK proof surfaces.
+
+## v0.1.100 - 2026-05-18
+
+- Extend the direct `launch-apk` slice with `--dex-proof`, adding a session-bound Linuxoid DEX bridge that safely stages `classes.dex`, `classes2.dex`, and similar entries, parses DEX header-and-count metadata, records deterministic checksums plus staged paths, and emits nested `dex` plus `art_bootstrap` JSON with `class_loader_ready` while still keeping `java_execution_supported: false`.
+- Add regression coverage for successful DEX proof on a valid native-only fixture APK, deterministic multi-DEX discovery, honest blocked behavior when DEX is missing but native launch still succeeded, and structured failure when a malformed DEX payload is required.
+- Refresh the README, phased plan, self-healing runtime note, status text, changelog, and step log so the repo says plainly that native-only APK launch plus surface proof plus asset/resource bridge plus lifecycle/input foundation plus Binder/service registry plus DEX/bootstrap probe now exist, while full Java/Kotlin ART execution is still future work.
+
+## v0.1.99 - 2026-05-17
+
+- Extend `native-service-manager-fixture <bootstrap-manifest>` into a P5 Binder/service-registry foundation for the Self-Healing Android Device path, adding deterministic `package_manager`, `activity_manager`, and app-local placeholder service registration, stable owner-session plus owner-process metadata, honest missing-service lookup reporting, and explicit limitation flags like `local_foundation_only`, `real_android_binder: false`, and `system_server_present: false`.
+- Persist richer Binder/service artifacts under the staged lifecycle session root, including `binder/service-manager.json`, `binder/registered-services.json`, `binder/service-lookups.json`, `binder/service-lookups.jsonl`, `binder/service-transactions.jsonl`, and `binder/transport-messages.jsonl`, while threading the lookup summary path and richer Binder evidence into the lifecycle shim and runtime-health reporting.
+- Add regression coverage for deterministic Binder fixture artifacts, CLI output, missing-service lookup truth, PackageManager/ActivityManager-shaped transaction metadata, lifecycle-session wiring of the new lookup summary artifact, and preservation of the existing P4 lifecycle/Looper/InputQueue bridge outputs.
+
+## v0.1.98 - 2026-05-17
+
+- Extend the native-only `launch-apk` slice with `--lifecycle-proof`, binding the staged APK session to a deterministic Android-like lifecycle controller, Looper-style event pump, and InputQueue foundation that emit nested `lifecycle`, `looper`, and `input_queue` JSON with explicit `lifecycle_health`, `looper_health`, and `input_health` fields for future Self-Healing Android Device work.
+- Add regression coverage for successful lifecycle proof, session-bound lifecycle metadata, deterministic lifecycle ordering, deterministic looper dispatch counts, malformed input rejection, and structured missing-native-library failure when lifecycle proof is requested.
+- Refresh the README, phased plan, self-healing runtime note, status text, changelog, and step log so the repo says plainly that native-only APK launch plus surface proof plus asset/resource bridge plus lifecycle/input foundation now exist, while full Android framework services, Binder service ecosystems, Java/Kotlin ART execution, and production app compatibility remain future work.
+
+## v0.1.97 - 2026-05-17
+
+- Extend the native-only `launch-apk` slice with `--asset-proof`, binding the staged APK session to a deterministic Linuxoid AssetManager/Resources-shaped bridge that lists normalized assets, opens and checksums a staged asset, reports `resources.arsc` plus `res/` metadata, and surfaces explicit `asset_health` plus `resource_health` fields for future Self-Healing Android Device work.
+- Add regression coverage for successful asset-proof launch, session-bound asset bridge metadata, deterministic asset listing, deterministic asset checksum and size reporting, unsafe path rejection, missing asset reporting, and structured nonzero behavior when launch fails even though staged asset/resource proof is still available.
+- Refresh the README, phased plan, self-healing runtime note, status text, and step log so the repo says plainly that native-only APK launch plus surface proof plus asset/resource metadata bridge now exist, while full Android Resources decoding, theme/layout inflation, Java/Kotlin ART execution, and production Android graphics compatibility remain future work.
+
+## v0.1.96 - 2026-05-17
+
+- Extend the native-only `launch-apk` slice with `--surface-proof` and `launch-apk-surface`, binding the APK launch session to a deterministic native surface/session object with lifecycle states, first-frame proof, first-pixel marker artifacts, and explicit `backend: headless` reporting when Linuxoid is not using a real Wayland/EGL path.
+- Add regression coverage for successful APK-launched surface proof, package/session binding, deterministic first-pixel marker stability, and structured failure behavior when surface proof is requested on a missing-native-library path.
+- Refresh the README, phased build plan, self-healing runtime note, step log, and status text so the repo says plainly that native-only APK launch plus surface proof now exists, while full Java/Kotlin ART execution and production Android graphics compatibility remain future work.
+
+## v0.1.95 - 2026-05-17
+
+- Add `compatctl launch-apk <apk-path> [staging-root]`, Linuxoid's first end-to-end native-only APK launch slice. It opens a stored ZIP APK, reads plain-XML manifest metadata, stages ABI-matching native libraries plus assets into a deterministic session directory, loads the selected library, calls `JNI_OnLoad` when present, creates a minimal native activity/session object, and emits structured JSON for both success and structured failure.
+- Add regression coverage for the new launch slice, including valid native-only fixture success plus structured failures for path traversal, missing native libraries, invalid APK input, missing manifest metadata, and unsupported ABI.
+- Refresh the README, phased build plan, self-healing runtime note, step log, and status text so the repo says this new slice is real and useful, but still narrower than full Java/Kotlin ART-backed Android app execution.
+
+## v0.1.94 - 2026-05-17
+
+- Refresh the README, self-healing runtime note, and phased build plan so they say more plainly that Linuxoid’s strongest current guarantee is a stable diagnosis-and-replay contract across `preflight-runtime native`, `verify-package native`, `verify-package-matrix native`, and `launch-package native`, including blocked verification and matrix outcomes that are still correct self-healing passes.
+- Clarify that repeated blocked `verify-package native` runs now keep the rendered report plus generated health/replay JSON stable, repeated blocked `verify-package-matrix native` runs keep row-level diagnosis stable, and that none of those guarantees mean Linuxoid has crossed the last real milestone of a default-path, no-override, host-ART-owned staged app startup.
+
+## v0.1.93 - 2026-05-17
+
+- Add blocked-host-ART CLI regressions for `verify-package native` and `verify-package-matrix native` so Linuxoid now proves four bridge-level guarantees at those public verification surfaces too: deterministic health classification, deterministic recovery selection, stable repeated command or JSON output, and no false success when ART/bootstrap is still missing.
+- Pin the blocked verification contract through both the rendered operator reports and the generated `runtime-health.json` plus merged replay JSON, keeping the public native verification surfaces aligned with the deeper self-healing engine.
+
+## v0.1.92 - 2026-05-17
+
+- Extend `verify-package native` and `verify-package-matrix native` so they now surface the full replayable JSONL bundle directly: recovery-actions trace path, health replay path, diagnostic replay path, diagnostic fixture command, diagnostic trace-index path, canonical/found/missing trace-source counts, and per-source trace details now render at the bridge layer instead of only inside deeper preflight or health artifacts.
+- Add regression coverage that pins those replay fields on both override-backed success and blocked host-ART native verification or matrix paths, keeping the public replay contract aligned with Linuxoid’s underlying self-healing fixtures.
+
+## v0.1.91 - 2026-05-17
+
+- Extend `verify-package native` and `verify-package-matrix native` so they now render the full canonical four-scenario recovery mapping with rank, retry budget, scope, and reason metadata, instead of only surfacing the currently selected blocked-path recovery actions.
+- Add regression coverage that pins those deterministic canonical recovery details on both override-backed success and blocked host-ART native verification or matrix paths, keeping the bridge-level recovery contract aligned with the deeper self-healing runtime plan.
+
+## v0.1.90 - 2026-05-17
+
+- Extend the public native self-healing bridge so `preflight-runtime native`, `verify-package native`, `verify-package-matrix native`, and `launch-package native` now render the six required core runtime-health records directly through `Runtime Core Subsystems*` fields instead of leaving that projection only inside deeper `runtime-health.json`.
+- Add regression coverage that pins the new core-subsystem projection across blocked native preflight, blocked native launch, and native matrix reporting, while keeping the existing bridge-level health, recovery, and replay contract green.
+
+## v0.1.89 - 2026-05-17
+
+- Extend `verify-package-matrix native` so each staged package row now carries the same bridge-level self-healing truth as native preflight, verification, and launch: runtime health classification, overall-ready verdict, dependency-blocked state, recovery details, and replay handles now render directly in the matrix output instead of staying trapped inside nested per-package reports.
+- Add regression coverage for both override-backed native matrix success and blocked host-ART native matrix failure so the matrix surface stays aligned with the stronger self-healing contract already enforced on the single-package native bridge.
+
+## v0.1.88 - 2026-05-17
+
+- Extend `verify-package native` so it surfaces the same bridge-level self-healing truth as native preflight and launch: runtime health classification, overall-ready verdict, dependency-blocked state, recovery details, replay readiness, replay commands, and trace-bundle completeness now render directly in the verification report instead of being buried only inside `Preflight Output:`.
+- Add regression coverage for both override-backed success and blocked host-ART verification so the native verification surface stays aligned with the preflight and launch self-healing contract.
+
+## v0.1.87 - 2026-05-17
+
+- Refresh the README, self-healing runtime note, and phased build plan so they state more plainly what self-healing means today at the public native bridge: truthful diagnosis, deterministic bounded recovery, stable replay, and no false claim of app execution success.
+- Clarify again that the remaining milestone is still the first default-path, no-override, host-ART-owned staged app startup, plus the supporting Binder, graphics, input, and Android resource gaps around it.
+
+## v0.1.86 - 2026-05-17
+
+- Extend the public native self-healing bridge so blocked `preflight-runtime native` and `launch-package native` now render `Runtime Health Classification` plus `Runtime Overall Ready` directly, instead of forcing callers to infer those verdicts only from deeper JSON artifacts.
+- Add CLI-level regressions that pin health classification, recovery decision selection, repeated runtime-health JSON stability, and no false success on the blocked host-ART path for both native preflight and native launch.
+
+## v0.1.85 - 2026-05-17
+
+- Extend the public native replay contract so `preflight-runtime native` and `launch-package native` now render exact replay commands for `native-runtime-health-replay`, `native-runtime-diagnostic-replay`, and `native-runtime-diagnostic-fixture` alongside the existing JSONL artifact paths and trace-source summaries.
+- Add regression coverage that pins those replay-command lines on blocked native preflight and blocked native launch, keeping the public bridge aligned with Linuxoid’s replayable self-healing fixtures.
+
+## v0.1.84 - 2026-05-17
+
+- Extend the public native self-healing bridge so deterministic recovery details now carry operator-facing `action_reason` text alongside the existing `action_rank`, `retry_budget`, and `recovery_scope` metadata.
+- Pin that richer recovery-detail contract with blocked-host-ART regressions for both `preflight-runtime native` and `launch-package native`, keeping the bridge output aligned with the deeper `runtime-health` recovery plan.
+
 ## v0.1.83 - 2026-05-17
 
 - Extend the host ART probe contract to cover the common 64-bit binary names too: Linuxoid now recognizes `dalvikvm64` as the same bootstrap-capable host class as `dalvikvm`, and `app_process64` as the same detection-only host class as `app_process`.

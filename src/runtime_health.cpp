@@ -442,10 +442,16 @@ RuntimeHealthRecord BuildInputRecord(const RuntimeObservationContext& context,
 
 RuntimeHealthRecord BuildBinderRecord(
     const RuntimeObservationContext& context, const std::string& scenario) {
+  const auto& binder = context.lifecycle.binder_service_manager;
+  const int missing_lookup_count = std::count_if(
+      binder.lookups.begin(), binder.lookups.end(),
+      [](const BinderServiceLookup& lookup) { return lookup.result != "found"; });
+
   if (scenario == "failed_service_lookup") {
     return MakeHealthRecord(
         "binder_service_readiness", "blocked", false,
-        context.lifecycle.binder_transport_log_path,
+        binder.lookup_summary_path.empty() ? context.lifecycle.binder_transport_log_path
+                                           : binder.lookup_summary_path,
         "service_lookup_failed",
         "Scenario forced a failed local service lookup classification.");
   }
@@ -454,12 +460,16 @@ RuntimeHealthRecord BuildBinderRecord(
       "binder_service_readiness",
       context.lifecycle.binder_service_manager_ready ? "ready" : "blocked",
       context.lifecycle.binder_service_manager_ready,
-      context.lifecycle.binder_transport_log_path,
+      binder.metadata_path.empty() ? context.lifecycle.binder_transport_log_path
+                                   : binder.metadata_path,
       context.lifecycle.binder_service_manager_ready ? "" : "binder_registry_unavailable",
-      "transport_kind=" + context.lifecycle.binder_service_manager.transport_kind +
+      "transport_kind=" + binder.transport_kind +
           "; transport_round_trips=" +
-          std::to_string(
-              context.lifecycle.binder_service_manager.transport_round_trips));
+          std::to_string(binder.transport_round_trips) +
+          "; registered_services=" + std::to_string(binder.services.size()) +
+          "; missing_lookups=" + std::to_string(missing_lookup_count) +
+          "; local_foundation_only=" +
+          std::string(binder.local_foundation_only ? "true" : "false"));
 }
 
 RuntimeHealthRecord BuildDexRecord(const RuntimeObservationContext& context) {

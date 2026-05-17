@@ -1,5 +1,9 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_archive.hpp"
+#include "wfa/apk_asset_bridge.hpp"
+#include "wfa/apk_lifecycle_bridge.hpp"
+#include "wfa/apk_native_launch.hpp"
+#include "wfa/apk_storage_bridge.hpp"
 #include "wfa/art_activity_bootstrap_fixture.hpp"
 #include "wfa/art_bootstrap_execution_fixture.hpp"
 #include "wfa/art_classloader_fixture.hpp"
@@ -29,6 +33,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -71,6 +76,61 @@ std::string ReadTextFile(const std::filesystem::path& path) {
   std::ostringstream buffer;
   buffer << input.rdbuf();
   return buffer.str();
+}
+
+void WriteTextFile(const std::filesystem::path& path,
+                   const std::string& contents) {
+  std::ofstream output(path);
+  if (!output) {
+    throw std::runtime_error("unable to open file for write: " + path.string());
+  }
+  output << contents;
+}
+
+std::string ReplaceFirstOrThrow(const std::string& input,
+                                const std::string& needle,
+                                const std::string& replacement) {
+  const auto position = input.find(needle);
+  if (position == std::string::npos) {
+    throw std::runtime_error("expected token not found: " + needle);
+  }
+  std::string updated = input;
+  updated.replace(position, needle.size(), replacement);
+  return updated;
+}
+
+std::string ReadBinaryFile(const std::filesystem::path& path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    throw std::runtime_error("unable to open binary file: " + path.string());
+  }
+  return std::string(std::istreambuf_iterator<char>(input),
+                     std::istreambuf_iterator<char>());
+}
+
+std::string ComputeFnv1a64Checksum(const std::string& contents) {
+  std::uint64_t hash = 1469598103934665603ull;
+  for (const unsigned char byte : contents) {
+    hash ^= static_cast<std::uint64_t>(byte);
+    hash *= 1099511628211ull;
+  }
+
+  std::ostringstream output;
+  output << "fnv1a64:" << std::hex << std::nouppercase << std::setfill('0')
+         << std::setw(16) << hash;
+  return output.str();
+}
+
+std::string ExtractReportValue(const std::string& output,
+                               const std::string& prefix) {
+  std::istringstream lines(output);
+  std::string line;
+  while (std::getline(lines, line)) {
+    if (line.rfind(prefix, 0) == 0) {
+      return line.substr(prefix.size());
+    }
+  }
+  throw std::runtime_error("missing report prefix: " + prefix);
 }
 
 class ScopedEnvironmentVariable {
@@ -241,6 +301,14 @@ struct NativeRuntimePackageFixture {
   std::string apk_path;
 };
 
+struct NativeApkLaunchFixture {
+  std::filesystem::path root;
+  std::filesystem::path apk_path;
+  std::filesystem::path staging_root;
+  std::string package_name;
+  std::string launcher_component;
+};
+
 NativeRuntimePackageFixture CreateNativeRuntimePackageFixture(
     const std::string& fixture_name, bool include_classes_dex = true,
     bool include_input_method_service = false) {
@@ -343,6 +411,175 @@ NativeRuntimePackageFixture CreateNativeRuntimePackageFixture(
           .install_root = layout.host_package_root,
           .apk_path =
               (fs::path(layout.host_package_root) / "base.apk").string()};
+}
+
+NativeApkLaunchFixture CreateNativeApkLaunchFixture(
+    const std::string& fixture_name, bool include_native_library = true,
+    bool include_version_metadata = true,
+    const std::vector<std::pair<std::string, std::string>>& extra_entries = {}) {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / fixture_name;
+  fs::remove_all(root);
+  fs::create_directories(root);
+
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path fixture_library = build_dir / "liblinuxoid_p1_fixture.so";
+  Expect(fs::exists(fixture_library),
+         "expected linuxoid p1 fixture library to exist");
+
+  std::ostringstream manifest;
+  manifest << "<manifest package=\"com.example.launchapk\"";
+  if (include_version_metadata) {
+    manifest << " android:versionCode=\"1\" android:versionName=\"1.0.0\"";
+  }
+  manifest << ">\n"
+           << "  <uses-sdk android:minSdkVersion=\"24\" android:targetSdkVersion=\"35\"/>\n"
+           << "  <application android:name=\"com.example.launchapk.App\">\n"
+           << "    <activity android:name=\"com.example.launchapk.MainActivity\">\n"
+           << "      <intent-filter>\n"
+           << "        <action android:name=\"android.intent.action.MAIN\"/>\n"
+           << "        <category android:name=\"android.intent.category.LAUNCHER\"/>\n"
+           << "      </intent-filter>\n"
+           << "    </activity>\n"
+           << "  </application>\n"
+           << "</manifest>\n";
+
+  std::vector<std::pair<std::string, std::string>> archive_entries = {
+      {"AndroidManifest.xml", manifest.str()},
+      {"assets/config/hello.txt", "hello launch apk\n"},
+      {"res/raw/payload.txt", "payload\n"},
+      {"resources.arsc", "arsc"},
+  };
+  if (include_native_library) {
+    archive_entries.push_back(
+        {"lib/x86_64/libcalculator.so", ReadBinaryFile(fixture_library)});
+  }
+  archive_entries.insert(archive_entries.end(), extra_entries.begin(),
+                         extra_entries.end());
+
+  const fs::path apk_path = root / "native-launch.apk";
+  WriteStoredZipFixture(apk_path, archive_entries);
+
+  return {.root = root,
+          .apk_path = apk_path,
+          .staging_root = root / "staging",
+          .package_name = "com.example.launchapk",
+          .launcher_component = "com.example.launchapk/.MainActivity"};
+}
+
+NativeApkLaunchFixture CreateNativeApkLaunchFixtureWithManifest(
+    const std::string& fixture_name, const std::string& manifest_xml,
+    bool include_native_library = true,
+    const std::vector<std::pair<std::string, std::string>>& extra_entries = {}) {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / fixture_name;
+  fs::remove_all(root);
+  fs::create_directories(root);
+
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path fixture_library = build_dir / "liblinuxoid_p1_fixture.so";
+  Expect(fs::exists(fixture_library),
+         "expected linuxoid p1 fixture library to exist");
+
+  std::vector<std::pair<std::string, std::string>> archive_entries = {
+      {"AndroidManifest.xml", manifest_xml},
+      {"assets/config/hello.txt", "hello launch apk\n"},
+      {"res/raw/payload.txt", "payload\n"},
+      {"resources.arsc", "arsc"},
+  };
+  if (include_native_library) {
+    archive_entries.push_back(
+        {"lib/x86_64/libcalculator.so", ReadBinaryFile(fixture_library)});
+  }
+  archive_entries.insert(archive_entries.end(), extra_entries.begin(),
+                         extra_entries.end());
+
+  const fs::path apk_path = root / "native-launch.apk";
+  WriteStoredZipFixture(apk_path, archive_entries);
+
+  return {.root = root,
+          .apk_path = apk_path,
+          .staging_root = root / "staging",
+          .package_name = "com.example.launchapk",
+          .launcher_component = "com.example.launchapk/.MainActivity"};
+}
+
+wfa::NativeApkAssetBridgeSession BuildAssetBridgeSessionForLaunchReport(
+    const wfa::NativeApkLaunchReport& report) {
+  const std::string selected_library_path =
+      !report.native_execute.selected_library_path.empty()
+          ? report.native_execute.selected_library_path
+          : (report.native_libraries.empty() ? ""
+                                             : report.native_libraries.front());
+  return wfa::NativeApkAssetBridgeSession(
+      {.session_id = report.package_name + ":" + report.install_id + ":assets",
+       .package_name = report.package_name,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .selected_library_path = selected_library_path,
+       .launch_status = report.launch_status,
+       .asset_root = report.asset_root,
+       .resource_root = report.resource_root,
+       .manifest_source = report.manifest_source});
+}
+
+wfa::NativeApkLifecycleBridgeSession BuildLifecycleSessionForLaunchReport(
+    const wfa::NativeApkLaunchReport& report, int width = 320, int height = 240,
+    int format = 1) {
+  const std::string selected_library_path =
+      !report.native_execute.selected_library_path.empty()
+          ? report.native_execute.selected_library_path
+          : (report.native_libraries.empty() ? ""
+                                             : report.native_libraries.front());
+  return wfa::NativeApkLifecycleBridgeSession(
+      {.session_id = report.package_name + ":" + report.install_id + ":lifecycle",
+       .package_name = report.package_name,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .selected_abi = report.selected_abi,
+       .selected_library_path = selected_library_path,
+       .launch_status = report.launch_status,
+       .asset_health = report.asset_health,
+       .resource_health = report.resource_health,
+       .surface_health = report.surface_health,
+       .surface_state = report.surface.state,
+       .artifact_root =
+           (std::filesystem::path(report.staged_dir) / "lifecycle-proof")
+               .string(),
+       .width = width,
+       .height = height,
+       .format = format});
+}
+
+wfa::NativeApkStorageBridgeSession BuildStorageSessionForLaunchReport(
+    const wfa::NativeApkLaunchReport& report) {
+  const std::filesystem::path app_data_dir =
+      !report.storage.app_data_dir.empty()
+          ? std::filesystem::path(report.storage.app_data_dir)
+          : (std::filesystem::path(report.sandbox_root) / "data" / "data" /
+             report.package_name);
+  return wfa::NativeApkStorageBridgeSession(
+      {.session_id = report.package_name + ":" + report.install_id + ":storage",
+       .package_name = report.package_name,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .app_data_dir = app_data_dir.string(),
+       .files_dir = (app_data_dir / "files").string(),
+       .cache_dir = (app_data_dir / "cache").string(),
+       .native_lib_dir = report.library_root,
+       .asset_root = report.asset_root,
+       .resource_root = report.resource_root,
+       .artifact_root = (std::filesystem::path(report.staged_dir) / "storage")
+                            .string(),
+       .uid_placeholder = 10000,
+       .gid_placeholder = 10000,
+       .isolation_level = "path_sandbox_only",
+       .sandbox_state = "path_sandbox_only",
+       .permission_metadata = {"uid_placeholder=10000",
+                               "gid_placeholder=10000",
+                               "app_data_dir_mode=0700",
+                               "files_dir_mode=0700",
+                               "cache_dir_mode=0700"}});
 }
 
 RuntimeHealthBootstrapFixture CreateRuntimeHealthBootstrapFixture(
@@ -2189,6 +2426,9 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
   Expect(report.registry_path ==
              (root / "binder" / "registered-services.json").string(),
          "expected deterministic binder registry path");
+  Expect(report.lookup_summary_path ==
+             (root / "binder" / "service-lookups.json").string(),
+         "expected deterministic binder lookup summary path");
   Expect(report.lookup_log_path ==
              (root / "binder" / "service-lookups.jsonl").string(),
          "expected deterministic binder lookup log path");
@@ -2197,6 +2437,8 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
          "expected deterministic binder transaction log path");
   Expect(fs::exists(report.metadata_path), "expected binder metadata artifact");
   Expect(fs::exists(report.registry_path), "expected binder registry artifact");
+  Expect(fs::exists(report.lookup_summary_path),
+         "expected binder lookup summary artifact");
   Expect(fs::exists(report.lookup_log_path),
          "expected binder lookup log artifact");
   Expect(fs::exists(report.transaction_log_path),
@@ -2204,29 +2446,51 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
   Expect(fs::exists(report.transport_log_path),
          "expected binder transport log artifact");
 
-  Expect(report.services.size() == 3,
-         "expected three deterministic binder services");
-  Expect(report.lookups.size() == 2,
-         "expected two deterministic binder lookups");
-  Expect(report.transactions.size() == 2,
-         "expected two deterministic binder transactions");
-  Expect(report.transport_round_trips == 4,
+  Expect(report.session_id == "com.example.simple:bootstrap",
+         "expected deterministic binder session id");
+  Expect(report.owner_process_identity ==
+             "linuxoid-native-session:com.example.simple:bootstrap",
+         "expected deterministic binder owner identity");
+  Expect(report.services.size() == 4,
+         "expected four deterministic binder services");
+  Expect(report.lookups.size() == 4,
+         "expected four deterministic binder lookups");
+  Expect(report.transactions.size() == 3,
+         "expected three deterministic binder transactions");
+  Expect(report.transport_round_trips == 7,
          "expected deterministic binder transport round trips");
+  Expect(report.local_foundation_only,
+         "expected honest local foundation classification");
+  Expect(!report.real_android_binder,
+         "expected no false real binder classification");
+  Expect(!report.system_server_present,
+         "expected no false system_server classification");
+  Expect(report.parcel_support_level == "metadata_only",
+         "expected metadata-only parcel support level");
 
-  std::ifstream registry_input(report.registry_path);
-  std::string registry((std::istreambuf_iterator<char>(registry_input)),
-                       std::istreambuf_iterator<char>());
+  const std::string registry = ReadTextFile(report.registry_path);
   Expect(registry.find("\"service_name\": \"package_manager\"") !=
              std::string::npos,
          "expected package manager registration");
   Expect(registry.find("\"service_name\": \"activity_manager\"") !=
              std::string::npos,
          "expected activity manager registration");
+  Expect(registry.find("\"service_name\": \"app_local_service\"") !=
+             std::string::npos,
+         "expected app-local placeholder registration");
+  Expect(registry.find("\"owner_session_id\": \"com.example.simple:bootstrap\"") !=
+             std::string::npos,
+         "expected owner session id in registry");
 
-  std::ifstream transaction_input(report.transaction_log_path);
-  std::string transactions(
-      (std::istreambuf_iterator<char>(transaction_input)),
-      std::istreambuf_iterator<char>());
+  const std::string lookups = ReadTextFile(report.lookup_summary_path);
+  Expect(lookups.find("\"service_name\": \"window_manager\"") !=
+             std::string::npos,
+         "expected missing service lookup");
+  Expect(lookups.find("\"lookup_status\": \"missing\"") !=
+             std::string::npos,
+         "expected honest missing lookup status");
+
+  const std::string transactions = ReadTextFile(report.transaction_log_path);
   Expect(transactions.find("\"transaction_name\": \"getPackageInfo\"") !=
              std::string::npos,
          "expected package manager transaction");
@@ -2234,16 +2498,23 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
              "\"transaction_name\": \"scheduleLaunchActivity\"") !=
              std::string::npos,
          "expected activity manager transaction");
+  Expect(transactions.find("\"request_status\": \"accepted\"") !=
+             std::string::npos,
+         "expected deterministic transaction request status");
+  Expect(transactions.find("\"response_status\": \"queued\"") !=
+             std::string::npos,
+         "expected deterministic transaction response status");
 
-  std::ifstream transport_input(report.transport_log_path);
-  std::string transport((std::istreambuf_iterator<char>(transport_input)),
-                        std::istreambuf_iterator<char>());
+  const std::string transport = ReadTextFile(report.transport_log_path);
   Expect(transport.find("\"message_kind\": \"lookup_request\"") !=
              std::string::npos,
          "expected binder lookup request on transport");
   Expect(transport.find("\"message_kind\": \"transaction_response\"") !=
              std::string::npos,
          "expected binder transaction response on transport");
+  Expect(transport.find("\"delivery_status\": \"missing\"") !=
+             std::string::npos,
+         "expected missing lookup delivery status in transport log");
 
   const auto rendered = wfa::RenderBinderServiceManagerFixtureJson(report);
   Expect(rendered.find("\"manager_ready\": true") != std::string::npos,
@@ -2251,12 +2522,68 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
   Expect(rendered.find("\"metadata_path\": \"" + report.metadata_path + "\"") !=
              std::string::npos,
          "expected binder metadata path in json");
+  Expect(rendered.find("\"lookup_summary_path\": \"" +
+                           report.lookup_summary_path + "\"") !=
+             std::string::npos,
+         "expected binder lookup summary path in json");
   Expect(rendered.find("\"transport_log_path\": \"" +
                            report.transport_log_path + "\"") !=
              std::string::npos,
          "expected binder transport log path in json");
+  Expect(rendered.find("\"local_foundation_only\": true") !=
+             std::string::npos,
+         "expected local foundation limitation in json");
+  Expect(rendered.find("\"real_android_binder\": false") !=
+             std::string::npos,
+         "expected no false real binder flag in json");
+  Expect(rendered.find("\"limitation_flags\": [\"linuxoid_local_foundation_only\"") !=
+             std::string::npos,
+         "expected limitation flags in json");
 
   fs::remove_all(root);
+}
+
+void TestNativeServiceManagerFixtureCommandWritesDeterministicJson() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-native-service-manager-command", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-service-manager-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path,
+      &exit_code);
+  Expect(exit_code == 0, "expected native-service-manager-fixture success");
+  Expect(output.find("\"manager_ready\": true") != std::string::npos,
+         "expected binder fixture ready json");
+  Expect(output.find("\"service_name\": \"app_local_service\"") !=
+             std::string::npos,
+         "expected app-local service in command json");
+  Expect(output.find("\"service_name\": \"window_manager\"") !=
+             std::string::npos,
+         "expected missing service lookup in command json");
+  Expect(output.find("\"local_foundation_only\": true") !=
+             std::string::npos,
+         "expected local foundation flag in command json");
+  Expect(output.find("\"real_android_binder\": false") !=
+             std::string::npos,
+         "expected no false real binder flag in command json");
+  Expect(output.find("\"system_server_present\": false") !=
+             std::string::npos,
+         "expected no false system_server flag in command json");
+
+  const fs::path session_root =
+      fs::path(fixture.bootstrap.plan.package_root) / "lifecycle" /
+      (fixture.bootstrap.plan.assessment.install_id + "-default");
+  Expect(fs::exists(session_root / "binder" / "service-manager.json"),
+         "expected binder manager metadata from cli fixture");
+  Expect(fs::exists(session_root / "binder" / "service-lookups.json"),
+         "expected binder lookup summary from cli fixture");
+  Expect(fs::exists(session_root / "binder" / "service-transactions.jsonl"),
+         "expected binder transaction log from cli fixture");
+
+  fs::remove_all(fixture.root);
 }
 
 void TestRuntimeHealthFixtureWritesStableArtifacts() {
@@ -4608,6 +4935,8 @@ void TestNativeLifecycleShimWritesSessionArtifacts() {
          "expected service registry file");
   Expect(fs::exists(lifecycle.binder_manager_metadata_path),
          "expected binder manager metadata file");
+  Expect(fs::exists(lifecycle.binder_lookup_summary_path),
+         "expected binder lookup summary file");
   Expect(fs::exists(lifecycle.binder_lookup_log_path),
          "expected binder lookup log file");
   Expect(fs::exists(lifecycle.binder_transaction_log_path),
@@ -4634,11 +4963,17 @@ void TestNativeLifecycleShimWritesSessionArtifacts() {
          "expected activity manager service");
   Expect(services.find("package_manager") != std::string::npos,
          "expected package manager service");
+  Expect(services.find("app_local_service") != std::string::npos,
+         "expected app-local placeholder service");
 
-  std::ifstream binder_lookup_input(lifecycle.binder_lookup_log_path);
-  std::string binder_lookups(
-      (std::istreambuf_iterator<char>(binder_lookup_input)),
-      std::istreambuf_iterator<char>());
+  const std::string binder_lookup_summary =
+      ReadTextFile(lifecycle.binder_lookup_summary_path);
+  Expect(binder_lookup_summary.find("\"service_name\": \"window_manager\"") !=
+             std::string::npos,
+         "expected honest missing lookup summary");
+
+  const std::string binder_lookups =
+      ReadTextFile(lifecycle.binder_lookup_log_path);
   Expect(binder_lookups.find("\"service_name\": \"package_manager\"") !=
              std::string::npos,
          "expected package manager lookup");
@@ -4659,6 +4994,10 @@ void TestNativeLifecycleShimWritesSessionArtifacts() {
   Expect(rendered.find("Binder Service Manager Ready: yes") !=
              std::string::npos,
          "expected binder manager readiness line");
+  Expect(rendered.find("Binder Lookup Summary: " +
+                           lifecycle.binder_lookup_summary_path) !=
+             std::string::npos,
+         "expected binder lookup summary line");
   Expect(rendered.find("Execution Engine Ready: no") != std::string::npos,
          "expected lifecycle execution readiness line");
   Expect(rendered.find("Process State: BOOTSTRAPPED") != std::string::npos,
@@ -4908,6 +5247,2336 @@ void TestNativeExecuteStubRunsFixtureNativeActivity() {
          "expected activity flag in fixture json");
 
   fs::remove_all(root);
+}
+
+void TestLaunchApkCommandRunsNativeOnlyFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-valid-fixture");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk " + fixture.apk_path.string() + " " +
+          fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected valid native-only launch-apk command to succeed");
+  Expect(!output.empty() && output.front() == '{',
+         "expected launch-apk command to emit machine-readable JSON on stdout");
+  Expect(output.find("\"package_name\": \"com.example.launchapk\"") !=
+             std::string::npos,
+         "expected package name in launch-apk json");
+  Expect(output.find("\"manifest_source\": \"archive_plain_xml\"") !=
+             std::string::npos,
+         "expected plain-xml manifest source in launch-apk json");
+  Expect(output.find("\"selected_abi\": \"x86_64\"") != std::string::npos,
+         "expected selected host abi in launch-apk json");
+  Expect(output.find("\"jni_onload_called\": true") != std::string::npos,
+         "expected JNI_OnLoad call in launch-apk json");
+  Expect(output.find("\"jni_onload_result\": 65542") != std::string::npos,
+         "expected JNI_OnLoad return code in launch-apk json");
+  Expect(output.find("\"launch_ready\": true") != std::string::npos,
+         "expected launch_ready true in launch-apk json");
+  Expect(output.find("\"launch_status\": \"native_apk_launch_succeeded\"") !=
+             std::string::npos,
+         "expected success launch status in launch-apk json");
+  Expect(output.find("\"errors\": []") != std::string::npos,
+         "expected no errors in launch-apk json");
+  Expect(output.find("\"diagnostics\": [\"[fixture] JNI_OnLoad invoked\"") !=
+             std::string::npos,
+         "expected captured native diagnostics in launch-apk json");
+  Expect(output.find("\"limitations\": [\"plain_xml_manifest_parser_only\", "
+                     "\"stored_zip_entries_only\", "
+                     "\"native_only_no_art_execution_yet\"]") !=
+             std::string::npos,
+         "expected limitation list in launch-apk json");
+  Expect(fs::exists(fixture.staging_root / "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/base.apk"),
+         "expected staged base.apk for launch-apk fixture");
+  Expect(fs::exists(fixture.staging_root / "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/native-execute.log"),
+         "expected native-execute log for launch-apk fixture");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkRejectsPathTraversalEntries() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-traversal", true, true,
+      {{"assets/../escape.txt", "escape\n"}});
+
+  const auto report =
+      wfa::LaunchNativeApk(fixture.apk_path.string(),
+                           {.staging_root = fixture.staging_root.string(),
+                            .watchdog_seconds = 1});
+
+  Expect(!report.launch_ready, "expected traversal fixture to stay blocked");
+  Expect(std::find(report.errors.begin(), report.errors.end(),
+                   "unsafe_archive_entry:assets/../escape.txt") !=
+             report.errors.end(),
+         "expected unsafe archive entry error");
+  Expect(report.launch_status == "unsafe_archive_entry",
+         "expected unsafe archive status");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkReportsMissingNativeLibraryHonestly() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-missing-native-lib", false);
+
+  const auto report =
+      wfa::LaunchNativeApk(fixture.apk_path.string(),
+                           {.staging_root = fixture.staging_root.string(),
+                            .watchdog_seconds = 1});
+
+  Expect(!report.launch_ready,
+         "expected missing native library fixture to stay blocked");
+  Expect(report.launch_status == "no_native_libraries_found",
+         "expected no native libraries launch status");
+  Expect(std::find(report.errors.begin(), report.errors.end(),
+                   "no_native_libraries_found") != report.errors.end(),
+         "expected no_native_libraries_found error");
+  Expect(report.native_libraries.empty(),
+         "expected no staged native libraries");
+  Expect(report.assets_count == 1, "expected asset staging even without native libs");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkRejectsInvalidArchive() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "linuxoid-launch-apk-invalid";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path apk_path = root / "invalid.apk";
+  {
+    std::ofstream output(apk_path);
+    output << "not a zip archive\n";
+  }
+
+  const auto report =
+      wfa::LaunchNativeApk(apk_path.string(),
+                           {.staging_root = (root / "staging").string(),
+                            .watchdog_seconds = 1});
+
+  Expect(!report.launch_ready, "expected invalid archive launch to fail");
+  Expect(report.launch_status == "invalid_apk",
+         "expected invalid apk launch status");
+  Expect(!report.errors.empty() &&
+             report.errors.front().find("invalid_apk:") == 0,
+         "expected invalid_apk structured error");
+
+  fs::remove_all(root);
+}
+
+void TestLaunchApkRejectsMissingManifestMetadata() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-missing-manifest-metadata", true, false);
+
+  const auto report =
+      wfa::LaunchNativeApk(fixture.apk_path.string(),
+                           {.staging_root = fixture.staging_root.string(),
+                            .watchdog_seconds = 1});
+
+  Expect(!report.launch_ready,
+         "expected missing manifest metadata launch to fail");
+  Expect(report.launch_status == "manifest_metadata_unavailable",
+         "expected manifest metadata status");
+  Expect(std::find(report.errors.begin(), report.errors.end(),
+                   "manifest_version_code_missing") != report.errors.end(),
+         "expected missing version code error");
+  Expect(std::find(report.errors.begin(), report.errors.end(),
+                   "manifest_version_name_missing") != report.errors.end(),
+         "expected missing version name error");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkRejectsUnsupportedHostAbiHonestly() {
+  namespace fs = std::filesystem;
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path fixture_library = build_dir / "liblinuxoid_p1_fixture.so";
+  Expect(fs::exists(fixture_library),
+         "expected linuxoid p1 fixture library to exist");
+
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-unsupported-abi", false, true,
+      {{"lib/arm64-v8a/libcalculator.so", ReadBinaryFile(fixture_library)}});
+
+  const auto report =
+      wfa::LaunchNativeApk(fixture.apk_path.string(),
+                           {.staging_root = fixture.staging_root.string(),
+                            .watchdog_seconds = 1});
+
+  Expect(!report.launch_ready,
+         "expected unsupported abi launch to stay blocked");
+  Expect(report.launch_status == "unsupported_host_abi",
+         "expected unsupported host abi launch status");
+  Expect(std::find(report.errors.begin(), report.errors.end(),
+                   "unsupported_host_abi:x86_64") != report.errors.end(),
+         "expected unsupported_host_abi structured error");
+  Expect(report.selected_abi.empty(),
+         "expected no selected abi for unsupported host path");
+  Expect(report.native_libraries.empty(),
+         "expected no staged host-compatible libraries");
+  Expect(report.native_libraries_present,
+         "expected native libraries to be detected in archive");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSurfaceProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-surface-valid-fixture");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk-surface " + fixture.apk_path.string() +
+          " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected valid native-only launch-apk-surface command to succeed");
+  Expect(!output.empty() && output.front() == '{',
+         "expected launch-apk-surface command to emit machine-readable JSON");
+  Expect(output.find("\"launch_ready\": true") != std::string::npos,
+         "expected launch_ready true in launch-apk-surface json");
+  Expect(output.find("\"surface_proof_requested\": true") !=
+             std::string::npos,
+         "expected surface proof request flag in launch-apk-surface json");
+  Expect(output.find("\"surface_created\": true") != std::string::npos,
+         "expected created surface in launch-apk-surface json");
+  Expect(output.find("\"first_frame_presented\": true") !=
+             std::string::npos,
+         "expected first frame presented in launch-apk-surface json");
+  Expect(output.find("\"backend\": \"headless\"") != std::string::npos,
+         "expected explicit headless backend in launch-apk-surface json");
+  Expect(output.find("\"state\": \"cleanup_ready\"") != std::string::npos,
+         "expected cleanup-ready terminal surface state");
+  Expect(output.find("\"surface_health\": \"ready\"") != std::string::npos,
+         "expected ready surface health in launch-apk-surface json");
+  Expect(output.find("\"launch_health\": \"ready\"") != std::string::npos,
+         "expected ready launch health in launch-apk-surface json");
+  Expect(output.find("\"recoverable\": false") != std::string::npos,
+         "expected non-recoverable successful launch-apk-surface json");
+  Expect(output.find("\"recommended_recovery_action\": \"none\"") !=
+             std::string::npos,
+         "expected no recommended recovery action for successful surface proof");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSurfaceProofTracksPackageSessionMetadata() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-surface-session-binding");
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .surface_proof_requested = true});
+
+  Expect(report.launch_ready, "expected native launch readiness");
+  Expect(report.surface.surface_created,
+         "expected surface proof to create a surface");
+  Expect(report.surface.package_name == report.package_name,
+         "expected surface proof to bind package name");
+  Expect(report.surface.apk_path == report.apk_path,
+         "expected surface proof to bind apk path");
+  Expect(report.surface.staged_dir == report.staged_dir,
+         "expected surface proof to bind staged dir");
+  Expect(report.surface.selected_library_path ==
+             report.native_execute.selected_library_path,
+         "expected surface proof to bind selected native library");
+  Expect(report.surface.session_id.find(report.package_name) !=
+             std::string::npos,
+         "expected surface session id to include package name");
+  Expect(report.surface.lifecycle_states.size() >= 5,
+         "expected deterministic surface lifecycle trace");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSurfaceProofKeepsDeterministicPixelMarker() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-surface-deterministic-marker");
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .surface_proof_requested = true});
+
+  Expect(report.surface.first_frame_presented,
+         "expected first frame presented for deterministic marker test");
+  Expect(report.surface.first_pixel_marker == "0x1ee7c0de",
+         "expected stable first-pixel marker");
+  Expect(report.surface.marker_checksum == "0x1ee7c0de",
+         "expected stable first-pixel checksum");
+  Expect(fs::exists(report.surface.marker_path),
+         "expected first-pixel marker artifact");
+  Expect(ReadTextFile(report.surface.marker_path).find("first_pixel=0x1ee7c0de") !=
+             std::string::npos,
+         "expected deterministic first-pixel marker contents");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSurfaceProofFailsForMissingNativeLibrary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-surface-missing-native-lib", false);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk-surface " + fixture.apk_path.string() +
+          " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected missing native library launch-apk-surface command to fail");
+  Expect(output.find("\"launch_ready\": false") != std::string::npos,
+         "expected launch_ready false in failing surface proof json");
+  Expect(output.find("\"surface_proof_requested\": true") !=
+             std::string::npos,
+         "expected surface proof request flag on failing path");
+  Expect(output.find("no_native_libraries_found") != std::string::npos,
+         "expected missing native library error in surface proof json");
+  Expect(output.find("\"recommended_recovery_action\": "
+                     "\"stage_abi_matching_native_library\"") !=
+             std::string::npos,
+         "expected recommended recovery action for missing native library");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkAssetProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-asset-valid-fixture", true, true,
+      {{"assets/alpha.txt", "alpha\n"},
+       {"assets/zeta.txt", "zeta\n"},
+       {"assets/config/world.txt", "world\n"},
+       {"res/layout/main.xml", "<layout/>\n"}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --asset-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected valid native-only launch-apk asset proof command to succeed");
+  Expect(output.find("\"asset_proof_requested\": true") != std::string::npos,
+         "expected asset proof request flag in launch-apk json");
+  Expect(output.find("\"asset_health\": \"ready\"") != std::string::npos,
+         "expected ready asset health in launch-apk asset proof json");
+  Expect(output.find("\"resource_health\": \"ready\"") != std::string::npos,
+         "expected ready resource health in launch-apk asset proof json");
+  Expect(output.find("\"asset_paths\": [\"alpha.txt\", \"config/hello.txt\", "
+                     "\"config/world.txt\", \"zeta.txt\"]") !=
+             std::string::npos,
+         "expected sorted asset paths in asset proof json");
+  Expect(output.find("\"opened_asset\": \"alpha.txt\"") != std::string::npos,
+         "expected first sorted asset to be opened");
+  Expect(output.find("\"opened_asset_size\": 6") != std::string::npos,
+         "expected opened asset size in asset proof json");
+  Expect(output.find("\"opened_asset_checksum\": \"" +
+                         ComputeFnv1a64Checksum("alpha\n") + "\"") !=
+             std::string::npos,
+         "expected deterministic asset checksum in asset proof json");
+  Expect(output.find("\"resource_table_present\": true") !=
+             std::string::npos,
+         "expected resource table presence in asset proof json");
+  Expect(output.find("\"res_entries_count\": 2") != std::string::npos,
+         "expected resource entry count in asset proof json");
+  Expect(output.find("\"decode_level\": \"metadata_only\"") !=
+             std::string::npos,
+         "expected metadata-only resource decode level");
+  Expect(output.find("\"launch_ready\": true") != std::string::npos,
+         "expected launch readiness to remain true in asset proof json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkAssetBridgeTracksPackageSessionMetadata() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-asset-session-binding", true, true,
+      {{"assets/alpha.txt", "alpha\n"}});
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .asset_proof_requested = true});
+  const auto session = BuildAssetBridgeSessionForLaunchReport(report);
+
+  Expect(report.launch_ready, "expected native launch readiness");
+  Expect(report.asset_bridge.ready, "expected asset bridge readiness");
+  Expect(session.context().package_name == report.package_name,
+         "expected asset bridge to bind package name");
+  Expect(session.context().apk_path == report.apk_path,
+         "expected asset bridge to bind apk path");
+  Expect(session.context().staged_dir == report.staged_dir,
+         "expected asset bridge to bind staged dir");
+  Expect(session.context().selected_library_path ==
+             report.native_execute.selected_library_path,
+         "expected asset bridge to bind selected native library");
+  Expect(session.context().session_id.find(report.package_name) !=
+             std::string::npos,
+         "expected asset bridge session id to include package name");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeApkAssetBridgeListsAssetsDeterministically() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-asset-sorted-list", true, true,
+      {{"assets/alpha.txt", "alpha\n"},
+       {"assets/zeta.txt", "zeta\n"},
+       {"assets/config/world.txt", "world\n"}});
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(), .watchdog_seconds = 1});
+  const auto session = BuildAssetBridgeSessionForLaunchReport(report);
+  const auto assets = session.ListAssets();
+
+  Expect(assets == std::vector<std::string>(
+                       {"alpha.txt", "config/hello.txt", "config/world.txt",
+                        "zeta.txt"}),
+         "expected deterministic sorted asset listing");
+
+  const auto resources = session.InspectResources();
+  Expect(resources.ready, "expected resource metadata inspection readiness");
+  Expect(resources.resource_table_present,
+         "expected resource table presence in resource metadata");
+  Expect(resources.res_entries == std::vector<std::string>({"raw/payload.txt"}),
+         "expected deterministic sorted resource entry listing");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeApkAssetBridgeReadsAssetChecksumAndSize() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-asset-read", true, true,
+      {{"assets/config/world.txt", "world\n"}});
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(), .watchdog_seconds = 1});
+  const auto session = BuildAssetBridgeSessionForLaunchReport(report);
+  const auto read = session.OpenAsset("assets/config/world.txt");
+
+  Expect(read.opened, "expected asset read to succeed");
+  Expect(read.normalized_asset_path == "config/world.txt",
+         "expected normalized asset path");
+  Expect(read.contents == "world\n", "expected asset contents");
+  Expect(read.size == 6, "expected asset size");
+  Expect(read.checksum == ComputeFnv1a64Checksum("world\n"),
+         "expected deterministic asset checksum");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeApkAssetBridgeRejectsUnsafePaths() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-asset-unsafe-paths");
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(), .watchdog_seconds = 1});
+  const auto session = BuildAssetBridgeSessionForLaunchReport(report);
+
+  const auto traversal = session.OpenAsset("../escape.txt");
+  Expect(!traversal.opened, "expected traversal asset path rejection");
+  Expect(traversal.rejected_unsafe_path,
+         "expected traversal path to be marked unsafe");
+  Expect(std::find(traversal.errors.begin(), traversal.errors.end(),
+                   "asset_path_traversal_rejected") != traversal.errors.end(),
+         "expected traversal rejection error");
+
+  const auto absolute = session.OpenAsset("/escape.txt");
+  Expect(!absolute.opened, "expected absolute asset path rejection");
+  Expect(absolute.rejected_unsafe_path,
+         "expected absolute path to be marked unsafe");
+  Expect(std::find(absolute.errors.begin(), absolute.errors.end(),
+                   "asset_path_absolute_rejected") != absolute.errors.end(),
+         "expected absolute path rejection error");
+
+  const auto empty = session.OpenAsset("");
+  Expect(!empty.opened, "expected empty asset path rejection");
+  Expect(!empty.rejected_unsafe_path,
+         "expected empty path to be invalid but not unsafe");
+  Expect(std::find(empty.errors.begin(), empty.errors.end(),
+                   "asset_path_empty") != empty.errors.end(),
+         "expected empty asset path error");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeApkAssetBridgeReportsMissingAssetHonestly() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-asset-missing");
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(), .watchdog_seconds = 1});
+  const auto session = BuildAssetBridgeSessionForLaunchReport(report);
+  const auto missing = session.OpenAsset("config/missing.txt");
+
+  Expect(!missing.opened, "expected missing asset read to fail");
+  Expect(std::find(missing.errors.begin(), missing.errors.end(),
+                   "asset_not_found") != missing.errors.end(),
+         "expected structured missing asset error");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkAssetProofFailsForMissingNativeLibrary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-asset-missing-native-lib", false, true,
+      {{"assets/alpha.txt", "alpha\n"}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --asset-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected missing native library launch-apk asset proof command to fail");
+  Expect(output.find("\"launch_ready\": false") != std::string::npos,
+         "expected launch_ready false in failing asset proof json");
+  Expect(output.find("\"asset_proof_requested\": true") != std::string::npos,
+         "expected asset proof request flag on failing path");
+  Expect(output.find("\"asset_health\": \"ready\"") != std::string::npos,
+         "expected asset bridge readiness to stay honest on failing launch path");
+  Expect(output.find("\"resource_health\": \"ready\"") != std::string::npos,
+         "expected resource bridge readiness to stay honest on failing launch path");
+  Expect(output.find("\"resource_table_present\": true") !=
+             std::string::npos,
+         "expected resource metadata in failing asset proof json");
+  Expect(output.find("no_native_libraries_found") != std::string::npos,
+         "expected missing native library error in asset proof json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkLifecycleProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-lifecycle-valid-fixture");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --lifecycle-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected valid native-only launch-apk lifecycle proof command to succeed");
+  Expect(output.find("\"lifecycle_proof_requested\": true") !=
+             std::string::npos,
+         "expected lifecycle proof request flag in launch-apk json");
+  Expect(output.find("\"lifecycle_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready lifecycle health in launch-apk lifecycle proof json");
+  Expect(output.find("\"looper_health\": \"ready\"") != std::string::npos,
+         "expected ready looper health in launch-apk lifecycle proof json");
+  Expect(output.find("\"input_health\": \"ready\"") != std::string::npos,
+         "expected ready input health in launch-apk lifecycle proof json");
+  Expect(output.find("\"states_visited\": [\"created\", \"started\", "
+                     "\"resumed\", \"paused\", \"stopped\", \"destroyed\"]") !=
+             std::string::npos,
+         "expected deterministic lifecycle order in launch-apk lifecycle proof json");
+  Expect(output.find("\"current_state\": \"destroyed\"") !=
+             std::string::npos,
+         "expected destroyed terminal state in lifecycle proof json");
+  Expect(output.find("\"posted_events\": 11") != std::string::npos,
+         "expected deterministic posted event count");
+  Expect(output.find("\"dispatched_events\": 11") != std::string::npos,
+         "expected deterministic dispatched event count");
+  Expect(output.find("\"queued_events\": 5") != std::string::npos,
+         "expected deterministic queued input event count");
+  Expect(output.find("\"handled_events\": 5") != std::string::npos,
+         "expected deterministic handled input event count");
+  Expect(output.find("\"rejected_events\": 0") != std::string::npos,
+         "expected no rejected input events on happy path");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkLifecycleProofTracksSessionMetadata() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-lifecycle-session-binding");
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .lifecycle_proof_requested = true});
+  const auto session = BuildLifecycleSessionForLaunchReport(report);
+
+  Expect(report.launch_ready, "expected native launch readiness");
+  Expect(report.lifecycle.ready, "expected lifecycle proof readiness");
+  Expect(report.looper.ready, "expected looper proof readiness");
+  Expect(report.input_queue.ready, "expected input queue proof readiness");
+  Expect(session.context().package_name == report.package_name,
+         "expected lifecycle session to bind package name");
+  Expect(session.context().apk_path == report.apk_path,
+         "expected lifecycle session to bind apk path");
+  Expect(session.context().staged_dir == report.staged_dir,
+         "expected lifecycle session to bind staged dir");
+  Expect(session.context().selected_abi == report.selected_abi,
+         "expected lifecycle session to bind selected abi");
+  Expect(session.context().asset_health == report.asset_health,
+         "expected lifecycle session to bind asset health");
+  Expect(session.context().surface_health == report.surface_health,
+         "expected lifecycle session to bind surface health");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeApkLifecycleLooperDispatchesStatesDeterministically() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-lifecycle-deterministic");
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(), .watchdog_seconds = 1});
+  auto session = BuildLifecycleSessionForLaunchReport(report);
+  const auto lifecycle_report = session.RunDeterministicProof();
+
+  Expect(lifecycle_report.ready, "expected lifecycle bridge report readiness");
+  Expect(lifecycle_report.lifecycle.states_visited ==
+             std::vector<std::string>(
+                 {"created", "started", "resumed", "paused", "stopped",
+                  "destroyed"}),
+         "expected deterministic lifecycle state order");
+  Expect(lifecycle_report.lifecycle.events_dispatched == 6,
+         "expected deterministic lifecycle dispatch count");
+  Expect(lifecycle_report.looper.posted_events == 11,
+         "expected deterministic looper posted count");
+  Expect(lifecycle_report.looper.dispatched_events == 11,
+         "expected deterministic looper dispatched count");
+  Expect(lifecycle_report.looper.shutdown_clean,
+         "expected clean looper shutdown");
+  Expect(lifecycle_report.input_queue.queued_events == 5,
+         "expected deterministic queued input count");
+  Expect(lifecycle_report.input_queue.handled_events == 5,
+         "expected deterministic handled input count");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeApkLifecycleInputQueueRejectsMalformedEvents() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-lifecycle-invalid-input");
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(), .watchdog_seconds = 1});
+  auto session = BuildLifecycleSessionForLaunchReport(report);
+
+  const auto invalid_touch = session.EnqueueInputEvent(
+      {.action = "touch_down", .x = -1, .y = 8});
+  Expect(invalid_touch.rejected,
+         "expected negative-coordinate touch event rejection");
+  Expect(std::find(invalid_touch.errors.begin(), invalid_touch.errors.end(),
+                   "input_coordinates_negative") !=
+             invalid_touch.errors.end(),
+         "expected negative-coordinate error");
+
+  const auto invalid_key = session.EnqueueInputEvent(
+      {.action = "key_down", .key_code = 0});
+  Expect(invalid_key.rejected, "expected invalid key code rejection");
+  Expect(std::find(invalid_key.errors.begin(), invalid_key.errors.end(),
+                   "input_key_code_invalid") != invalid_key.errors.end(),
+         "expected invalid key code error");
+
+  const auto invalid_action = session.EnqueueInputEvent(
+      {.action = "wheel_spin"});
+  Expect(invalid_action.rejected, "expected unsupported action rejection");
+  Expect(std::find(invalid_action.errors.begin(), invalid_action.errors.end(),
+                   "input_action_unsupported") !=
+             invalid_action.errors.end(),
+         "expected unsupported action error");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkLifecycleProofFailsForMissingNativeLibrary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-lifecycle-missing-native-lib", false);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --lifecycle-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected missing native library launch-apk lifecycle proof command to fail");
+  Expect(output.find("\"launch_ready\": false") != std::string::npos,
+         "expected launch_ready false on failing lifecycle proof path");
+  Expect(output.find("\"lifecycle_proof_requested\": true") !=
+             std::string::npos,
+         "expected lifecycle proof request flag on failing path");
+  Expect(output.find("\"lifecycle_health\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked lifecycle health on failing path");
+  Expect(output.find("\"looper_health\": \"blocked\"") != std::string::npos,
+         "expected blocked looper health on failing path");
+  Expect(output.find("\"input_health\": \"blocked\"") != std::string::npos,
+         "expected blocked input health on failing path");
+  Expect(output.find("no_native_libraries_found") != std::string::npos,
+         "expected missing native library error in lifecycle proof json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkDexProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const std::string dex_payload = BuildResolvableDexPayload(
+      {"Lcom/example/launchapk/App;", "Lcom/example/launchapk/MainActivity;"});
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-dex-valid-fixture", true, true,
+      {{"classes.dex", dex_payload}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --dex-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected valid native-only launch-apk dex proof command to succeed");
+  Expect(!output.empty() && output.front() == '{',
+         "expected launch-apk dex proof command to emit machine-readable JSON");
+  Expect(output.find("\"dex_proof_requested\": true") != std::string::npos,
+         "expected dex proof request flag in launch-apk json");
+  Expect(output.find("\"dex_health\": \"ready\"") != std::string::npos,
+         "expected ready dex health in launch-apk dex proof json");
+  Expect(output.find("\"art_health\": \"ready\"") != std::string::npos,
+         "expected ready art health in launch-apk dex proof json");
+  Expect(output.find("\"ready\": true") != std::string::npos,
+         "expected ready dex/art proof state in launch-apk dex proof json");
+  Expect(output.find("\"files_count\": 1") != std::string::npos,
+         "expected one dex file in launch-apk dex proof json");
+  Expect(output.find("\"decode_level\": \"header_and_counts\"") !=
+             std::string::npos,
+         "expected header-and-counts decode level in launch-apk dex proof json");
+  Expect(output.find("\"class_defs_count\": 2") != std::string::npos,
+         "expected class defs count in launch-apk dex proof json");
+  Expect(output.find("\"class_loader_ready\": true") != std::string::npos,
+         "expected class loader readiness in launch-apk dex proof json");
+  Expect(output.find("\"java_execution_supported\": false") !=
+             std::string::npos,
+         "expected honest no-java-execution flag in launch-apk dex proof json");
+  Expect(output.find("\"art_runtime_required\": true") != std::string::npos,
+         "expected art runtime required flag in launch-apk dex proof json");
+  Expect(output.find("\"asset_proof_requested\": false") != std::string::npos,
+         "expected dex proof to keep asset proof optional");
+
+  const fs::path staged_dex =
+      fixture.staging_root /
+      "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/dex/classes.dex";
+  Expect(fs::exists(staged_dex),
+         "expected staged classes.dex for launch-apk dex proof fixture");
+  Expect(
+      fs::exists(
+          fixture.staging_root /
+          "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/art/dex-proof.json"),
+      "expected staged dex-proof artifact for launch-apk dex proof fixture");
+  Expect(
+      fs::exists(
+          fixture.staging_root /
+          "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/art/art-bootstrap.json"),
+      "expected staged art-bootstrap artifact for launch-apk dex proof fixture");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkDexProofDetectsMultipleDexFilesDeterministically() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-dex-multi", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;"})},
+       {"classes2.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/Feature;",
+                                   "Lcom/example/launchapk/Feature2;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --dex-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected multi-dex launch-apk dex proof command to succeed");
+  Expect(output.find("\"files_count\": 2") != std::string::npos,
+         "expected two dex files in launch-apk multi-dex json");
+  Expect(output.find("\"total_bytes\": ") != std::string::npos,
+         "expected total dex bytes in launch-apk multi-dex json");
+  Expect(output.find("\"class_defs_count\": 3") != std::string::npos,
+         "expected combined class defs count in launch-apk multi-dex json");
+  Expect(output.find("\"entry_name\": \"classes.dex\"") != std::string::npos,
+         "expected classes.dex entry in multi-dex json");
+  Expect(output.find("\"entry_name\": \"classes2.dex\"") !=
+             std::string::npos,
+         "expected classes2.dex entry in multi-dex json");
+  Expect(output.find("\"entry_name\": \"classes.dex\"") <
+             output.find("\"entry_name\": \"classes2.dex\""),
+         "expected deterministic dex file ordering in multi-dex json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkDexProofBlocksWhenDexMissing() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-dex-missing");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --dex-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected missing-dex launch-apk dex proof command to fail");
+  Expect(!output.empty() && output.front() == '{',
+         "expected structured json on missing-dex proof path");
+  Expect(output.find("\"launch_ready\": true") != std::string::npos,
+         "expected native launch to stay ready even when dex proof blocks");
+  Expect(output.find("\"dex_proof_requested\": true") != std::string::npos,
+         "expected dex proof request flag on missing-dex path");
+  Expect(output.find("\"dex_health\": \"blocked\"") != std::string::npos,
+         "expected blocked dex health on missing-dex path");
+  Expect(output.find("\"art_health\": \"blocked\"") != std::string::npos,
+         "expected blocked art health on missing-dex path");
+  Expect(output.find("\"files_count\": 0") != std::string::npos,
+         "expected zero dex files on missing-dex path");
+  Expect(output.find("no_dex_entries_found") != std::string::npos,
+         "expected structured no-dex error in missing-dex proof json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkDexProofFailsForMalformedDex() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-dex-malformed", true, true,
+      {{"classes.dex", "dex\n035\0broken"}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --dex-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected malformed-dex launch-apk dex proof command to fail");
+  Expect(!output.empty() && output.front() == '{',
+         "expected structured json on malformed-dex proof path");
+  Expect(output.find("\"dex_health\": \"blocked\"") != std::string::npos,
+         "expected blocked dex health on malformed-dex path");
+  Expect(output.find("\"art_health\": \"blocked\"") != std::string::npos,
+         "expected blocked art health on malformed-dex path");
+  Expect(output.find("\"class_loader_ready\": false") !=
+             std::string::npos,
+         "expected no class-loader readiness on malformed-dex path");
+  Expect(output.find("dex_header_truncated") != std::string::npos ||
+             output.find("dex_magic_invalid") != std::string::npos,
+         "expected structured malformed-dex error in json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-activity-valid", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --activity-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected launch-apk activity proof command to succeed");
+  Expect(output.find("\"activity_proof_requested\": true") !=
+             std::string::npos,
+         "expected activity proof request flag in json");
+  Expect(output.find("\"package_manager\": {") != std::string::npos,
+         "expected package_manager section in json");
+  Expect(output.find("\"intent_resolution\": {") != std::string::npos,
+         "expected intent_resolution section in json");
+  Expect(output.find("\"activity_launch\": {") != std::string::npos,
+         "expected activity_launch section in json");
+  Expect(output.find("\"binder_health\": \"ready\"") != std::string::npos,
+         "expected ready binder health in activity proof json");
+  Expect(output.find("\"activity_health\": \"ready\"") != std::string::npos,
+         "expected ready activity health in activity proof json");
+  Expect(output.find("\"resolution_reason\": "
+                     "\"manifest_main_launcher_component\"") !=
+             std::string::npos,
+         "expected MAIN/LAUNCHER resolution reason in activity proof json");
+  Expect(output.find("\"resolved_component\": "
+                     "\"com.example.launchapk/.MainActivity\"") !=
+             std::string::npos,
+         "expected resolved launcher component in activity proof json");
+  Expect(output.find("\"activity_launch_status\": "
+                     "\"activity_launch_contract_ready\"") !=
+             std::string::npos,
+         "expected ready activity launch status in json");
+  Expect(output.find("\"class_loader_ready\": true") != std::string::npos,
+         "expected dex/art contract to stay ready for activity proof");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofTracksSessionArtifacts() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-activity-session", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --activity-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected activity proof fixture to succeed");
+  Expect(output.find("\"package_record_path\": ") != std::string::npos,
+         "expected package record path in activity proof json");
+  Expect(output.find("\"resolution_json_path\": ") != std::string::npos,
+         "expected intent resolution path in activity proof json");
+  Expect(output.find("\"launch_record_path\": ") != std::string::npos,
+         "expected activity launch record path in activity proof json");
+
+  const fs::path package_record =
+      fixture.staging_root /
+      "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/activity-launch/package-record.json";
+  const fs::path intent_record =
+      fixture.staging_root /
+      "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/activity-launch/intent-resolution.json";
+  const fs::path activity_record =
+      fixture.staging_root /
+      "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/activity-launch/activity-launch.json";
+  const fs::path binder_record =
+      fixture.staging_root /
+      "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/binder/service-manager.json";
+  Expect(fs::exists(package_record),
+         "expected session-bound package record artifact");
+  Expect(fs::exists(intent_record),
+         "expected session-bound intent resolution artifact");
+  Expect(fs::exists(activity_record),
+         "expected session-bound activity launch artifact");
+  Expect(fs::exists(binder_record),
+         "expected session-bound binder service-manager artifact");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofBlocksWhenDexMissing() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-activity-dex-missing");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --activity-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected activity proof without dex to fail");
+  Expect(output.find("\"launch_ready\": true") != std::string::npos,
+         "expected native launch to stay ready on missing-dex activity proof");
+  Expect(output.find("\"dex_health\": \"blocked\"") != std::string::npos,
+         "expected blocked dex health on missing-dex activity proof");
+  Expect(output.find("\"activity_health\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked activity health on missing-dex activity proof");
+  Expect(output.find("\"activity_launch_status\": "
+                     "\"activity_launch_dependency_blocked\"") !=
+             std::string::npos,
+         "expected blocked activity launch contract on missing-dex path");
+  Expect(output.find("dex_not_ready") != std::string::npos,
+         "expected dex dependency error in activity proof json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofSurfacesPackageRegistryMetadata() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.launchapk.App" android:label="Launch Apk App">
+    <activity android:name="com.example.launchapk.MainActivity" android:label="Main Label" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+    <activity android:name="com.example.launchapk.SettingsActivity" android:enabled="false" android:label="Settings Label"/>
+    <service android:name="com.example.launchapk.SyncService"/>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-activity-registry", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;",
+                                   "Lcom/example/launchapk/SettingsActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --activity-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected activity-proof registry fixture to succeed");
+  Expect(output.find("\"package_label\": \"Launch Apk App\"") !=
+             std::string::npos,
+         "expected package label in package_manager json");
+  Expect(output.find("\"component_name\": \"com.example.launchapk/.MainActivity\"") !=
+             std::string::npos,
+         "expected normalized main activity component in package_manager json");
+  Expect(output.find("\"component_name\": \"com.example.launchapk/.SettingsActivity\"") !=
+             std::string::npos,
+         "expected normalized secondary activity component in package_manager json");
+  Expect(output.find("\"label\": \"Main Label\"") != std::string::npos,
+         "expected activity label in package_manager json");
+  Expect(output.find("\"exported\": true") != std::string::npos,
+         "expected exported activity flag in package_manager json");
+  Expect(output.find("\"enabled\": false") != std::string::npos,
+         "expected disabled activity flag in package_manager json");
+  Expect(output.find("\"android.intent.action.MAIN\"") != std::string::npos,
+         "expected MAIN action in activity intent filter json");
+  Expect(output.find("\"android.intent.category.LAUNCHER\"") !=
+             std::string::npos,
+         "expected LAUNCHER category in activity intent filter json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofBlocksOnMissingLauncher() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity" android:exported="true"/>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-activity-no-launcher", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --activity-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected no-launcher activity proof to fail honestly");
+  Expect(output.find("\"resolution_status\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked resolution status on no-launcher path");
+  Expect(output.find("\"blocking_reason\": \"no_launcher_activity\"") !=
+             std::string::npos,
+         "expected no-launcher blocking reason in intent resolution json");
+  Expect(output.find("\"recommended_recovery_action\": \"repair_launcher_intent_filters\"") !=
+             std::string::npos,
+         "expected launcher repair recovery action on no-launcher path");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofBlocksOnAmbiguousLauncher() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+    <activity android:name="com.example.launchapk.AltActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-activity-ambiguous-launcher", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;",
+                                   "Lcom/example/launchapk/AltActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --activity-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected ambiguous-launcher activity proof to fail honestly");
+  Expect(output.find("\"blocking_reason\": \"ambiguous_launcher_activities\"") !=
+             std::string::npos,
+         "expected ambiguous-launcher blocking reason in json");
+  Expect(output.find("\"matched_components\": [\"com.example.launchapk/.AltActivity\", "
+                     "\"com.example.launchapk/.MainActivity\"]") !=
+             std::string::npos ||
+         output.find("\"matched_components\": [\"com.example.launchapk/.MainActivity\", "
+                     "\"com.example.launchapk/.AltActivity\"]") !=
+             std::string::npos,
+         "expected both launcher candidates in deterministic resolution output");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofSupportsExplicitComponentResolution() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+    <activity android:name="com.example.launchapk.AltActivity" android:exported="true"/>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-activity-explicit", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;",
+                                   "Lcom/example/launchapk/AltActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() +
+          " launch-apk --activity-proof --component com.example.launchapk/.AltActivity " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected explicit-component activity proof to succeed");
+  Expect(output.find("\"resolution_mode\": \"explicit_component\"") !=
+             std::string::npos,
+         "expected explicit resolution mode in json");
+  Expect(output.find("\"resolved_component\": \"com.example.launchapk/.AltActivity\"") !=
+             std::string::npos,
+         "expected explicit component in resolved activity json");
+  Expect(output.find("\"blocking_reason\": \"none\"") != std::string::npos,
+         "expected no blocking reason on explicit component success path");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofBlocksOnPackageNotFound() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-activity-package-not-found", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() +
+          " launch-apk --activity-proof --package com.example.missing " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected mismatched package selection to fail honestly");
+  Expect(output.find("\"blocking_reason\": \"package_not_found\"") !=
+             std::string::npos,
+         "expected package-not-found blocking reason in json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofBlocksOnUnsupportedExplicitComponent() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+    <service android:name="com.example.launchapk.SyncService"/>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-activity-unsupported-component", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() +
+          " launch-apk --activity-proof --component com.example.launchapk/.SyncService " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected unsupported explicit component to fail honestly");
+  Expect(output.find("\"blocking_reason\": \"unsupported_component_type\"") !=
+             std::string::npos,
+         "expected unsupported-component blocking reason in json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkActivityProofOutputIsStableAcrossRepeatedRuns() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-activity-stable-output", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code_first = 0;
+  const std::string first_output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --activity-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code_first);
+  int exit_code_second = 0;
+  const std::string second_output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --activity-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code_second);
+
+  Expect(exit_code_first == 0 && exit_code_second == 0,
+         "expected repeated activity-proof runs to succeed");
+  Expect(first_output == second_output,
+         "expected deterministic repeated activity-proof json output");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-self-heal-valid", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --self-heal-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected self-heal-proof command to succeed for valid fixture");
+  Expect(output.find("\"self_heal_proof_requested\": true") !=
+             std::string::npos,
+         "expected self-heal proof request flag in json");
+  Expect(output.find("\"self_healing_android_device\": {") !=
+             std::string::npos,
+         "expected self-healing android device section in json");
+  Expect(output.find("\"ready\": true") != std::string::npos,
+         "expected ready self-healing android device report");
+  Expect(output.find("\"initial_health\": \"healthy\"") !=
+             std::string::npos,
+         "expected healthy initial watchdog state");
+  Expect(output.find("\"final_health\": \"healthy\"") != std::string::npos,
+         "expected healthy final watchdog state");
+  Expect(output.find("\"journal_path\": ") != std::string::npos,
+         "expected recovery journal path in self-heal proof json");
+  Expect(output.find("\"recommended_next_action\": \"none\"") !=
+             std::string::npos,
+         "expected no next action for healthy self-heal proof");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRestagesMissingAssetBridge() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-self-heal-assets", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true,
+       .simulate_missing_asset_bridge = true});
+
+  Expect(report.self_healing_android_device.ready,
+         "expected ready self-healing android device report");
+  Expect(report.self_healing_android_device.initial_health == "degraded" ||
+             report.self_healing_android_device.initial_health == "blocked",
+         "expected degraded or blocked initial health for missing asset bridge");
+  Expect(report.self_healing_android_device.final_health == "recovered",
+         "expected recovered final health after restaging assets");
+  Expect(report.self_healing_android_device.actions_attempted >= 1,
+         "expected at least one recovery action");
+  Expect(report.self_healing_android_device.actions_succeeded >= 1,
+         "expected successful recovery action");
+  Expect(fs::exists(report.self_healing_android_device.journal_path),
+         "expected recovery journal for missing asset bridge");
+  Expect(!report.self_healing_android_device.actions.empty(),
+         "expected explicit recovery actions in self-heal report");
+  Expect(report.self_healing_android_device.actions.front().action ==
+             "restage_assets",
+         "expected restage_assets recovery action");
+  Expect(report.self_healing_android_device.actions.front().result ==
+             "attempted_succeeded",
+         "expected successful asset recovery result");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRestartsBlockedSurface() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-self-heal-surface", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true,
+       .simulate_blocked_surface_proof = true});
+
+  Expect(report.self_healing_android_device.ready,
+         "expected ready self-healing android device report");
+  Expect(report.self_healing_android_device.final_health == "recovered",
+         "expected recovered final health after restarting surface");
+  Expect(!report.self_healing_android_device.actions.empty(),
+         "expected explicit recovery actions in self-heal report");
+  Expect(report.self_healing_android_device.actions.front().action ==
+             "restart_surface",
+         "expected restart_surface recovery action");
+  Expect(report.self_healing_android_device.actions.front().result ==
+             "attempted_succeeded",
+         "expected successful surface recovery result");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRefreshesMissingBinderService() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-self-heal-binder", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true,
+       .simulate_missing_binder_service = true});
+
+  Expect(report.self_healing_android_device.ready,
+         "expected ready self-healing android device report");
+  Expect(report.self_healing_android_device.final_health == "recovered",
+         "expected recovered final health after refreshing binder services");
+  Expect(!report.self_healing_android_device.actions.empty(),
+         "expected explicit recovery actions in self-heal report");
+  Expect(report.self_healing_android_device.actions.front().action ==
+             "refresh_binder_services",
+         "expected refresh_binder_services recovery action");
+  Expect(report.self_healing_android_device.actions.front().result ==
+             "attempted_succeeded",
+         "expected successful binder recovery result");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRebuildsDexBootstrap() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-self-heal-dex", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true,
+       .simulate_failed_dex_bootstrap = true});
+
+  Expect(report.self_healing_android_device.ready,
+         "expected ready self-healing android device report");
+  Expect(report.self_healing_android_device.final_health == "recovered",
+         "expected recovered final health after rebuilding dex bootstrap");
+  Expect(!report.self_healing_android_device.actions.empty(),
+         "expected explicit recovery actions in self-heal report");
+  Expect(report.self_healing_android_device.actions.front().action ==
+             "rebuild_dex_bootstrap",
+         "expected rebuild_dex_bootstrap recovery action");
+  Expect(report.self_healing_android_device.actions.front().result ==
+             "attempted_succeeded",
+         "expected successful dex bootstrap recovery result");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRerunsIntentResolutionHonestly() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity" android:exported="true"/>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-self-heal-intent", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true});
+
+  Expect(report.self_healing_android_device.ready,
+         "expected ready self-healing android device report");
+  Expect(report.self_healing_android_device.initial_health == "blocked" ||
+             report.self_healing_android_device.initial_health ==
+                 "unrecoverable",
+         "expected blocked or unrecoverable initial health for missing launcher");
+  Expect(report.self_healing_android_device.actions_attempted >= 1,
+         "expected at least one recovery action");
+  Expect(!report.self_healing_android_device.actions.empty(),
+         "expected explicit recovery actions in self-heal report");
+  Expect(report.self_healing_android_device.actions.front().action ==
+             "rerun_intent_resolution",
+         "expected rerun_intent_resolution recovery action");
+  Expect(report.self_healing_android_device.actions.front().result ==
+             "attempted_failed",
+         "expected failed rerun_intent_resolution result for missing launcher");
+  Expect(report.self_healing_android_device.recommended_next_action ==
+             "repair_launcher_intent_filters",
+         "expected launcher repair next action after failed rerun");
+  Expect(fs::exists(report.self_healing_android_device.journal_path),
+         "expected recovery journal for missing launcher path");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkStorageProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-storage-valid");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --storage-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected launch-apk storage proof command to succeed");
+  Expect(output.find("\"storage_proof_requested\": true") !=
+             std::string::npos,
+         "expected storage proof request flag in json");
+  Expect(output.find("\"storage_health\": \"ready\"") != std::string::npos,
+         "expected ready storage health in json");
+  Expect(output.find("\"sandbox_health\": \"ready\"") != std::string::npos,
+         "expected ready sandbox health in json");
+  Expect(output.find("\"storage\": {\n    \"ready\": true") !=
+             std::string::npos,
+         "expected ready storage proof section in json");
+  Expect(output.find("\"isolation_level\": \"path_sandbox_only\"") !=
+             std::string::npos,
+         "expected path_sandbox_only isolation level in json");
+  Expect(output.find("\"marker_written\": true") != std::string::npos,
+         "expected marker file write proof in json");
+
+  const fs::path session_root =
+      fixture.staging_root / "users/0/packages/com.example.launchapk/"
+                             "vc1-1.0.0/launch-apk/default";
+  Expect(fs::exists(session_root / "sandbox/data/data/com.example.launchapk"),
+         "expected deterministic app data directory");
+  Expect(
+      fs::exists(session_root / "sandbox/data/data/com.example.launchapk/files"),
+      "expected deterministic files directory");
+  Expect(
+      fs::exists(session_root / "sandbox/data/data/com.example.launchapk/cache"),
+      "expected deterministic cache directory");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeApkStorageBridgeResolvesSafePathsAndRejectsEscapes() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-storage-resolver");
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true});
+
+  Expect(report.storage.ready, "expected ready storage proof");
+  auto session = BuildStorageSessionForLaunchReport(report);
+
+  const auto accepted = session.ResolveAppRelativePath("files/session.txt");
+  Expect(accepted.accepted, "expected valid relative storage path to resolve");
+  Expect(accepted.normalized_relative_path == "files/session.txt",
+         "expected normalized relative path");
+
+  const auto traversal = session.ResolveAppRelativePath("../session.txt");
+  Expect(traversal.rejected, "expected traversal path to be rejected");
+
+  const auto absolute = session.ResolveAppRelativePath("/tmp/session.txt");
+  Expect(absolute.rejected, "expected absolute storage path to be rejected");
+
+  const fs::path outside_root = fixture.root / "outside";
+  fs::create_directories(outside_root);
+  std::error_code link_error;
+  fs::create_directory_symlink(
+      outside_root, fs::path(report.storage.files_dir) / "escape-link",
+      link_error);
+  Expect(!link_error,
+         "expected to create symlink escape fixture for storage resolver test");
+
+  const auto symlink_escape =
+      session.ResolveAppRelativePath("files/escape-link/escape.txt");
+  Expect(symlink_escape.rejected,
+         "expected symlink escape storage path to be rejected");
+  Expect(std::find(symlink_escape.errors.begin(), symlink_escape.errors.end(),
+                   "symlink_escape_rejected") !=
+             symlink_escape.errors.end(),
+         "expected explicit symlink escape rejection error");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkStorageProofWritesReadableMarker() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-storage-marker");
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true});
+
+  Expect(report.storage.ready, "expected ready storage proof");
+  Expect(report.storage.marker_written,
+         "expected storage marker to be written");
+  Expect(report.storage.marker_size > 0,
+         "expected non-empty storage marker file");
+  Expect(fs::exists(report.storage.marker_path),
+         "expected storage marker path to exist");
+
+  const std::string marker_contents = ReadTextFile(report.storage.marker_path);
+  Expect(marker_contents.find("package=com.example.launchapk") !=
+             std::string::npos,
+         "expected package marker contents");
+  Expect(marker_contents.find("isolation_level=path_sandbox_only") !=
+             std::string::npos,
+         "expected isolation level marker contents");
+  Expect(report.storage.marker_checksum ==
+             ComputeFnv1a64Checksum(marker_contents),
+         "expected deterministic marker checksum");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRepairsAppStorage() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-self-heal-storage", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true,
+       .simulate_storage_failure = true});
+
+  Expect(report.self_healing_android_device.ready,
+         "expected ready self-healing android device report");
+  Expect(report.self_healing_android_device.final_health == "recovered",
+         "expected recovered final health after repairing app storage");
+  Expect(report.self_healing_android_device.storage_health == "ready",
+         "expected ready storage health after repair");
+  Expect(report.self_healing_android_device.sandbox_health == "ready",
+         "expected ready sandbox health after repair");
+  Expect(!report.self_healing_android_device.actions.empty(),
+         "expected explicit recovery actions in storage self-heal report");
+  Expect(report.self_healing_android_device.actions.front().action ==
+             "repair_app_storage",
+         "expected repair_app_storage recovery action");
+  Expect(report.self_healing_android_device.actions.front().result ==
+             "attempted_succeeded",
+         "expected successful storage recovery result");
+  Expect(fs::exists(report.self_healing_android_device.journal_path),
+         "expected storage recovery journal path");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofParsesRequestedPermissions() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-valid", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --permissions-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected permissions-proof command to succeed for valid fixture");
+  Expect(output.find("\"permissions_proof_requested\": true") !=
+             std::string::npos,
+         "expected permissions proof request flag in json");
+  Expect(output.find("\"permissions\": {") != std::string::npos,
+         "expected permissions section in json");
+  Expect(output.find("\"app_ops\": {") != std::string::npos,
+         "expected app ops section in json");
+  Expect(output.find("android.permission.INTERNET") != std::string::npos,
+         "expected INTERNET permission in json");
+  Expect(output.find("android.permission.WRITE_EXTERNAL_STORAGE") !=
+             std::string::npos,
+         "expected WRITE_EXTERNAL_STORAGE permission in json");
+  Expect(output.find("android.permission.RECORD_AUDIO") != std::string::npos,
+         "expected RECORD_AUDIO permission in json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofAllowsSensitiveStorageWhenGranted() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-storage-allow", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --permissions-proof --storage-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected permissions+storage proof command to succeed");
+  Expect(output.find("\"allowed_operations\":") != std::string::npos,
+         "expected allowed operations in app ops json");
+  Expect(output.find("storage_sensitive_access") != std::string::npos,
+         "expected storage sensitive access operation in json");
+  Expect(output.find("\"permission_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready permission health in json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofDeniesSensitiveStorageWhenMissingPermission() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-storage-deny", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --permissions-proof --storage-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected permissions+storage proof command to stay honest and succeed");
+  Expect(output.find("\"denied_operations\":") != std::string::npos,
+         "expected denied operations in app ops json");
+  Expect(output.find("storage_sensitive_access") != std::string::npos,
+         "expected denied storage sensitive access operation in json");
+  Expect(output.find("\"app_ops_health\": \"ready\"") != std::string::npos,
+         "expected ready app ops health despite honest denial");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofSurfacesPermissionAndAppOpsHealth() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-self-heal", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --self-heal-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected self-heal proof command to succeed with permissions contract");
+  Expect(output.find("\"permission_health\":") != std::string::npos,
+         "expected permission health in launch json");
+  Expect(output.find("\"app_ops_health\":") != std::string::npos,
+         "expected app ops health in launch json");
+  Expect(output.find("\"self_healing_android_device\": {") !=
+             std::string::npos,
+         "expected self-healing section in json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRebuildsPermissionState() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-self-heal-rebuild", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true,
+       .simulate_permission_mismatch = true});
+
+  Expect(report.self_healing_android_device.ready,
+         "expected self-heal report for simulated permission mismatch");
+  Expect(report.self_healing_android_device.final_health == "recovered",
+         "expected permission mismatch recovery to converge");
+  Expect(report.self_healing_android_device.permission_health == "ready",
+         "expected permission health to recover");
+  Expect(report.self_healing_android_device.app_ops_health == "ready",
+         "expected app ops health to recover");
+  Expect(!report.self_healing_android_device.actions.empty(),
+         "expected recovery action for simulated permission mismatch");
+  Expect(report.self_healing_android_device.actions.front().action ==
+             "rebuild_permission_state",
+         "expected permission state rebuild action");
+  Expect(report.self_healing_android_device.actions.front().result ==
+             "attempted_succeeded",
+         "expected successful permission state rebuild");
+  Expect(fs::exists(report.self_healing_android_device.journal_path),
+         "expected permission recovery journal path");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofPersistsStateUnderSandbox() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-sandbox-persist", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  Expect(report.permissions.ready, "expected ready permissions contract");
+  Expect(report.app_ops.ready, "expected ready app ops contract");
+
+  const fs::path permissions_root =
+      fs::path(report.storage.app_data_dir) / "permissions";
+  const fs::path permission_state_path =
+      permissions_root / "permission-state.json";
+  const fs::path app_ops_path = permissions_root / "app-ops.json";
+
+  Expect(fs::exists(permission_state_path),
+         "expected permission state persisted under sandbox");
+  Expect(fs::exists(app_ops_path),
+         "expected app ops state persisted under sandbox");
+
+  const std::string permission_json = ReadTextFile(permission_state_path);
+  const std::string app_ops_json = ReadTextFile(app_ops_path);
+  Expect(permission_json.find("\"schema_version\":") != std::string::npos,
+         "expected schema_version in persisted permission json");
+  Expect(permission_json.find("\"user_id\": 0") != std::string::npos,
+         "expected user_id in persisted permission json");
+  Expect(permission_json.find("\"app_id\": 10000") != std::string::npos,
+         "expected app_id in persisted permission json");
+  Expect(permission_json.find("\"sandbox_root\":") != std::string::npos,
+         "expected sandbox_root in persisted permission json");
+  Expect(permission_json.find("\"contract_ready\": true") !=
+             std::string::npos,
+         "expected contract_ready true in persisted permission json");
+  Expect(app_ops_json.find("\"contract_ready\": true") != std::string::npos,
+         "expected contract_ready true in persisted app ops json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofPersistenceRoundTripIsDeterministic() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-roundtrip", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto first = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+  Expect(first.permissions.ready, "expected initial permission state creation");
+  Expect(first.app_ops.ready, "expected initial app ops state creation");
+
+  const auto second = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+  const std::string second_permissions =
+      ReadTextFile(second.permissions.report_json_path);
+  const std::string second_app_ops =
+      ReadTextFile(second.app_ops.report_json_path);
+
+  const auto third = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+  const std::string third_permissions =
+      ReadTextFile(third.permissions.report_json_path);
+  const std::string third_app_ops =
+      ReadTextFile(third.app_ops.report_json_path);
+
+  Expect(second_permissions == third_permissions,
+         "expected deterministic permission state persistence round-trip");
+  Expect(second_app_ops == third_app_ops,
+         "expected deterministic app ops persistence round-trip");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofHealsMissingFiles() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-heal-missing", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto first = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+  fs::remove(first.permissions.report_json_path);
+  fs::remove(first.app_ops.report_json_path);
+
+  const auto healed = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  Expect(healed.permissions.ready,
+         "expected missing permission state to heal on launch");
+  Expect(healed.app_ops.ready, "expected missing app ops state to heal on launch");
+  const std::string permission_json =
+      ReadTextFile(healed.permissions.report_json_path);
+  const std::string app_ops_json = ReadTextFile(healed.app_ops.report_json_path);
+  Expect(permission_json.find("initialize_missing_permission_state") !=
+             std::string::npos,
+         "expected healing action for missing permission state");
+  Expect(app_ops_json.find("initialize_missing_app_ops_state") !=
+             std::string::npos,
+         "expected healing action for missing app ops state");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofHealsMalformedFiles() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-heal-malformed", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto first = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+  {
+    std::ofstream permission_output(first.permissions.report_json_path);
+    permission_output << "{malformed";
+  }
+  {
+    std::ofstream app_ops_output(first.app_ops.report_json_path);
+    app_ops_output << "{malformed";
+  }
+
+  const auto healed = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  Expect(healed.permissions.ready,
+         "expected malformed permission state to heal on launch");
+  Expect(healed.app_ops.ready,
+         "expected malformed app ops state to heal on launch");
+  const std::string permission_json =
+      ReadTextFile(healed.permissions.report_json_path);
+  const std::string app_ops_json = ReadTextFile(healed.app_ops.report_json_path);
+  Expect(permission_json.find("rebuild_malformed_permission_state") !=
+             std::string::npos,
+         "expected malformed permission state rebuild action");
+  Expect(app_ops_json.find("rebuild_malformed_app_ops_state") !=
+             std::string::npos,
+         "expected malformed app ops state rebuild action");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofEmitsDeniedAudioCaptureDiagnostics() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-audio-denied", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .permissions_proof_requested = true});
+
+  Expect(std::find(report.permissions.denied_permissions.begin(),
+                   report.permissions.denied_permissions.end(),
+                   "android.permission.RECORD_AUDIO") !=
+             report.permissions.denied_permissions.end(),
+         "expected denied RECORD_AUDIO permission");
+  Expect(std::find(report.app_ops.denied_operations.begin(),
+                   report.app_ops.denied_operations.end(),
+                   "audio_capture_access") !=
+             report.app_ops.denied_operations.end(),
+         "expected denied audio capture operation");
+  const std::string app_ops_json = ReadTextFile(report.app_ops.report_json_path);
+  Expect(app_ops_json.find("audio_capture_access") != std::string::npos,
+         "expected audio capture app op in persisted json");
+  Expect(app_ops_json.find("missing android.permission.RECORD_AUDIO grant") !=
+             std::string::npos,
+         "expected explicit audio capture denial diagnostic");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestInspectApkPermissionsCommandReportsReadyContracts() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-inspect-apk-permissions-ready", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-permissions " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inspect-apk-permissions command to succeed");
+  Expect(!output.empty() && output.front() == '{',
+         "expected structured json from inspect-apk-permissions");
+  Expect(output.find("\"permission_health\": \"ready\"") != std::string::npos,
+         "expected ready permission health in inspect-apk-permissions json");
+  Expect(output.find("\"app_ops_health\": \"ready\"") != std::string::npos,
+         "expected ready app ops health in inspect-apk-permissions json");
+  Expect(output.find("\"sandbox_health\": \"ready\"") != std::string::npos,
+         "expected ready sandbox health in inspect-apk-permissions json");
+  Expect(output.find("\"permissions\": {") != std::string::npos,
+         "expected permissions section in inspect-apk-permissions json");
+  Expect(output.find("\"app_ops\": {") != std::string::npos,
+         "expected app_ops section in inspect-apk-permissions json");
+  Expect(output.find("\"storage\": {") != std::string::npos,
+         "expected storage section in inspect-apk-permissions json");
+  Expect(output.find("\"schema_version\": \"linuxoid.permission.contract.v1\"") !=
+             std::string::npos,
+         "expected permission schema version in inspect-apk-permissions json");
+  Expect(output.find("\"schema_version\": \"linuxoid.appops.contract.v1\"") !=
+             std::string::npos,
+         "expected appops schema version in inspect-apk-permissions json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofHealsIncompatibleFiles() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-heal-incompatible", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto first = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  WriteTextFile(first.permissions.report_json_path,
+                ReplaceFirstOrThrow(
+                    ReadTextFile(first.permissions.report_json_path),
+                    "\"package_name\": \"com.example.launchapk\"",
+                    "\"package_name\": \"com.example.other\""));
+  WriteTextFile(first.app_ops.report_json_path,
+                ReplaceFirstOrThrow(
+                    ReadTextFile(first.app_ops.report_json_path),
+                    "\"package_name\": \"com.example.launchapk\"",
+                    "\"package_name\": \"com.example.other\""));
+
+  const auto healed = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  Expect(healed.permissions.ready,
+         "expected incompatible permission state to heal on launch");
+  Expect(healed.app_ops.ready,
+         "expected incompatible app ops state to heal on launch");
+  const std::string permission_json =
+      ReadTextFile(healed.permissions.report_json_path);
+  const std::string app_ops_json = ReadTextFile(healed.app_ops.report_json_path);
+  Expect(permission_json.find("rebuild_incompatible_permission_state") !=
+             std::string::npos,
+         "expected incompatible permission state rebuild action");
+  Expect(app_ops_json.find("rebuild_incompatible_app_ops_state") !=
+             std::string::npos,
+         "expected incompatible app ops state rebuild action");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkPermissionsProofHealsStaleFiles() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-heal-stale", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto first = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  WriteTextFile(first.permissions.report_json_path,
+                ReplaceFirstOrThrow(
+                    ReadTextFile(first.permissions.report_json_path),
+                    "\"contract_ready\": true",
+                    "\"contract_ready\": false"));
+  WriteTextFile(first.app_ops.report_json_path,
+                ReplaceFirstOrThrow(
+                    ReadTextFile(first.app_ops.report_json_path),
+                    "\"contract_ready\": true",
+                    "\"contract_ready\": false"));
+
+  const auto healed = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  Expect(healed.permissions.ready,
+         "expected stale permission state to heal on launch");
+  Expect(healed.app_ops.ready,
+         "expected stale app ops state to heal on launch");
+  const std::string permission_json =
+      ReadTextFile(healed.permissions.report_json_path);
+  const std::string app_ops_json = ReadTextFile(healed.app_ops.report_json_path);
+  Expect(permission_json.find("refresh_stale_permission_state") !=
+             std::string::npos,
+         "expected stale permission state refresh action");
+  Expect(app_ops_json.find("refresh_stale_app_ops_state") !=
+             std::string::npos,
+         "expected stale app ops state refresh action");
+
+  fs::remove_all(fixture.root);
 }
 
 void TestRuntimeBridgeOutputParsers() {
@@ -5387,25 +8056,77 @@ void TestNativeRuntimePreflightRendersDetailedRecoveryContract() {
          "expected detailed selected recovery actions in native preflight render");
   Expect(rendered.find(
              "dex_classloader_readiness=>attempt_host_art_class_resolution "
-             "[rank=50 retry=0 scope=art_bridge]") != std::string::npos,
+             "[rank=50 retry=0 scope=art_bridge reason=") != std::string::npos,
          "expected detailed dex recovery action in native preflight render");
   Expect(rendered.find(
+             "reason=APK classes are now resolved offline from real DEX contents") !=
+             std::string::npos,
+         "expected detailed dex recovery reason in native preflight render");
+  Expect(rendered.find(
              "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
-             "[rank=70 retry=0 scope=bootstrap_execution]") !=
+             "[rank=70 retry=0 scope=bootstrap_execution reason=") !=
              std::string::npos,
          "expected detailed bootstrap execution recovery action in native preflight render");
   Expect(rendered.find("Canonical Recovery Scenario Details: ") !=
              std::string::npos,
          "expected detailed canonical recovery scenarios in native preflight render");
   Expect(rendered.find(
-             "missing_artifact=>restage_apk_bundle [rank=10 retry=1 scope=bundle]") !=
+             "missing_artifact=>restage_apk_bundle [rank=10 retry=1 scope=bundle reason=") !=
              std::string::npos,
          "expected detailed missing-artifact scenario in native preflight render");
   Expect(rendered.find(
              "failed_service_lookup=>rebuild_service_registry_and_retry_lookup "
-             "[rank=40 retry=1 scope=service_registry]") !=
+             "[rank=40 retry=1 scope=service_registry reason=") !=
              std::string::npos,
          "expected detailed failed-service-lookup scenario in native preflight render");
+  Expect(rendered.find(
+             "reason=A service lookup failed, so the local Binder-shaped registry should be rebuilt") !=
+             std::string::npos,
+         "expected detailed failed-service-lookup reason in native preflight render");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimePreflightRendersCoreSubsystemProjection() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight-core-subsystems");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native preflight should not shell out");
+      });
+
+  const auto rendered = wfa::RenderRuntimePreflightReport(report);
+  Expect(rendered.find("Runtime Core Subsystems Ready: no") !=
+             std::string::npos,
+         "expected core subsystem readiness line in native preflight render");
+  Expect(rendered.find("Runtime Core Subsystem Count: 6") !=
+             std::string::npos,
+         "expected core subsystem count in native preflight render");
+  Expect(rendered.find("Runtime Core Ready Subsystem Count: ") !=
+             std::string::npos,
+         "expected core ready subsystem count in native preflight render");
+  Expect(rendered.find("Runtime Core Subsystems: apk_staging, native_loading, surface_readiness, input_queue_readiness, binder_service_readiness, dex_classloader_readiness") !=
+             std::string::npos,
+         "expected ordered core subsystem names in native preflight render");
+  Expect(rendered.find("Runtime Core Subsystem Details: ") !=
+             std::string::npos,
+         "expected core subsystem details in native preflight render");
+  Expect(rendered.find("apk_staging=>") != std::string::npos,
+         "expected apk staging core detail in native preflight render");
+  Expect(rendered.find("binder_service_readiness=>") != std::string::npos,
+         "expected binder core detail in native preflight render");
+  Expect(rendered.find("dex_classloader_readiness=>") != std::string::npos,
+         "expected dex core detail in native preflight render");
 
   fs::remove_all(fixture.root);
 }
@@ -5438,6 +8159,69 @@ void TestNativeRuntimePreflightRendersTraceSourceDetails() {
          "expected bootstrap execution trace source detail in native preflight render");
   Expect(rendered.find("fingerprint=fnv1a64:") != std::string::npos,
          "expected trace source fingerprint in native preflight render");
+  Expect(rendered.find("Runtime Health Replay Command: ") !=
+             std::string::npos,
+         "expected runtime health replay command in native preflight render");
+  Expect(rendered.find("native-runtime-health-replay ") !=
+             std::string::npos,
+         "expected health replay command name in native preflight render");
+  Expect(rendered.find("Runtime Diagnostic Replay Command: ") !=
+             std::string::npos,
+         "expected diagnostic replay command in native preflight render");
+  Expect(rendered.find("native-runtime-diagnostic-replay ") !=
+             std::string::npos,
+         "expected diagnostic replay command name in native preflight render");
+  Expect(rendered.find("Runtime Diagnostic Fixture Command: ") !=
+             std::string::npos,
+         "expected diagnostic fixture command in native preflight render");
+  Expect(rendered.find("native-runtime-diagnostic-fixture ") !=
+             std::string::npos,
+         "expected diagnostic fixture command name in native preflight render");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchRendersCoreSubsystemProjection() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-core-subsystems");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native launch should not shell out through runtime bridge runner");
+      });
+
+  const auto rendered = wfa::RenderInstalledAppLaunchReport(report);
+  Expect(rendered.find("Runtime Core Subsystems Ready: no") !=
+             std::string::npos,
+         "expected core subsystem readiness line in native launch render");
+  Expect(rendered.find("Runtime Core Subsystem Count: 6") !=
+             std::string::npos,
+         "expected core subsystem count in native launch render");
+  Expect(rendered.find("Runtime Core Ready Subsystem Count: ") !=
+             std::string::npos,
+         "expected core ready subsystem count in native launch render");
+  Expect(rendered.find("Runtime Core Subsystems: apk_staging, native_loading, surface_readiness, input_queue_readiness, binder_service_readiness, dex_classloader_readiness") !=
+             std::string::npos,
+         "expected ordered core subsystem names in native launch render");
+  Expect(rendered.find("Runtime Core Subsystem Details: ") !=
+             std::string::npos,
+         "expected core subsystem details in native launch render");
+  Expect(rendered.find("apk_staging=>") != std::string::npos,
+         "expected apk staging core detail in native launch render");
+  Expect(rendered.find("surface_readiness=>") != std::string::npos,
+         "expected surface core detail in native launch render");
+  Expect(rendered.find("dex_classloader_readiness=>") != std::string::npos,
+         "expected dex core detail in native launch render");
 
   fs::remove_all(fixture.root);
 }
@@ -5951,15 +8735,23 @@ void TestNativeRuntimeLaunchRendersDetailedRecoveryContract() {
          "expected detailed selected recovery actions in native launch render");
   Expect(rendered.find(
              "dex_classloader_readiness=>attempt_host_art_class_resolution "
-             "[rank=50 retry=0 scope=art_bridge]") != std::string::npos,
+             "[rank=50 retry=0 scope=art_bridge reason=") != std::string::npos,
          "expected detailed dex recovery action in native launch render");
+  Expect(rendered.find(
+             "reason=APK classes are now resolved offline from real DEX contents") !=
+             std::string::npos,
+         "expected detailed dex recovery reason in native launch render");
   Expect(rendered.find("Runtime Canonical Recovery Scenario Details: ") !=
              std::string::npos,
          "expected detailed canonical recovery scenarios in native launch render");
   Expect(rendered.find(
              "unavailable_display=>fallback_to_headless_surface_probe "
-             "[rank=30 retry=0 scope=graphics_probe]") != std::string::npos,
+             "[rank=30 retry=0 scope=graphics_probe reason=") != std::string::npos,
          "expected detailed unavailable-display scenario in native launch render");
+  Expect(rendered.find(
+             "reason=Display backing is unavailable, so Linuxoid should fall back") !=
+             std::string::npos,
+         "expected detailed unavailable-display reason in native launch render");
 
   fs::remove_all(fixture.root);
 }
@@ -5992,6 +8784,24 @@ void TestNativeRuntimeLaunchRendersTraceSourceDetails() {
          "expected runtime smoke trace source detail in native launch render");
   Expect(rendered.find("events=") != std::string::npos,
          "expected event count in native launch trace source detail");
+  Expect(rendered.find("Runtime Health Replay Command: ") !=
+             std::string::npos,
+         "expected runtime health replay command in native launch render");
+  Expect(rendered.find("native-runtime-health-replay ") !=
+             std::string::npos,
+         "expected health replay command name in native launch render");
+  Expect(rendered.find("Runtime Diagnostic Replay Command: ") !=
+             std::string::npos,
+         "expected diagnostic replay command in native launch render");
+  Expect(rendered.find("native-runtime-diagnostic-replay ") !=
+             std::string::npos,
+         "expected diagnostic replay command name in native launch render");
+  Expect(rendered.find("Runtime Diagnostic Fixture Command: ") !=
+             std::string::npos,
+         "expected diagnostic fixture command in native launch render");
+  Expect(rendered.find("native-runtime-diagnostic-fixture ") !=
+             std::string::npos,
+         "expected diagnostic fixture command name in native launch render");
 
   fs::remove_all(fixture.root);
 }
@@ -6055,19 +8865,31 @@ void TestNativeRuntimePreflightSelfHealingContractStaysDeterministicWithoutHostA
                    "bootstrap_execution_readiness") !=
              first_report.failing_subsystems.end(),
          "expected bootstrap execution failure in blocked preflight");
-  Expect(std::find(
+  Expect(std::any_of(
              first_report.selected_recovery_action_details.begin(),
              first_report.selected_recovery_action_details.end(),
-             "dex_classloader_readiness=>attempt_host_art_class_resolution "
-             "[rank=50 retry=0 scope=art_bridge]") !=
-             first_report.selected_recovery_action_details.end(),
+             [](const std::string& detail) {
+               return detail.find(
+                          "dex_classloader_readiness=>attempt_host_art_class_resolution "
+                          "[rank=50 retry=0 scope=art_bridge reason=") !=
+                          std::string::npos &&
+                      detail.find(
+                          "APK classes are now resolved offline from real DEX contents") !=
+                          std::string::npos;
+             }),
          "expected detailed dex recovery selection in blocked preflight");
-  Expect(std::find(
+  Expect(std::any_of(
              first_report.selected_recovery_action_details.begin(),
              first_report.selected_recovery_action_details.end(),
-             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
-             "[rank=70 retry=0 scope=bootstrap_execution]") !=
-             first_report.selected_recovery_action_details.end(),
+             [](const std::string& detail) {
+               return detail.find(
+                          "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
+                          "[rank=70 retry=0 scope=bootstrap_execution reason=") !=
+                          std::string::npos &&
+                      detail.find(
+                          "attempt the first host-side application or launcher bootstrap execution") !=
+                          std::string::npos;
+             }),
          "expected detailed bootstrap recovery selection in blocked preflight");
   Expect(first_rendered.find("Dependency Blocked: yes") != std::string::npos,
          "expected dependency-blocked line in blocked preflight render");
@@ -6164,19 +8986,31 @@ void TestNativeRuntimeLaunchSelfHealingContractStaysDeterministicWithoutHostArt(
                    "bootstrap_execution_readiness") !=
              first_report.runtime_failing_subsystems.end(),
          "expected bootstrap execution failure on blocked native launch");
-  Expect(std::find(
+  Expect(std::any_of(
              first_report.runtime_selected_recovery_action_details.begin(),
              first_report.runtime_selected_recovery_action_details.end(),
-             "dex_classloader_readiness=>attempt_host_art_class_resolution "
-             "[rank=50 retry=0 scope=art_bridge]") !=
-             first_report.runtime_selected_recovery_action_details.end(),
+             [](const std::string& detail) {
+               return detail.find(
+                          "dex_classloader_readiness=>attempt_host_art_class_resolution "
+                          "[rank=50 retry=0 scope=art_bridge reason=") !=
+                          std::string::npos &&
+                      detail.find(
+                          "APK classes are now resolved offline from real DEX contents") !=
+                          std::string::npos;
+             }),
          "expected detailed dex recovery selection on blocked native launch");
-  Expect(std::find(
+  Expect(std::any_of(
              first_report.runtime_selected_recovery_action_details.begin(),
              first_report.runtime_selected_recovery_action_details.end(),
-             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
-             "[rank=70 retry=0 scope=bootstrap_execution]") !=
-             first_report.runtime_selected_recovery_action_details.end(),
+             [](const std::string& detail) {
+               return detail.find(
+                          "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
+                          "[rank=70 retry=0 scope=bootstrap_execution reason=") !=
+                          std::string::npos &&
+                      detail.find(
+                          "attempt the first host-side application or launcher bootstrap execution") !=
+                          std::string::npos;
+             }),
          "expected detailed bootstrap recovery selection on blocked native launch");
   Expect(first_rendered.find("Launch Classification: "
                              "native_bootstrap_execution_failed") !=
@@ -6206,6 +9040,139 @@ void TestNativeRuntimeLaunchSelfHealingContractStaysDeterministicWithoutHostArt(
   Expect(first_health_json.find("\"dependency_blocked\": true") !=
              std::string::npos,
          "expected dependency-blocked state in blocked native launch runtime-health json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimePreflightCliSelfHealingContractStaysDeterministicWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight-cli-self-healing");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 (fixture.root / "native").string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+  ScopedEnvironmentVariable compatctl_override("LINUXOID_COMPATCTL_PATH",
+                                               compatctl.string());
+
+  int first_exit_code = 0;
+  const std::string first_output = ReadCommandOutput(
+      compatctl.string() + " preflight-runtime native - " + fixture.package_name,
+      &first_exit_code);
+  const fs::path first_health_json_path = ExtractReportValue(
+      first_output, "Runtime Health JSON Path: ");
+  const std::string first_health_json = ReadTextFile(first_health_json_path);
+
+  int second_exit_code = 0;
+  const std::string second_output = ReadCommandOutput(
+      compatctl.string() + " preflight-runtime native - " + fixture.package_name,
+      &second_exit_code);
+  const fs::path second_health_json_path = ExtractReportValue(
+      second_output, "Runtime Health JSON Path: ");
+  const std::string second_health_json = ReadTextFile(second_health_json_path);
+
+  Expect(first_exit_code != 0,
+         "expected blocked native preflight command to stay non-zero");
+  Expect(second_exit_code != 0,
+         "expected repeated blocked native preflight command to stay non-zero");
+  Expect(first_output.find("Runtime Health Classification: recovery_needed") !=
+             std::string::npos,
+         "expected runtime health classification in blocked native preflight command");
+  Expect(first_output.find("Runtime Overall Ready: no") != std::string::npos,
+         "expected no-false-success overall-ready line in blocked native preflight command");
+  Expect(first_output.find("Ready For Launch: no") != std::string::npos,
+         "expected no-false-success launch readiness in blocked native preflight command");
+  Expect(first_output.find(
+             "Selected Recovery Actions: dex_classloader_readiness=>attempt_host_art_class_resolution, "
+             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution") !=
+             std::string::npos,
+         "expected deterministic recovery selection in blocked native preflight command");
+  Expect(first_output == second_output,
+         "expected stable repeated blocked native preflight command output");
+  Expect(first_health_json == second_health_json,
+         "expected stable repeated blocked native preflight runtime-health json");
+  Expect(first_health_json.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected recovery-needed classification in blocked native preflight runtime-health json");
+  Expect(first_health_json.find("\"overall_ready\": false") !=
+             std::string::npos,
+         "expected no false success in blocked native preflight runtime-health json");
+  Expect(first_health_json.find(
+             "\"selected_recovery_action\": \"attempt_host_art_class_resolution\"") !=
+             std::string::npos,
+         "expected deterministic recovery action in blocked native preflight runtime-health json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchCliSelfHealingContractStaysDeterministicWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-cli-self-healing");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 (fixture.root / "native").string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+  ScopedEnvironmentVariable compatctl_override("LINUXOID_COMPATCTL_PATH",
+                                               compatctl.string());
+
+  int first_exit_code = 0;
+  const std::string first_output = ReadCommandOutput(
+      compatctl.string() + " launch-package native " + fixture.package_name,
+      &first_exit_code);
+  const fs::path first_health_json_path = ExtractReportValue(
+      first_output, "Runtime Health JSON Path: ");
+  const std::string first_health_json = ReadTextFile(first_health_json_path);
+
+  int second_exit_code = 0;
+  const std::string second_output = ReadCommandOutput(
+      compatctl.string() + " launch-package native " + fixture.package_name,
+      &second_exit_code);
+  const fs::path second_health_json_path = ExtractReportValue(
+      second_output, "Runtime Health JSON Path: ");
+  const std::string second_health_json = ReadTextFile(second_health_json_path);
+
+  Expect(first_exit_code != 0,
+         "expected blocked native launch command to stay non-zero");
+  Expect(second_exit_code != 0,
+         "expected repeated blocked native launch command to stay non-zero");
+  Expect(first_output.find("Runtime Health Classification: recovery_needed") !=
+             std::string::npos,
+         "expected runtime health classification in blocked native launch command");
+  Expect(first_output.find("Runtime Overall Ready: no") != std::string::npos,
+         "expected no-false-success overall-ready line in blocked native launch command");
+  Expect(first_output.find("Launch Classification: native_bootstrap_execution_failed") !=
+             std::string::npos,
+         "expected blocked launch classification in native launch command");
+  Expect(first_output.find("Launch OK: no") != std::string::npos,
+         "expected no-false-success launch result in blocked native launch command");
+  Expect(first_output.find(
+             "Runtime Selected Recovery Actions: dex_classloader_readiness=>attempt_host_art_class_resolution, "
+             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution") !=
+             std::string::npos,
+         "expected deterministic recovery selection in blocked native launch command");
+  Expect(first_output == second_output,
+         "expected stable repeated blocked native launch command output");
+  Expect(first_health_json == second_health_json,
+         "expected stable repeated blocked native launch runtime-health json");
+  Expect(first_health_json.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected recovery-needed classification in blocked native launch runtime-health json");
+  Expect(first_health_json.find("\"overall_ready\": false") !=
+             std::string::npos,
+         "expected no false success in blocked native launch runtime-health json");
+  Expect(first_health_json.find(
+             "\"selected_recovery_action\": \"attempt_host_art_class_resolution\"") !=
+             std::string::npos,
+         "expected deterministic recovery action in blocked native launch runtime-health json");
 
   fs::remove_all(fixture.root);
 }
@@ -7362,6 +10329,354 @@ void TestInstalledPackageMatrixSuccessPath() {
   fs::remove_all(root);
 }
 
+void TestNativeInstalledPackageMatrixSurfacesReadySelfHealingContractWithOverride() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-installed-matrix-ready");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path compatctl_path = fixture.root / "compatctl";
+  const fs::path runtime_probe = fixture.root / "fake-dalvikvm";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+  {
+    std::ofstream runtime_probe_output(runtime_probe);
+    runtime_probe_output << "#!/bin/sh\n";
+    runtime_probe_output << "case \"$*\" in\n";
+    runtime_probe_output << "  *linuxoid.bootstrap.mode=application*) printf '%s\\n' "
+                            "'application-runtime-ok'; exit 0 ;;\n";
+    runtime_probe_output << "  *linuxoid.bootstrap.mode=activity*) printf '%s\\n' "
+                            "'activity-runtime-ok'; exit 0 ;;\n";
+    runtime_probe_output << "  *) printf '%s\\n' 'runtime-fixture-ok'; exit 0 ;;\n";
+    runtime_probe_output << "esac\n";
+  }
+  fs::permissions(runtime_probe,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable runtime_override(
+      "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+  ScopedEnvironmentVariable allow_override_launch(
+      "LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE", "1");
+
+  const auto report = wfa::VerifyInstalledPackageMatrixWithRunners(
+      {{.backend = wfa::RuntimeBackendKind::kNative,
+        .app_name = "Native Bridge",
+        .package_name = fixture.package_name,
+        .compatctl_path = compatctl_path.string()}},
+      fixture.root.string(),
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native matrix verification should not shell out through runtime bridge runner");
+      },
+      [](const std::string& command) -> wfa::CommandResult {
+        if (command.find("com.example.nativebridge.sh") != std::string::npos) {
+          return {0, "launcher ok\n"};
+        }
+        throw std::runtime_error(
+            "unexpected launcher command in native matrix ready test");
+      });
+
+  Expect(report.entries.size() == 1, "expected one native matrix entry");
+  Expect(report.entries[0].verification_ok,
+         "expected override-backed native matrix entry to pass");
+
+  const auto rendered = wfa::RenderInstalledPackageMatrixReport(report);
+  Expect(rendered.find("Packages Passed: 1/1") != std::string::npos,
+         "expected native matrix pass count");
+  Expect(rendered.find("    Runtime Health Classification: ready") !=
+             std::string::npos,
+         "expected ready health classification in native matrix report");
+  Expect(rendered.find("    Runtime Overall Ready: yes") != std::string::npos,
+         "expected overall-ready line in native matrix report");
+  Expect(rendered.find("    Runtime Core Subsystems Ready: yes") !=
+             std::string::npos,
+         "expected core subsystem readiness in native matrix report");
+  Expect(rendered.find("    Runtime Core Subsystem Count: 6") !=
+             std::string::npos,
+         "expected core subsystem count in native matrix report");
+  Expect(rendered.find("    Runtime Core Subsystems: apk_staging, native_loading, surface_readiness, input_queue_readiness, binder_service_readiness, dex_classloader_readiness") !=
+             std::string::npos,
+         "expected ordered core subsystem names in native matrix report");
+  Expect(rendered.find("    Runtime Core Subsystem Details: ") !=
+             std::string::npos,
+         "expected core subsystem details in native matrix report");
+  Expect(rendered.find("    Runtime Dependency Blocked: no") !=
+             std::string::npos,
+         "expected dependency-blocked line in native matrix report");
+  Expect(rendered.find("    Runtime Recovery Actions Selected: 0") !=
+             std::string::npos,
+         "expected zero selected recovery actions in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Replay Ready: yes") !=
+             std::string::npos,
+         "expected replay readiness line in native matrix report");
+  Expect(rendered.find("    Runtime Trace Bundle Complete: yes") !=
+             std::string::npos,
+         "expected trace bundle completeness line in native matrix report");
+  Expect(rendered.find("    Runtime Canonical Recovery Scenario Count: 4") !=
+             std::string::npos,
+         "expected canonical recovery scenario count in native matrix report");
+  Expect(rendered.find("    Runtime Canonical Recovery Scenarios: missing_artifact=>restage_apk_bundle, failed_native_load=>retry_native_load_after_bundle_refresh, unavailable_display=>fallback_to_headless_surface_probe, failed_service_lookup=>rebuild_service_registry_and_retry_lookup") !=
+             std::string::npos,
+         "expected canonical recovery scenarios in native matrix report");
+  Expect(rendered.find("    Runtime Canonical Recovery Scenario Details: missing_artifact=>restage_apk_bundle [rank=10 retry=1 scope=bundle reason=") !=
+             std::string::npos,
+         "expected canonical recovery scenario details in native matrix report");
+  Expect(rendered.find("    Runtime Recovery Actions Trace Path: ") !=
+             std::string::npos,
+         "expected recovery actions trace path in native matrix report");
+  Expect(rendered.find("    Runtime Health Replay Path: ") !=
+             std::string::npos,
+         "expected health replay path in native matrix report");
+  Expect(rendered.find("    Runtime Health Replay Command: ") !=
+             std::string::npos,
+         "expected health replay command in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Replay Path: ") !=
+             std::string::npos,
+         "expected diagnostic replay path in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Replay Command: ") !=
+             std::string::npos,
+         "expected diagnostic replay command in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Fixture Command: ") !=
+             std::string::npos,
+         "expected diagnostic fixture command in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Trace Index Path: ") !=
+             std::string::npos,
+         "expected diagnostic trace index path in native matrix report");
+  Expect(rendered.find("    Runtime Canonical Trace Source Count: 7") !=
+             std::string::npos,
+         "expected canonical trace source count in native matrix report");
+  Expect(rendered.find("    Runtime Trace Sources Found: 7") !=
+             std::string::npos,
+         "expected trace sources found in native matrix report");
+  Expect(rendered.find("    Runtime Missing Trace Source Count: 0") !=
+             std::string::npos,
+         "expected missing trace source count in native matrix report");
+  Expect(rendered.find("    Runtime Trace Source Details: ") !=
+             std::string::npos,
+         "expected trace source details in native matrix report");
+  Expect(rendered.find("runtime_health_trace=>") != std::string::npos,
+         "expected runtime health trace detail in native matrix report");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeInstalledPackageMatrixSurfacesBlockedSelfHealingContractWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-installed-matrix-blocked");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path compatctl_path = fixture.root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+  ScopedEnvironmentVariable compatctl_override("LINUXOID_COMPATCTL_PATH",
+                                               compatctl_path.string());
+
+  const auto report = wfa::VerifyInstalledPackageMatrixWithRunners(
+      {{.backend = wfa::RuntimeBackendKind::kNative,
+        .app_name = "Native Bridge",
+        .package_name = fixture.package_name,
+        .compatctl_path = compatctl_path.string()}},
+      fixture.root.string(),
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native matrix verification should not shell out through runtime bridge runner");
+      },
+      [](const std::string& command) -> wfa::CommandResult {
+        if (command.find("com.example.nativebridge.sh") != std::string::npos) {
+          return {0, "launcher ok\n"};
+        }
+        throw std::runtime_error(
+            "unexpected launcher command in native matrix blocked test");
+      });
+
+  Expect(report.entries.size() == 1, "expected one native matrix entry");
+  Expect(!report.entries[0].verification_ok,
+         "expected blocked native matrix entry to fail");
+
+  const auto rendered = wfa::RenderInstalledPackageMatrixReport(report);
+  Expect(rendered.find("Packages Passed: 0/1") != std::string::npos,
+         "expected native matrix blocked pass count");
+  Expect(rendered.find("    Runtime Health Classification: recovery_needed") !=
+             std::string::npos,
+         "expected blocked health classification in native matrix report");
+  Expect(rendered.find("    Runtime Overall Ready: no") != std::string::npos,
+         "expected blocked overall-ready line in native matrix report");
+  Expect(rendered.find("    Runtime Core Subsystems Ready: no") !=
+             std::string::npos,
+         "expected blocked core subsystem readiness in native matrix report");
+  Expect(rendered.find("    Runtime Core Subsystem Count: 6") !=
+             std::string::npos,
+         "expected blocked core subsystem count in native matrix report");
+  Expect(rendered.find("    Runtime Core Subsystems: apk_staging, native_loading, surface_readiness, input_queue_readiness, binder_service_readiness, dex_classloader_readiness") !=
+             std::string::npos,
+         "expected ordered blocked core subsystem names in native matrix report");
+  Expect(rendered.find("    Runtime Core Subsystem Details: ") !=
+             std::string::npos,
+         "expected blocked core subsystem details line in native matrix report");
+  Expect(rendered.find("    Runtime Dependency Blocked: yes") !=
+             std::string::npos,
+         "expected blocked dependency line in native matrix report");
+  Expect(rendered.find("    Runtime Recovery Actions Selected: 2") !=
+             std::string::npos,
+         "expected blocked recovery count in native matrix report");
+  Expect(rendered.find("    Runtime Selected Recovery Action Details: ") !=
+             std::string::npos,
+         "expected blocked recovery details line in native matrix report");
+  Expect(rendered.find(
+             "dex_classloader_readiness=>attempt_host_art_class_resolution "
+             "[rank=50 retry=0 scope=art_bridge reason=") != std::string::npos,
+         "expected blocked dex recovery detail in native matrix report");
+  Expect(rendered.find(
+             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
+             "[rank=70 retry=0 scope=bootstrap_execution reason=") !=
+             std::string::npos,
+         "expected blocked bootstrap recovery detail in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Replay Ready: yes") !=
+             std::string::npos,
+         "expected blocked replay readiness in native matrix report");
+  Expect(rendered.find("    Runtime Trace Bundle Complete: yes") !=
+             std::string::npos,
+         "expected blocked trace bundle completeness in native matrix report");
+  Expect(rendered.find("    Runtime Canonical Recovery Scenario Count: 4") !=
+             std::string::npos,
+         "expected blocked canonical recovery scenario count in native matrix report");
+  Expect(rendered.find("    Runtime Canonical Recovery Scenarios: missing_artifact=>restage_apk_bundle, failed_native_load=>retry_native_load_after_bundle_refresh, unavailable_display=>fallback_to_headless_surface_probe, failed_service_lookup=>rebuild_service_registry_and_retry_lookup") !=
+             std::string::npos,
+         "expected blocked canonical recovery scenarios in native matrix report");
+  Expect(rendered.find("    Runtime Canonical Recovery Scenario Details: ") !=
+             std::string::npos,
+         "expected blocked canonical recovery scenario details line in native matrix report");
+  Expect(rendered.find(
+             "failed_service_lookup=>rebuild_service_registry_and_retry_lookup "
+             "[rank=40 retry=1 scope=service_registry reason=") !=
+             std::string::npos,
+         "expected blocked failed-service canonical recovery detail in native matrix report");
+  Expect(rendered.find("    Runtime Health Replay Command: ") !=
+             std::string::npos,
+         "expected blocked health replay command in native matrix report");
+  Expect(rendered.find("    Runtime Recovery Actions Trace Path: ") !=
+             std::string::npos,
+         "expected blocked recovery actions trace path in native matrix report");
+  Expect(rendered.find("    Runtime Health Replay Path: ") !=
+             std::string::npos,
+         "expected blocked health replay path in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Replay Path: ") !=
+             std::string::npos,
+         "expected blocked diagnostic replay path in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Replay Command: ") !=
+             std::string::npos,
+         "expected blocked diagnostic replay command in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Fixture Command: ") !=
+             std::string::npos,
+         "expected blocked diagnostic fixture command in native matrix report");
+  Expect(rendered.find("    Runtime Diagnostic Trace Index Path: ") !=
+             std::string::npos,
+         "expected blocked diagnostic trace index path in native matrix report");
+  Expect(rendered.find("    Runtime Canonical Trace Source Count: 7") !=
+             std::string::npos,
+         "expected blocked canonical trace source count in native matrix report");
+  Expect(rendered.find("    Runtime Trace Sources Found: 7") !=
+             std::string::npos,
+         "expected blocked trace sources found in native matrix report");
+  Expect(rendered.find("    Runtime Missing Trace Source Count: 0") !=
+             std::string::npos,
+         "expected blocked missing trace source count in native matrix report");
+  Expect(rendered.find("    Runtime Trace Source Details: ") !=
+             std::string::npos,
+         "expected blocked trace source details in native matrix report");
+  Expect(rendered.find("art_bootstrap_execution_trace=>") !=
+             std::string::npos,
+         "expected blocked bootstrap execution trace detail in native matrix report");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeInstalledPackageMatrixCliSelfHealingContractStaysDeterministicWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-installed-matrix-cli-blocked");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+  const fs::path artifact_root = fixture.root / "matrix-artifacts";
+  fs::create_directories(artifact_root);
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 (fixture.root / "native").string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+  ScopedEnvironmentVariable compatctl_override("LINUXOID_COMPATCTL_PATH",
+                                               compatctl.string());
+
+  const auto run_matrix = [&](int* exit_code) {
+    return ReadCommandOutput(
+        compatctl.string() + " verify-package-matrix native " +
+            artifact_root.string() + " - " + fixture.package_name,
+        exit_code);
+  };
+
+  int first_exit_code = 0;
+  const std::string first_output = run_matrix(&first_exit_code);
+
+  int second_exit_code = 0;
+  const std::string second_output = run_matrix(&second_exit_code);
+
+  Expect(first_exit_code != 0,
+         "expected blocked native matrix command to stay non-zero");
+  Expect(second_exit_code != 0,
+         "expected repeated blocked native matrix command to stay non-zero");
+  Expect(first_output.find("Packages Passed: 0/1") != std::string::npos,
+         "expected no false success in blocked native matrix command");
+  Expect(first_output.find("Runtime Health Classification: recovery_needed") !=
+             std::string::npos,
+         "expected runtime health classification in blocked native matrix command");
+  Expect(first_output.find("Runtime Overall Ready: no") != std::string::npos,
+         "expected no-false-success overall-ready line in blocked native matrix command");
+  Expect(first_output.find("Runtime Dependency Blocked: yes") !=
+             std::string::npos,
+         "expected dependency-blocked line in blocked native matrix command");
+  Expect(first_output.find("Runtime Selected Recovery Action Details: ") !=
+             std::string::npos,
+         "expected selected recovery details in blocked native matrix command");
+  Expect(first_output.find(
+             "dex_classloader_readiness=>attempt_host_art_class_resolution "
+             "[rank=50 retry=0 scope=art_bridge reason=") != std::string::npos,
+         "expected deterministic dex recovery selection in blocked native matrix command");
+  Expect(first_output.find(
+             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
+             "[rank=70 retry=0 scope=bootstrap_execution reason=") !=
+             std::string::npos,
+         "expected deterministic bootstrap recovery selection in blocked native matrix command");
+  Expect(first_output.find("Runtime Diagnostic Replay Ready: yes") !=
+             std::string::npos,
+         "expected replay readiness in blocked native matrix command");
+  Expect(first_output.find("Runtime Trace Bundle Complete: yes") !=
+             std::string::npos,
+         "expected complete trace bundle in blocked native matrix command");
+  Expect(first_output == second_output,
+         "expected stable repeated blocked native matrix command output");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestWaydroidPackageVerificationSuccessPath() {
   const auto runtime_runner = [](const std::string& command) -> wfa::CommandResult {
     if (command == "waydroid status") {
@@ -7548,17 +10863,297 @@ void TestNativeInstalledPackageVerificationUsesPreflightAndOverrideBackedLaunch(
          "expected runtime probe readiness in native verification preflight");
   Expect(rendered.find("Bootstrap Planned: yes") != std::string::npos,
          "expected bootstrap planning in native verification preflight");
+  Expect(rendered.find("Runtime Health Classification: ready") !=
+             std::string::npos,
+         "expected ready runtime health classification in native verification");
+  Expect(rendered.find("Runtime Overall Ready: yes") != std::string::npos,
+         "expected overall-ready line in native verification");
   Expect(rendered.find("Runtime Health Trace Path: ") != std::string::npos,
          "expected runtime health trace path in native verification preflight");
+  Expect(rendered.find("Runtime Recovery Actions Trace Path: ") !=
+             std::string::npos,
+         "expected runtime recovery actions trace path in native verification");
+  Expect(rendered.find("Runtime Health Replay Path: ") !=
+             std::string::npos,
+         "expected runtime health replay path in native verification");
+  Expect(rendered.find("Runtime Health Replay Command: ") !=
+             std::string::npos,
+         "expected runtime health replay command in native verification");
+  Expect(rendered.find("Runtime Diagnostic Replay Path: ") !=
+             std::string::npos,
+         "expected runtime diagnostic replay path in native verification");
   Expect(rendered.find("Runtime Diagnostic Events Path: ") !=
              std::string::npos,
          "expected diagnostic events path in native verification preflight");
+  Expect(rendered.find("Runtime Diagnostic Replay Command: ") !=
+             std::string::npos,
+         "expected runtime diagnostic replay command in native verification");
+  Expect(rendered.find("Runtime Diagnostic Fixture Command: ") !=
+             std::string::npos,
+         "expected runtime diagnostic fixture command in native verification");
+  Expect(rendered.find("Runtime Diagnostic Trace Index Path: ") !=
+             std::string::npos,
+         "expected runtime diagnostic trace index path in native verification");
   Expect(rendered.find("Runtime Trace Bundle Complete: yes") !=
              std::string::npos,
          "expected complete trace bundle in native verification preflight");
+  Expect(rendered.find("Runtime Canonical Trace Source Count: 7") !=
+             std::string::npos,
+         "expected canonical trace source count in native verification");
+  Expect(rendered.find("Runtime Trace Sources Found: 7") !=
+             std::string::npos,
+         "expected trace sources found count in native verification");
+  Expect(rendered.find("Runtime Missing Trace Source Count: 0") !=
+             std::string::npos,
+         "expected missing trace source count in native verification");
+  Expect(rendered.find("Runtime Trace Source Details: ") !=
+             std::string::npos,
+         "expected trace source details in native verification");
+  Expect(rendered.find("runtime_health_trace=>") != std::string::npos,
+         "expected runtime health trace source detail in native verification");
+  Expect(rendered.find("Runtime Canonical Recovery Scenario Count: 4") !=
+             std::string::npos,
+         "expected canonical recovery scenario count in native verification");
+  Expect(rendered.find("Runtime Canonical Recovery Scenarios: missing_artifact=>restage_apk_bundle, failed_native_load=>retry_native_load_after_bundle_refresh, unavailable_display=>fallback_to_headless_surface_probe, failed_service_lookup=>rebuild_service_registry_and_retry_lookup") !=
+             std::string::npos,
+         "expected canonical recovery scenarios in native verification");
+  Expect(rendered.find("Runtime Canonical Recovery Scenario Details: missing_artifact=>restage_apk_bundle [rank=10 retry=1 scope=bundle reason=") !=
+             std::string::npos,
+         "expected canonical recovery scenario details in native verification");
   Expect(rendered.find("Component: com.example.nativebridge/.MainActivity") !=
              std::string::npos,
          "expected native launcher component in verification report");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeInstalledPackageVerificationSurfacesBlockedSelfHealingContractWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-installed-package-verify-blocked");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path compatctl_path = fixture.root / "compatctl";
+  {
+    std::ofstream compatctl_output(compatctl_path);
+    compatctl_output << "#!/bin/sh\nexit 0\n";
+  }
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+  ScopedEnvironmentVariable compatctl_override("LINUXOID_COMPATCTL_PATH",
+                                               compatctl_path.string());
+
+  const auto report = wfa::VerifyInstalledPackageWithRunners(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .app_name = "Native Bridge",
+       .package_name = fixture.package_name,
+       .compatctl_path = compatctl_path.string(),
+       .desktop_root = (fixture.root / "applications").string(),
+       .launcher_root = (fixture.root / "launchers").string()},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native verification should not shell out through runtime bridge runner");
+      },
+      [](const std::string& command) -> wfa::CommandResult {
+        if (command.find("com.example.nativebridge.sh") != std::string::npos) {
+          return {0, "launcher ok\n"};
+        }
+        throw std::runtime_error(
+            "unexpected launcher command in blocked native verification test");
+      });
+
+  Expect(!report.preflight_ok,
+         "expected native verification preflight to stay blocked without host ART");
+  Expect(!report.direct_launch_ok,
+         "expected native verification direct launch to stay blocked without host ART");
+  Expect(report.launcher_generation_ok,
+         "expected native verification launcher generation to still succeed");
+  Expect(report.generated_launcher_ok,
+         "expected native verification generated launcher to still succeed");
+
+  const auto rendered = wfa::RenderInstalledPackageVerificationReport(report);
+  Expect(rendered.find("Preflight OK: no") != std::string::npos,
+         "expected blocked native verification preflight line");
+  Expect(rendered.find("Direct Launch OK: no") != std::string::npos,
+         "expected blocked native verification direct launch line");
+  Expect(rendered.find("Runtime Health Classification: recovery_needed") !=
+             std::string::npos,
+         "expected blocked native verification health classification");
+  Expect(rendered.find("Runtime Overall Ready: no") != std::string::npos,
+         "expected blocked native verification overall-ready line");
+  Expect(rendered.find("Runtime Dependency Blocked: yes") !=
+             std::string::npos,
+         "expected blocked native verification dependency line");
+  Expect(rendered.find("Runtime Selected Recovery Action Details: ") !=
+             std::string::npos,
+         "expected blocked native verification recovery details line");
+  Expect(rendered.find(
+             "dex_classloader_readiness=>attempt_host_art_class_resolution "
+             "[rank=50 retry=0 scope=art_bridge reason=") != std::string::npos,
+         "expected blocked native verification dex recovery detail");
+  Expect(rendered.find(
+             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
+             "[rank=70 retry=0 scope=bootstrap_execution reason=") !=
+             std::string::npos,
+         "expected blocked native verification bootstrap recovery detail");
+  Expect(rendered.find("Runtime Diagnostic Replay Ready: yes") !=
+             std::string::npos,
+         "expected blocked native verification replay readiness");
+  Expect(rendered.find("Runtime Trace Bundle Complete: yes") !=
+             std::string::npos,
+         "expected blocked native verification trace bundle completeness");
+  Expect(rendered.find("Runtime Recovery Actions Trace Path: ") !=
+             std::string::npos,
+         "expected blocked native verification recovery actions trace path");
+  Expect(rendered.find("Runtime Health Replay Path: ") !=
+             std::string::npos,
+         "expected blocked native verification health replay path");
+  Expect(rendered.find("Runtime Canonical Recovery Scenario Count: 4") !=
+             std::string::npos,
+         "expected blocked native verification canonical recovery scenario count");
+  Expect(rendered.find("Runtime Canonical Recovery Scenarios: missing_artifact=>restage_apk_bundle, failed_native_load=>retry_native_load_after_bundle_refresh, unavailable_display=>fallback_to_headless_surface_probe, failed_service_lookup=>rebuild_service_registry_and_retry_lookup") !=
+             std::string::npos,
+         "expected blocked native verification canonical recovery scenarios");
+  Expect(rendered.find("Runtime Canonical Recovery Scenario Details: ") !=
+             std::string::npos,
+         "expected blocked native verification canonical recovery scenario details");
+  Expect(rendered.find(
+             "failed_service_lookup=>rebuild_service_registry_and_retry_lookup "
+             "[rank=40 retry=1 scope=service_registry reason=") !=
+             std::string::npos,
+         "expected blocked native verification failed-service canonical recovery detail");
+  Expect(rendered.find("Runtime Health Replay Command: ") !=
+             std::string::npos,
+         "expected blocked native verification health replay command");
+  Expect(rendered.find("Runtime Diagnostic Replay Path: ") !=
+             std::string::npos,
+         "expected blocked native verification diagnostic replay path");
+  Expect(rendered.find("Runtime Diagnostic Replay Command: ") !=
+             std::string::npos,
+         "expected blocked native verification diagnostic replay command");
+  Expect(rendered.find("Runtime Diagnostic Fixture Command: ") !=
+             std::string::npos,
+         "expected blocked native verification diagnostic fixture command");
+  Expect(rendered.find("Runtime Diagnostic Trace Index Path: ") !=
+             std::string::npos,
+         "expected blocked native verification trace index path");
+  Expect(rendered.find("Runtime Canonical Trace Source Count: 7") !=
+             std::string::npos,
+         "expected blocked native verification canonical trace source count");
+  Expect(rendered.find("Runtime Trace Sources Found: 7") !=
+             std::string::npos,
+         "expected blocked native verification trace sources found count");
+  Expect(rendered.find("Runtime Missing Trace Source Count: 0") !=
+             std::string::npos,
+         "expected blocked native verification missing trace source count");
+  Expect(rendered.find("Runtime Trace Source Details: ") !=
+             std::string::npos,
+         "expected blocked native verification trace source details");
+  Expect(rendered.find("art_bootstrap_execution_trace=>") !=
+             std::string::npos,
+         "expected blocked native verification bootstrap execution trace detail");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeInstalledPackageVerificationCliSelfHealingContractStaysDeterministicWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-installed-package-verify-cli-blocked");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+  const fs::path desktop_root = fixture.root / "applications";
+  const fs::path launcher_root = fixture.root / "launchers";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 (fixture.root / "native").string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+  ScopedEnvironmentVariable compatctl_override("LINUXOID_COMPATCTL_PATH",
+                                               compatctl.string());
+
+  const auto run_verify = [&](int* exit_code) {
+    return ReadCommandOutput(
+        compatctl.string() + " verify-package native " + fixture.package_name +
+            " - - " + desktop_root.string() + " " + launcher_root.string(),
+        exit_code);
+  };
+
+  int first_exit_code = 0;
+  const std::string first_output = run_verify(&first_exit_code);
+  const fs::path first_health_json_path = ExtractReportValue(
+      first_output, "Runtime Health JSON Path: ");
+  const fs::path first_replay_json_path = ExtractReportValue(
+      first_output, "Runtime Diagnostic Replay Path: ");
+  const std::string first_health_json = ReadTextFile(first_health_json_path);
+  const std::string first_replay_json = ReadTextFile(first_replay_json_path);
+
+  int second_exit_code = 0;
+  const std::string second_output = run_verify(&second_exit_code);
+  const fs::path second_health_json_path = ExtractReportValue(
+      second_output, "Runtime Health JSON Path: ");
+  const fs::path second_replay_json_path = ExtractReportValue(
+      second_output, "Runtime Diagnostic Replay Path: ");
+  const std::string second_health_json = ReadTextFile(second_health_json_path);
+  const std::string second_replay_json = ReadTextFile(second_replay_json_path);
+
+  Expect(first_exit_code != 0,
+         "expected blocked native verification command to stay non-zero");
+  Expect(second_exit_code != 0,
+         "expected repeated blocked native verification command to stay non-zero");
+  Expect(first_output.find("Preflight OK: no") != std::string::npos,
+         "expected blocked preflight line in blocked native verification command");
+  Expect(first_output.find("Direct Launch OK: no") != std::string::npos,
+         "expected blocked direct-launch line in blocked native verification command");
+  Expect(first_output.find("Runtime Health Classification: recovery_needed") !=
+             std::string::npos,
+         "expected runtime health classification in blocked native verification command");
+  Expect(first_output.find("Runtime Overall Ready: no") != std::string::npos,
+         "expected no-false-success overall-ready line in blocked native verification command");
+  Expect(first_output.find("Runtime Dependency Blocked: yes") !=
+             std::string::npos,
+         "expected dependency-blocked line in blocked native verification command");
+  Expect(first_output.find("Runtime Selected Recovery Action Details: ") !=
+             std::string::npos,
+         "expected selected recovery details in blocked native verification command");
+  Expect(first_output.find(
+             "dex_classloader_readiness=>attempt_host_art_class_resolution "
+             "[rank=50 retry=0 scope=art_bridge reason=") != std::string::npos,
+         "expected deterministic dex recovery selection in blocked native verification command");
+  Expect(first_output.find(
+             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
+             "[rank=70 retry=0 scope=bootstrap_execution reason=") !=
+             std::string::npos,
+         "expected deterministic bootstrap recovery selection in blocked native verification command");
+  Expect(first_output.find("Runtime Diagnostic Replay Ready: yes") !=
+             std::string::npos,
+         "expected replay readiness in blocked native verification command");
+  Expect(first_output.find("Runtime Trace Bundle Complete: yes") !=
+             std::string::npos,
+         "expected complete trace bundle in blocked native verification command");
+  Expect(first_output == second_output,
+         "expected stable repeated blocked native verification command output");
+  Expect(first_health_json == second_health_json,
+         "expected stable repeated blocked native verification runtime-health json");
+  Expect(first_replay_json == second_replay_json,
+         "expected stable repeated blocked native verification replay json");
+  Expect(first_health_json.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected recovery-needed classification in blocked native verification runtime-health json");
+  Expect(first_health_json.find("\"overall_ready\": false") !=
+             std::string::npos,
+         "expected no false success in blocked native verification runtime-health json");
+  Expect(first_health_json.find("\"dependency_blocked\": true") !=
+             std::string::npos,
+         "expected dependency-blocked state in blocked native verification runtime-health json");
+  Expect(first_replay_json.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected recovery-needed classification in blocked native verification replay json");
 
   fs::remove_all(fixture.root);
 }
@@ -8146,6 +11741,7 @@ int main() {
     TestNativeInputQueueFixtureWritesStableArtifacts();
     TestNativeInputQueueFixtureReportsFallbackHonestly();
     TestBinderServiceManagerFixtureWritesStableArtifacts();
+    TestNativeServiceManagerFixtureCommandWritesDeterministicJson();
     TestRuntimeHealthFixtureWritesStableArtifacts();
     TestRuntimeHealthFixtureSelectsMissingArtifactRecovery();
     TestRuntimeHealthFixtureSelectsUnavailableDisplayRecovery();
@@ -8203,7 +11799,66 @@ int main() {
     TestNativeProcessBootstrapRunsFixtureAndWritesSessionState();
     TestNativeExecuteStubReportsMissingNativeLibraryPayload();
     TestNativeExecuteStubRunsFixtureNativeActivity();
-    TestRuntimeBridgeOutputParsers();
+    TestLaunchApkCommandRunsNativeOnlyFixture();
+    TestLaunchApkRejectsPathTraversalEntries();
+    TestLaunchApkReportsMissingNativeLibraryHonestly();
+    TestLaunchApkRejectsInvalidArchive();
+    TestLaunchApkRejectsMissingManifestMetadata();
+    TestLaunchApkRejectsUnsupportedHostAbiHonestly();
+    TestLaunchApkSurfaceProofCommandRunsFixture();
+    TestLaunchApkSurfaceProofTracksPackageSessionMetadata();
+    TestLaunchApkSurfaceProofKeepsDeterministicPixelMarker();
+    TestLaunchApkSurfaceProofFailsForMissingNativeLibrary();
+    TestLaunchApkAssetProofCommandRunsFixture();
+    TestLaunchApkAssetBridgeTracksPackageSessionMetadata();
+    TestNativeApkAssetBridgeListsAssetsDeterministically();
+    TestNativeApkAssetBridgeReadsAssetChecksumAndSize();
+    TestNativeApkAssetBridgeRejectsUnsafePaths();
+    TestNativeApkAssetBridgeReportsMissingAssetHonestly();
+    TestLaunchApkAssetProofFailsForMissingNativeLibrary();
+    TestLaunchApkLifecycleProofCommandRunsFixture();
+    TestLaunchApkLifecycleProofTracksSessionMetadata();
+    TestNativeApkLifecycleLooperDispatchesStatesDeterministically();
+    TestNativeApkLifecycleInputQueueRejectsMalformedEvents();
+    TestLaunchApkLifecycleProofFailsForMissingNativeLibrary();
+    TestLaunchApkDexProofCommandRunsFixture();
+    TestLaunchApkDexProofDetectsMultipleDexFilesDeterministically();
+    TestLaunchApkDexProofBlocksWhenDexMissing();
+    TestLaunchApkDexProofFailsForMalformedDex();
+    TestLaunchApkActivityProofCommandRunsFixture();
+    TestLaunchApkActivityProofTracksSessionArtifacts();
+    TestLaunchApkActivityProofBlocksWhenDexMissing();
+    TestLaunchApkActivityProofSurfacesPackageRegistryMetadata();
+    TestLaunchApkActivityProofBlocksOnMissingLauncher();
+    TestLaunchApkActivityProofBlocksOnAmbiguousLauncher();
+    TestLaunchApkActivityProofSupportsExplicitComponentResolution();
+    TestLaunchApkActivityProofBlocksOnPackageNotFound();
+    TestLaunchApkActivityProofBlocksOnUnsupportedExplicitComponent();
+    TestLaunchApkActivityProofOutputIsStableAcrossRepeatedRuns();
+    TestLaunchApkSelfHealProofCommandRunsFixture();
+    TestLaunchApkSelfHealProofRestagesMissingAssetBridge();
+    TestLaunchApkSelfHealProofRestartsBlockedSurface();
+    TestLaunchApkSelfHealProofRefreshesMissingBinderService();
+    TestLaunchApkSelfHealProofRebuildsDexBootstrap();
+    TestLaunchApkSelfHealProofRerunsIntentResolutionHonestly();
+    TestLaunchApkStorageProofCommandRunsFixture();
+    TestNativeApkStorageBridgeResolvesSafePathsAndRejectsEscapes();
+    TestLaunchApkStorageProofWritesReadableMarker();
+    TestLaunchApkSelfHealProofRepairsAppStorage();
+    TestLaunchApkPermissionsProofParsesRequestedPermissions();
+    TestLaunchApkPermissionsProofAllowsSensitiveStorageWhenGranted();
+  TestLaunchApkPermissionsProofDeniesSensitiveStorageWhenMissingPermission();
+  TestLaunchApkSelfHealProofSurfacesPermissionAndAppOpsHealth();
+  TestLaunchApkSelfHealProofRebuildsPermissionState();
+    TestLaunchApkPermissionsProofPersistsStateUnderSandbox();
+    TestLaunchApkPermissionsProofPersistenceRoundTripIsDeterministic();
+    TestLaunchApkPermissionsProofHealsMissingFiles();
+    TestLaunchApkPermissionsProofHealsMalformedFiles();
+    TestInspectApkPermissionsCommandReportsReadyContracts();
+    TestLaunchApkPermissionsProofHealsIncompatibleFiles();
+    TestLaunchApkPermissionsProofHealsStaleFiles();
+    TestLaunchApkPermissionsProofEmitsDeniedAudioCaptureDiagnostics();
+  TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();
     TestNativeRuntimeDiscoveryUsesCompatRootOverride();
     TestNativeRuntimeMetadataReadsStagedPackage();
@@ -8213,8 +11868,10 @@ int main() {
     TestNativeRuntimePreflightReportsHostAppProcessCapabilityHonestly();
     TestNativeRuntimePreflightUsesHostDalvikvm64WithoutOverride();
     TestNativeRuntimePreflightRendersDetailedRecoveryContract();
+    TestNativeRuntimePreflightRendersCoreSubsystemProjection();
     TestNativeRuntimePreflightRendersTraceSourceDetails();
     TestNativeRuntimePreflightSelfHealingContractStaysDeterministicWithoutHostArt();
+    TestNativeRuntimePreflightCliSelfHealingContractStaysDeterministicWithoutHostArt();
     TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
     TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault();
     TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();
@@ -8223,8 +11880,10 @@ int main() {
     TestNativeRuntimeLaunchReportsHostAppProcessCapabilityHonestly();
     TestNativeRuntimeLaunchCanUseHostDalvikvm64WithoutOverride();
     TestNativeRuntimeLaunchRendersDetailedRecoveryContract();
+    TestNativeRuntimeLaunchRendersCoreSubsystemProjection();
     TestNativeRuntimeLaunchRendersTraceSourceDetails();
     TestNativeRuntimeLaunchSelfHealingContractStaysDeterministicWithoutHostArt();
+    TestNativeRuntimeLaunchCliSelfHealingContractStaysDeterministicWithoutHostArt();
     TestDesktopLaunchArtifactsForImeApp();
     TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();
     TestDesktopLaunchArtifactsRejectCrossPackageComponent();
@@ -8249,9 +11908,14 @@ int main() {
     TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage();
     TestInstalledPackageVerificationSuccessPath();
     TestInstalledPackageMatrixSuccessPath();
+    TestNativeInstalledPackageMatrixSurfacesReadySelfHealingContractWithOverride();
+    TestNativeInstalledPackageMatrixSurfacesBlockedSelfHealingContractWithoutHostArt();
+    TestNativeInstalledPackageMatrixCliSelfHealingContractStaysDeterministicWithoutHostArt();
     TestWaydroidPackageVerificationSuccessPath();
     TestWaydroidPackageMatrixSuccessPath();
     TestNativeInstalledPackageVerificationUsesPreflightAndOverrideBackedLaunch();
+    TestNativeInstalledPackageVerificationSurfacesBlockedSelfHealingContractWithoutHostArt();
+    TestNativeInstalledPackageVerificationCliSelfHealingContractStaysDeterministicWithoutHostArt();
     TestNativeInstalledPackageVerificationReportsNonCandidateFailureHonestly();
     TestWaydroidPackageMatrixCapturesFailure();
     TestApkHostVerificationImeSuccessPath();

@@ -301,6 +301,9 @@ void WriteLifecycleArtifacts(const NativeLifecycleShim& lifecycle) {
                    << "  \"binder_manager_metadata_path\": \""
                    << EscapeJson(lifecycle.binder_manager_metadata_path)
                    << "\",\n"
+                   << "  \"binder_lookup_summary_path\": \""
+                   << EscapeJson(lifecycle.binder_lookup_summary_path)
+                   << "\",\n"
                    << "  \"binder_lookup_log_path\": \""
                    << EscapeJson(lifecycle.binder_lookup_log_path) << "\",\n"
                    << "  \"binder_transaction_log_path\": \""
@@ -566,6 +569,9 @@ NativeLifecycleShim BuildNativeLifecycleShim(
   lifecycle.binder_manager_metadata_path =
       (fs::path(lifecycle.session_root) / "binder" / "service-manager.json")
           .string();
+  lifecycle.binder_lookup_summary_path =
+      (fs::path(lifecycle.session_root) / "binder" / "service-lookups.json")
+          .string();
   lifecycle.binder_lookup_log_path =
       (fs::path(lifecycle.session_root) / "binder" / "service-lookups.jsonl")
           .string();
@@ -591,12 +597,17 @@ NativeLifecycleShim BuildNativeLifecycleShim(
       {.package_name = bootstrap.plan.assessment.package_name,
        .launcher_component = bootstrap.plan.assessment.launcher_component,
        .apk_path = bootstrap.plan.apk_path,
-       .artifact_root = lifecycle.session_root});
+       .artifact_root = lifecycle.session_root,
+       .session_id = lifecycle.session_id,
+       .owner_process_identity =
+           "linuxoid-native-session:" + lifecycle.session_id});
   lifecycle.binder_service_manager_ready =
       lifecycle.binder_service_manager.manager_ready;
   lifecycle.binder_manager_metadata_path =
       lifecycle.binder_service_manager.metadata_path;
   lifecycle.service_registry_path = lifecycle.binder_service_manager.registry_path;
+  lifecycle.binder_lookup_summary_path =
+      lifecycle.binder_service_manager.lookup_summary_path;
   lifecycle.binder_lookup_log_path =
       lifecycle.binder_service_manager.lookup_log_path;
   lifecycle.binder_transaction_log_path =
@@ -614,6 +625,7 @@ NativeLifecycleShim BuildNativeLifecycleShim(
       FileExists(lifecycle.activity_state_path) &&
       FileExists(lifecycle.service_registry_path) &&
       FileExists(lifecycle.binder_manager_metadata_path) &&
+      FileExists(lifecycle.binder_lookup_summary_path) &&
       FileExists(lifecycle.binder_lookup_log_path) &&
       FileExists(lifecycle.binder_transaction_log_path) &&
       FileExists(lifecycle.binder_transport_log_path) &&
@@ -741,6 +753,7 @@ NativeLifecycleShim RunNativeProcessBootstrap(
       FileExists(lifecycle.activity_state_path) &&
       FileExists(lifecycle.service_registry_path) &&
       FileExists(lifecycle.binder_manager_metadata_path) &&
+      FileExists(lifecycle.binder_lookup_summary_path) &&
       FileExists(lifecycle.binder_lookup_log_path) &&
       FileExists(lifecycle.binder_transaction_log_path) &&
       FileExists(lifecycle.binder_transport_log_path) &&
@@ -772,6 +785,8 @@ std::string RenderNativeLifecycleShimReport(
   output << "Activity State File: " << lifecycle.activity_state_path << "\n";
   output << "Service Registry: " << lifecycle.service_registry_path << "\n";
   output << "Binder Manager Metadata: " << lifecycle.binder_manager_metadata_path
+         << "\n";
+  output << "Binder Lookup Summary: " << lifecycle.binder_lookup_summary_path
          << "\n";
   output << "Binder Lookup Log: " << lifecycle.binder_lookup_log_path << "\n";
   output << "Binder Transaction Log: " << lifecycle.binder_transaction_log_path
@@ -872,6 +887,8 @@ std::string RenderNativeProcessBootstrapJson(
          << EscapeJson(lifecycle.service_registry_path) << "\",\n"
          << "    \"binder_manager_metadata_path\": \""
          << EscapeJson(lifecycle.binder_manager_metadata_path) << "\",\n"
+         << "    \"binder_lookup_summary_path\": \""
+         << EscapeJson(lifecycle.binder_lookup_summary_path) << "\",\n"
          << "    \"binder_lookup_log_path\": \""
          << EscapeJson(lifecycle.binder_lookup_log_path) << "\",\n"
          << "    \"binder_transaction_log_path\": \""

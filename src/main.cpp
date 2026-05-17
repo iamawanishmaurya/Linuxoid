@@ -1,5 +1,6 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
+#include "wfa/apk_native_launch.hpp"
 #include "wfa/art_activity_bootstrap_fixture.hpp"
 #include "wfa/art_bootstrap_execution_fixture.hpp"
 #include "wfa/art_classloader_fixture.hpp"
@@ -39,6 +40,17 @@ void PrintUsage() {
       << "  compatctl foundation\n"
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
+      << "  compatctl launch-apk <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --surface-proof <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --asset-proof <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --lifecycle-proof <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --dex-proof <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --storage-proof <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --permissions-proof <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --activity-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --self-heal-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk-surface <apk-path> [staging-root]\n"
+      << "  compatctl inspect-apk-permissions <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-resources <apk-path> [resource-root-or-dash]\n"
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
@@ -223,6 +235,128 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
 
+    if (command == "launch-apk" || command == "launch-apk-surface") {
+      const bool command_requests_surface = command == "launch-apk-surface";
+      bool surface_proof_requested = command_requests_surface;
+      bool asset_proof_requested = false;
+      bool lifecycle_proof_requested = false;
+      bool dex_proof_requested = false;
+      bool activity_proof_requested = false;
+      bool storage_proof_requested = false;
+      bool permissions_proof_requested = false;
+      bool self_heal_proof_requested = false;
+      std::string requested_package_name;
+      std::string requested_component;
+      int apk_arg_index = 2;
+      while (apk_arg_index < argc) {
+        const std::string argument = argv[apk_arg_index];
+        if (argument == "--surface-proof") {
+          surface_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
+        if (argument == "--asset-proof") {
+          asset_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
+        if (argument == "--lifecycle-proof") {
+          lifecycle_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
+        if (argument == "--dex-proof") {
+          dex_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
+        if (argument == "--storage-proof") {
+          storage_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
+        if (argument == "--permissions-proof") {
+          permissions_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
+        if (argument == "--activity-proof") {
+          activity_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
+        if (argument == "--self-heal-proof") {
+          self_heal_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
+        if (argument == "--package" && apk_arg_index + 1 < argc) {
+          requested_package_name = argv[apk_arg_index + 1];
+          apk_arg_index += 2;
+          continue;
+        }
+        if (argument == "--component" && apk_arg_index + 1 < argc) {
+          requested_component = argv[apk_arg_index + 1];
+          apk_arg_index += 2;
+          continue;
+        }
+        break;
+      }
+
+      const int remaining_arguments = argc - apk_arg_index;
+      if (remaining_arguments < 1 || remaining_arguments > 2) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const wfa::NativeApkLaunchOptions options{
+          .staging_root = remaining_arguments == 2
+                              ? argv[apk_arg_index + 1]
+                              : "/tmp/linuxoid-apk-launch",
+          .requested_package_name = requested_package_name,
+          .requested_component = requested_component,
+          .watchdog_seconds = 1,
+          .surface_proof_requested = surface_proof_requested,
+          .asset_proof_requested = asset_proof_requested,
+          .lifecycle_proof_requested = lifecycle_proof_requested,
+          .dex_proof_requested = dex_proof_requested,
+          .activity_proof_requested = activity_proof_requested,
+          .storage_proof_requested = storage_proof_requested,
+          .permissions_proof_requested = permissions_proof_requested,
+          .self_heal_proof_requested = self_heal_proof_requested,
+      };
+      const auto report = wfa::LaunchNativeApk(argv[apk_arg_index], options);
+      std::cout << wfa::RenderNativeApkLaunchJson(report);
+      const bool success = report.launch_ready &&
+                           (!report.surface_proof_requested ||
+                           report.surface_proof_ready) &&
+                           (!report.asset_proof_requested ||
+                            (report.asset_bridge.ready &&
+                             report.resource_bridge.ready)) &&
+                           (!report.storage_proof_requested ||
+                            report.storage.ready) &&
+                           (!report.permissions_proof_requested ||
+                            (report.permissions.ready &&
+                             report.app_ops.ready)) &&
+                           (!report.lifecycle_proof_requested ||
+                            (report.lifecycle.ready && report.looper.ready &&
+                             report.input_queue.ready)) &&
+                           (!report.dex_proof_requested ||
+                            (report.dex.ready &&
+                             report.art_bootstrap.ready)) &&
+                           (!report.activity_proof_requested ||
+                           (report.package_manager.ready &&
+                             report.intent_resolution.ready &&
+                             report.activity_launch.ready)) &&
+                           (!report.self_heal_proof_requested ||
+                            (report.self_healing_android_device.ready &&
+                             (report.self_healing_android_device.final_health ==
+                                  "healthy" ||
+                              report.self_healing_android_device.final_health ==
+                                  "recovered")));
+      return success ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
     if (command == "inspect-apk-resources") {
       if (argc < 3 || argc > 4) {
         PrintUsage();
@@ -234,6 +368,25 @@ int main(int argc, char** argv) {
       const auto report = wfa::InspectApkResourceReadiness(argv[2], resource_root);
       std::cout << wfa::RenderApkResourceReadinessJson(report);
       return report.manifest.manifest_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "inspect-apk-permissions") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const wfa::NativeApkLaunchOptions options{
+          .staging_root = argc == 4 ? argv[3] : "/tmp/linuxoid-apk-launch",
+          .watchdog_seconds = 1,
+          .storage_proof_requested = true,
+          .permissions_proof_requested = true,
+      };
+      const auto report = wfa::LaunchNativeApk(argv[2], options);
+      std::cout << wfa::RenderNativeApkLaunchJson(report);
+      const bool success =
+          report.storage.ready && report.permissions.ready && report.app_ops.ready;
+      return success ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "plan-native-spike") {

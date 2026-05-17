@@ -24,6 +24,7 @@ struct NativeLifecycleShim {
   std::string activity_state_path;
   std::string service_registry_path;
   std::string binder_manager_metadata_path;
+  std::string binder_lookup_summary_path;
   std::string binder_lookup_log_path;
   std::string binder_transaction_log_path;
   std::string binder_transport_log_path;

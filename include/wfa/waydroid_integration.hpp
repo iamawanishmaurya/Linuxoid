@@ -26,6 +26,7 @@ struct InstalledPackageVerificationReport {
   std::string serial;
   std::string package_name;
   std::string component;
+  RuntimePreflightReport runtime_preflight;
   bool preflight_ok = false;
   bool target_discovered = false;
   bool package_visible = false;

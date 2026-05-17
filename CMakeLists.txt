@@ -44,6 +44,14 @@ target_include_directories(wfa_core PUBLIC include)
 
 add_library(
   linuxoid_p1
+  src/apk_activity_launch_bridge.cpp
+  src/apk_asset_bridge.cpp
+  src/apk_dex_bridge.cpp
+  src/apk_lifecycle_bridge.cpp
+  src/apk_native_launch.cpp
+  src/apk_permission_bridge.cpp
+  src/apk_self_healing_watchdog.cpp
+  src/apk_storage_bridge.cpp
   src/asset_manager_stub.cpp
   src/jni_stub.cpp
   src/looper_stub.cpp
@@ -55,7 +63,7 @@ add_library(
   src/signal_handler.cpp
 )
 target_include_directories(linuxoid_p1 PUBLIC include)
-target_link_libraries(linuxoid_p1 PUBLIC dl)
+target_link_libraries(linuxoid_p1 PUBLIC dl wfa_core)
 if(WAYLAND_CLIENT_INCLUDE_DIR AND WAYLAND_CLIENT_LIBRARY)
   target_include_directories(linuxoid_p1 PRIVATE ${WAYLAND_CLIENT_INCLUDE_DIR})
   target_link_libraries(linuxoid_p1 PUBLIC ${WAYLAND_CLIENT_LIBRARY})

@@ -15,6 +15,18 @@ namespace {
 
 namespace fs = std::filesystem;
 
+std::string JoinStrings(const std::vector<std::string>& values,
+                        const std::string& delimiter) {
+  std::ostringstream output;
+  for (std::size_t index = 0; index < values.size(); ++index) {
+    if (index > 0) {
+      output << delimiter;
+    }
+    output << values[index];
+  }
+  return output.str();
+}
+
 std::string QuoteForShell(const std::string& value) {
   std::string quoted = "'";
   for (const char character : value) {
@@ -43,6 +55,132 @@ bool VerificationPassed(const InstalledPackageVerificationReport& report) {
   return report.preflight_ok && report.direct_launch_ok &&
          report.launcher_generation_ok &&
          report.generated_launcher_ok;
+}
+
+bool ShouldRenderRuntimePreflightSummary(
+    const InstalledPackageVerificationReport& report) {
+  return report.backend_name == "native" ||
+         !report.runtime_preflight.runtime_health_json_path.empty();
+}
+
+void AppendRuntimePreflightSummary(std::ostream& output,
+                                   const RuntimePreflightReport& preflight,
+                                   const std::string& indent) {
+  if (!preflight.art_runtime_probe_source.empty()) {
+    output << indent << "ART Runtime Probe Source: "
+           << preflight.art_runtime_probe_source << '\n';
+  }
+  if (!preflight.art_runtime_probe_capability.empty()) {
+    output << indent << "ART Runtime Probe Capability: "
+           << preflight.art_runtime_probe_capability << '\n';
+  }
+  output << indent << "Runtime Probe Ready: "
+         << (preflight.runtime_probe_ready ? "yes" : "no") << '\n';
+  output << indent << "Bootstrap Planned: "
+         << (preflight.bootstrap_planned ? "yes" : "no") << '\n';
+  if (!preflight.runtime_health_classification.empty()) {
+    output << indent << "Runtime Health Classification: "
+           << preflight.runtime_health_classification << '\n';
+  }
+  output << indent << "Runtime Overall Ready: "
+         << (preflight.runtime_overall_ready ? "yes" : "no") << '\n';
+  output << indent << "Runtime Core Subsystems Ready: "
+         << (preflight.core_subsystems_ready ? "yes" : "no") << '\n';
+  output << indent << "Runtime Core Subsystem Count: "
+         << preflight.core_subsystem_count << '\n';
+  output << indent << "Runtime Core Ready Subsystem Count: "
+         << preflight.core_ready_subsystem_count << '\n';
+  output << indent << "Runtime Core Subsystems: "
+         << (preflight.core_subsystems.empty()
+                 ? "none"
+                 : JoinStrings(preflight.core_subsystems, ", "))
+         << '\n';
+  output << indent << "Runtime Core Subsystem Details: "
+         << (preflight.core_subsystem_details.empty()
+                 ? "none"
+                 : JoinStrings(preflight.core_subsystem_details, ", "))
+         << '\n';
+  output << indent << "Runtime Dependency Blocked: "
+         << (preflight.dependency_blocked ? "yes" : "no") << '\n';
+  output << indent << "Runtime Failing Subsystem Count: "
+         << preflight.failing_subsystem_count << '\n';
+  output << indent << "Runtime Recovery Actions Selected: "
+         << preflight.recovery_actions_selected << '\n';
+  output << indent << "Runtime Selected Recovery Actions: "
+         << (preflight.selected_recovery_actions.empty()
+                 ? "none"
+                 : JoinStrings(preflight.selected_recovery_actions, ", "))
+         << '\n';
+  output << indent << "Runtime Selected Recovery Action Details: "
+         << (preflight.selected_recovery_action_details.empty()
+                 ? "none"
+                 : JoinStrings(preflight.selected_recovery_action_details, ", "))
+         << '\n';
+  output << indent << "Runtime Canonical Recovery Scenario Count: "
+         << preflight.canonical_recovery_scenario_count << '\n';
+  output << indent << "Runtime Canonical Recovery Scenarios: "
+         << (preflight.canonical_recovery_scenarios.empty()
+                 ? "none"
+                 : JoinStrings(preflight.canonical_recovery_scenarios, ", "))
+         << '\n';
+  output << indent << "Runtime Canonical Recovery Scenario Details: "
+         << (preflight.canonical_recovery_scenario_details.empty()
+                 ? "none"
+                 : JoinStrings(preflight.canonical_recovery_scenario_details,
+                               ", "))
+         << '\n';
+  if (!preflight.runtime_health_trace_jsonl_path.empty()) {
+    output << indent << "Runtime Health Trace Path: "
+           << preflight.runtime_health_trace_jsonl_path << '\n';
+  }
+  if (!preflight.runtime_recovery_actions_jsonl_path.empty()) {
+    output << indent << "Runtime Recovery Actions Trace Path: "
+           << preflight.runtime_recovery_actions_jsonl_path << '\n';
+  }
+  if (!preflight.runtime_health_replay_json_path.empty()) {
+    output << indent << "Runtime Health Replay Path: "
+           << preflight.runtime_health_replay_json_path << '\n';
+  }
+  if (!preflight.runtime_health_replay_command.empty()) {
+    output << indent << "Runtime Health Replay Command: "
+           << preflight.runtime_health_replay_command << '\n';
+  }
+  if (!preflight.runtime_diagnostic_replay_json_path.empty()) {
+    output << indent << "Runtime Diagnostic Replay Path: "
+           << preflight.runtime_diagnostic_replay_json_path << '\n';
+  }
+  output << indent << "Runtime Diagnostic Replay Ready: "
+         << (preflight.runtime_diagnostic_replay_ready ? "yes" : "no")
+         << '\n';
+  output << indent << "Runtime Trace Bundle Complete: "
+         << (preflight.runtime_trace_bundle_complete ? "yes" : "no") << '\n';
+  output << indent << "Runtime Canonical Trace Source Count: "
+         << preflight.runtime_canonical_trace_source_count << '\n';
+  output << indent << "Runtime Trace Sources Found: "
+         << preflight.runtime_trace_sources_found << '\n';
+  output << indent << "Runtime Missing Trace Source Count: "
+         << preflight.runtime_missing_trace_source_count << '\n';
+  output << indent << "Runtime Trace Source Details: "
+         << (preflight.runtime_trace_source_details.empty()
+                 ? "none"
+                 : JoinStrings(preflight.runtime_trace_source_details, ", "))
+         << '\n';
+  if (!preflight.runtime_diagnostic_replay_command.empty()) {
+    output << indent << "Runtime Diagnostic Replay Command: "
+           << preflight.runtime_diagnostic_replay_command << '\n';
+  }
+  if (!preflight.runtime_diagnostic_fixture_command.empty()) {
+    output << indent << "Runtime Diagnostic Fixture Command: "
+           << preflight.runtime_diagnostic_fixture_command << '\n';
+  }
+  if (!preflight.runtime_diagnostic_trace_index_path.empty()) {
+    output << indent << "Runtime Diagnostic Trace Index Path: "
+           << preflight.runtime_diagnostic_trace_index_path << '\n';
+  }
+  if (!preflight.runtime_diagnostic_events_jsonl_path.empty()) {
+    output << indent << "Runtime Diagnostic Events Path: "
+           << preflight.runtime_diagnostic_events_jsonl_path << '\n';
+  }
 }
 
 int CalculateInstalledMatrixProgress(const InstalledPackageMatrixReport& report) {
@@ -106,6 +244,7 @@ InstalledPackageVerificationReport VerifyInstalledPackageWithRunners(
        .package_name = spec.package_name,
        .component = spec.component},
       runtime_runner);
+  report.runtime_preflight = preflight;
   report.serial = preflight.serial.empty() ? spec.serial : preflight.serial;
   report.component = preflight.component.empty() ? spec.component : preflight.component;
   report.preflight_ok = preflight.ready_for_launch;
@@ -247,6 +386,9 @@ std::string RenderInstalledPackageVerificationReport(
          << '\n';
   output << "Component Ready: " << (report.component_ready ? "yes" : "no")
          << '\n';
+  if (ShouldRenderRuntimePreflightSummary(report)) {
+    AppendRuntimePreflightSummary(output, report.runtime_preflight, "");
+  }
   output << "Preflight Notes: " << report.preflight_notes << '\n';
   output << "Direct Launch OK: " << (report.direct_launch_ok ? "yes" : "no")
          << '\n';
@@ -294,6 +436,10 @@ std::string RenderInstalledPackageMatrixReport(
            << '\n';
     if (!entry.component.empty()) {
       output << "    Component: " << entry.component << '\n';
+    }
+    if (ShouldRenderRuntimePreflightSummary(entry.verification)) {
+      AppendRuntimePreflightSummary(output, entry.verification.runtime_preflight,
+                                    "    ");
     }
     if (!entry.error.empty()) {
       output << "    Error: " << entry.error << '\n';
