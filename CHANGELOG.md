@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.60 - 2026-05-17
+
+- Strengthen the deterministic recovery contract at the public CLI surface by adding a scenario-matrix regression for `native-runtime-recovery-plan`, proving the four requested recovery cases stay mapped to the same action names and action ranks: missing artifact, failed native load, unavailable display, and failed service lookup.
+
 ## v0.1.59 - 2026-05-17
 
 - Lock the Self-Healing Android Device runtime health contract more explicitly by adding a regression that proves the six core subsystem records appear in deterministic order with stable artifact paths and JSON output: `apk_staging`, `native_loading`, `surface_readiness`, `input_queue_readiness`, `binder_service_readiness`, and `dex_classloader_readiness`.

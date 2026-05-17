@@ -3848,6 +3848,87 @@ void TestRuntimeRecoveryPlanCommandWritesStableJson() {
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeRecoveryPlanCommandCoreScenariosStayDeterministic() {
+  namespace fs = std::filesystem;
+  auto missing_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-command-missing", true, true);
+  auto native_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-command-native", true, true);
+  auto display_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-command-display", true, true);
+  auto binder_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-recovery-command-binder", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  auto run_command = [&](const std::string& manifest_path,
+                         const std::string& scenario_name) {
+    int exit_code = 0;
+    const std::string output = ReadCommandOutput(
+        compatctl.string() + " native-runtime-recovery-plan " + manifest_path +
+            " " + scenario_name,
+        &exit_code);
+    Expect(exit_code == 0,
+           "expected native-runtime-recovery-plan scenario command success");
+    return output;
+  };
+
+  const std::string missing_output = run_command(
+      missing_fixture.bootstrap.bootstrap_manifest_path, "missing_artifact");
+  const std::string native_output = run_command(
+      native_fixture.bootstrap.bootstrap_manifest_path, "failed_native_load");
+  const std::string display_output = run_command(
+      display_fixture.bootstrap.bootstrap_manifest_path, "unavailable_display");
+  const std::string binder_output = run_command(
+      binder_fixture.bootstrap.bootstrap_manifest_path,
+      "failed_service_lookup");
+
+  Expect(missing_output.find("\"scenario_name\": \"missing_artifact\"") !=
+             std::string::npos,
+         "expected missing-artifact scenario name in command json");
+  Expect(missing_output.find("\"action_name\": \"restage_apk_bundle\"") !=
+             std::string::npos,
+         "expected restage action in missing-artifact command json");
+  Expect(missing_output.find("\"action_rank\": 10") != std::string::npos,
+         "expected deterministic missing-artifact rank in command json");
+
+  Expect(native_output.find("\"scenario_name\": \"failed_native_load\"") !=
+             std::string::npos,
+         "expected failed-native-load scenario name in command json");
+  Expect(native_output.find(
+             "\"action_name\": "
+             "\"retry_native_load_after_bundle_refresh\"") !=
+             std::string::npos,
+         "expected native-load retry action in command json");
+  Expect(native_output.find("\"action_rank\": 20") != std::string::npos,
+         "expected deterministic native-load rank in command json");
+
+  Expect(display_output.find("\"scenario_name\": \"unavailable_display\"") !=
+             std::string::npos,
+         "expected unavailable-display scenario name in command json");
+  Expect(display_output.find(
+             "\"action_name\": \"fallback_to_headless_surface_probe\"") !=
+             std::string::npos,
+         "expected headless fallback action in command json");
+  Expect(display_output.find("\"action_rank\": 30") != std::string::npos,
+         "expected deterministic display rank in command json");
+
+  Expect(binder_output.find("\"scenario_name\": \"failed_service_lookup\"") !=
+             std::string::npos,
+         "expected failed-service-lookup scenario name in command json");
+  Expect(binder_output.find(
+             "\"action_name\": "
+             "\"rebuild_service_registry_and_retry_lookup\"") !=
+             std::string::npos,
+         "expected binder retry action in command json");
+  Expect(binder_output.find("\"action_rank\": 40") != std::string::npos,
+         "expected deterministic binder rank in command json");
+
+  fs::remove_all(missing_fixture.root);
+  fs::remove_all(native_fixture.root);
+  fs::remove_all(display_fixture.root);
+  fs::remove_all(binder_fixture.root);
+}
+
 void TestNativeLifecycleShimWritesSessionArtifacts() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "linuxoid-native-lifecycle-test";
@@ -6141,6 +6222,7 @@ int main() {
     TestRuntimeRecoveryPlanWritesStableArtifacts();
     TestRuntimeRecoveryPlanScenariosSelectDeterministicActions();
     TestRuntimeRecoveryPlanCommandWritesStableJson();
+    TestRuntimeRecoveryPlanCommandCoreScenariosStayDeterministic();
     TestNativeArtClassloaderFixtureWritesStableArtifacts();
     TestNativeArtClassloaderFixtureHandlesMissingDexHonestly();
     TestNativeArtClassloaderCommandWritesStableJson();
