@@ -29,6 +29,7 @@ namespace {
 struct WorkingHealthState {
   bool launch_ready = false;
   bool surface_ready = false;
+  bool window_ready = false;
   bool asset_ready = false;
   bool resource_ready = false;
   bool lifecycle_ready = false;
@@ -142,6 +143,8 @@ WorkingHealthState BuildWorkingHealthState(
   return {.launch_ready = report.launch_ready,
           .surface_ready = !report.surface_proof_requested ||
                            report.surface_proof_ready,
+          .window_ready = !report.window_proof_requested ||
+                          report.window_manager.ready,
           .asset_ready =
               !report.asset_proof_requested || report.asset_bridge.ready,
           .resource_ready = !report.asset_proof_requested ||
@@ -182,7 +185,8 @@ WorkingHealthState BuildWorkingHealthState(
 
 bool AllContractsReady(const NativeApkLaunchReport& report,
                        const WorkingHealthState& state) {
-  return state.launch_ready && state.surface_ready && state.asset_ready &&
+  return state.launch_ready && state.surface_ready && state.window_ready &&
+         state.asset_ready &&
          state.resource_ready && state.lifecycle_ready && state.looper_ready &&
          state.input_ready && state.binder_ready && state.dex_ready &&
          state.art_ready && state.package_manager_ready &&
@@ -206,8 +210,8 @@ std::string ClassifyHealth(const NativeApkLaunchReport& report,
     return "healthy";
   }
   const bool blocking_issue =
-      !state.launch_ready || !state.surface_ready || !state.lifecycle_ready ||
-      !state.looper_ready || !state.input_ready || !state.binder_ready ||
+      !state.launch_ready || !state.surface_ready || !state.window_ready ||
+      !state.lifecycle_ready || !state.looper_ready || !state.input_ready || !state.binder_ready ||
       !state.dex_ready || !state.art_ready || !state.package_manager_ready ||
       !state.intent_resolution_ready || !state.activity_launch_ready ||
       !state.storage_ready || !state.sandbox_ready ||
@@ -263,6 +267,9 @@ std::string DetermineRecommendedNextAction(
   }
   if (!state.activity_manager_ready || !state.process_ready) {
     return "rebuild_process_manager_state";
+  }
+  if (!state.window_ready) {
+    return "rebuild_window_manager_state";
   }
   if (!state.launch_ready) {
     return "safe_mode_launch";
@@ -518,6 +525,89 @@ NativeApkProcessManagerSession BuildProcessSession(
        .allow_persisted_contract_repair = true});
 }
 
+NativeApkWindowManagerSession BuildWindowSession(
+    const NativeApkLaunchReport& report, const WorkingHealthState& state) {
+  const fs::path app_data_dir =
+      !report.storage.app_data_dir.empty()
+          ? fs::path(report.storage.app_data_dir)
+          : (fs::path(report.sandbox_root) / "data" / "data" /
+             report.package_name);
+  return NativeApkWindowManagerSession(
+      {.session_id = report.package_name + ":" + report.install_id +
+                     ":self-heal-window-manager",
+       .package_name = report.package_name,
+       .requested_package_name = report.requested_package_name,
+       .requested_component = report.requested_component,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .sandbox_root = report.sandbox_root,
+       .app_data_dir = app_data_dir.string(),
+       .artifact_root = (app_data_dir / "window-manager").string(),
+       .install_id = report.install_id,
+       .version_name = report.version_name,
+       .version_code = report.version_code,
+       .user_id = report.permissions.user_id,
+       .app_id = report.permissions.app_id,
+       .uid_placeholder = report.storage.uid_placeholder,
+       .gid_placeholder = report.storage.gid_placeholder,
+       .launch_status = report.launch_status,
+       .launch_ready = report.launch_ready,
+       .recoverable = report.recoverable,
+       .launcher_component = report.launcher_component,
+       .resolved_component = report.intent_resolution.resolved_component,
+       .activity_launch_status = report.activity_launch.activity_launch_status,
+       .activity_launch_blocking_reason =
+           report.activity_launch.blocking_reason,
+       .activity_launch_recovery_action =
+           report.activity_launch.recommended_recovery_action,
+       .lifecycle_state = report.lifecycle.current_state,
+       .process_identity = report.process_manager.process_identity,
+       .process_name = report.process_manager.process_name,
+       .pid_value = report.process_manager.pid_value,
+       .pid_source = report.process_manager.pid_source,
+       .surface_session_id = report.surface.session_id,
+       .surface_session_root = report.surface.session_root,
+       .surface_metadata_path = report.surface.metadata_path,
+       .surface_event_log_path = report.surface.event_log_path,
+       .surface_marker_path = report.surface.marker_path,
+       .surface_state = state.surface_ready ? "recovered" : report.surface.state,
+       .surface_backend = report.surface.backend,
+       .surface_backing_mode = report.surface.backing_mode,
+       .surface_width = report.surface.width > 0 ? report.surface.width : 328,
+       .surface_height = report.surface.height > 0 ? report.surface.height : 244,
+       .surface_format = report.surface.format > 0 ? report.surface.format : 1,
+       .surface_first_frame_presented = state.surface_ready,
+       .surface_created = state.surface_ready,
+       .wayland_surface_available = report.surface.wayland_surface_available,
+       .egl_surface_available = report.surface.egl_surface_available,
+       .surface_recovered = state.surface_ready && report.surface_health != "ready",
+       .storage_health = state.storage_ready ? "ready" : report.storage_health,
+       .sandbox_health = state.sandbox_ready ? "ready" : report.sandbox_health,
+       .permission_health =
+           state.permission_ready ? "ready" : report.permission_health,
+       .app_ops_health = state.app_ops_ready ? "ready" : report.app_ops_health,
+       .binder_health = state.binder_ready ? "ready" : report.binder_health,
+       .surface_health = state.surface_ready ? "ready" : report.surface_health,
+       .lifecycle_health =
+           state.lifecycle_ready ? "ready" : report.lifecycle_health,
+       .looper_health = state.looper_ready ? "ready" : report.looper_health,
+       .input_health = state.input_ready ? "ready" : report.input_health,
+       .dex_health = state.dex_ready ? "ready" : report.dex_health,
+       .art_health = state.art_ready ? "ready" : report.art_health,
+       .activity_health =
+           state.activity_launch_ready ? "ready" : report.activity_health,
+       .activity_manager_health = state.activity_manager_ready
+                                      ? "ready"
+                                      : report.activity_manager_health,
+       .process_health =
+           state.process_ready ? "ready" : report.process_health,
+       .activity_manager_ready = state.activity_manager_ready,
+       .process_ready = state.process_ready,
+       .persisted_artifact_root_preexisting =
+           fs::exists(app_data_dir / "window-manager"),
+       .allow_persisted_contract_repair = true});
+}
+
 bool AttemptRestageAssets(const NativeApkLaunchReport& report,
                           WorkingHealthState* state,
                           std::vector<std::string>* errors) {
@@ -607,6 +697,17 @@ bool AttemptRebuildProcessManagerState(const NativeApkLaunchReport& report,
   state->activity_manager_ready = activity_manager.ready;
   state->process_ready = process_manager.ready;
   return state->activity_manager_ready && state->process_ready;
+}
+
+bool AttemptRebuildWindowManagerState(const NativeApkLaunchReport& report,
+                                      WorkingHealthState* state,
+                                      std::vector<std::string>* errors) {
+  const auto window_manager = BuildWindowSession(report, *state).BuildReport();
+  for (const auto& error : window_manager.errors) {
+    AppendError(errors, error);
+  }
+  state->window_ready = window_manager.ready;
+  return state->window_ready;
 }
 
 bool AttemptRestartSurface(const NativeApkLaunchReport& report,
@@ -838,6 +939,8 @@ void WriteRecoveryReport(const SelfHealingAndroidDeviceReport& report) {
          << EscapeJson(report.activity_manager_health) << "\",\n"
          << "  \"process_health\": \"" << EscapeJson(report.process_health)
          << "\",\n"
+         << "  \"window_health\": \"" << EscapeJson(report.window_health)
+         << "\",\n"
          << "  \"recoverable\": " << (report.recoverable ? "true" : "false")
          << ",\n"
          << "  \"actions_attempted\": " << report.actions_attempted << ",\n"
@@ -901,6 +1004,7 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
   watchdog.app_ops_health = report_.app_ops_health;
   watchdog.activity_manager_health = report_.activity_manager_health;
   watchdog.process_health = report_.process_health;
+  watchdog.window_health = report_.window_health;
 
   auto attempt_action = [&](const std::string& subsystem,
                             const std::string& reason,
@@ -1028,6 +1132,14 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
                                                                 errors);
                      });
     }
+    if (report_.window_proof_requested && !state.window_ready) {
+      attempt_action("window_manager", "window_health_blocked",
+                     "rebuild_window_manager_state",
+                     [&](std::vector<std::string>* errors) {
+                       return AttemptRebuildWindowManagerState(report_, &state,
+                                                               errors);
+                     });
+    }
     if (!state.launch_ready && watchdog.actions.empty()) {
       attempt_action("launch", "launch_not_ready", "safe_mode_launch",
                      [&](std::vector<std::string>* errors) {
@@ -1062,6 +1174,8 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
                                    : report_.activity_manager_health;
   watchdog.process_health =
       state.process_ready ? "ready" : report_.process_health;
+  watchdog.window_health =
+      state.window_ready ? "ready" : report_.window_health;
   watchdog.recoverable = state.recoverable;
   watchdog.recommended_next_action =
       DetermineRecommendedNextAction(report_, state);

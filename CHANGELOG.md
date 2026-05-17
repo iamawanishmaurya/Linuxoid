@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.105 - 2026-05-18
+
+- Implement **P12 WindowManager + Wayland/EGL Surface Contract** on the direct `launch-apk` path through `--window-proof` and `inspect-apk-window`, extending the staged APK session into a Linuxoid-owned `window_manager` contract that maps activity/process identity onto the existing native surface proof without Waydroid, emulator, or ADB.
+- Persist deterministic window-manager artifacts under `sandbox/data/data/<package>/window-manager/window-state.json`, `window-session-map.json`, and `window-events.jsonl`, and validate or heal missing, malformed, incomplete, stale, or incompatible window-manager state without claiming full Android WindowManagerService or production compositor compatibility.
+- Extend the Self-Healing Android Device watchdog so it now consumes `window_health`, records deterministic `rebuild_window_manager_state` recovery attempts in `self-healing-android-device/recovery-journal.jsonl`, and can rebuild blocked window-manager contracts after upstream surface, process, storage, permission/AppOps, Binder, lifecycle, or DEX/bootstrap repairs converge.
+- Add regression coverage for direct window-proof success, deterministic surface/session mapping, focused `inspect-apk-window` operator output, CLI healing of malformed window-manager artifacts, window recovery after blocked-surface repair, and preservation of the existing P2 through P11 behavior.
+- Update repo docs and status output to make **P12 WindowManager + Wayland/EGL Surface Contract** the current direct-runtime slice and point the next handoff at **P13 Runtime Process Handoff + Resume Contract**.
+
 ## v0.1.104 - 2026-05-18
 
 - Implement **P11 Minimal ActivityManager/ProcessManager Contract** on the direct `launch-apk` path through `--process-proof` and `inspect-apk-process`, extending the staged APK session into Linuxoid-owned `activity_manager` and `process_manager` contracts with deterministic process identity, lifecycle state, start reason, launch component, restart policy, termination policy, and sandbox-backed process artifacts.

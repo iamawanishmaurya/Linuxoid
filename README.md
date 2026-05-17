@@ -216,6 +216,8 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 - `compatctl launch-apk --activity-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`
 - `compatctl launch-apk --process-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`
 - `compatctl inspect-apk-process <apk-path> [staging-root]`
+- `compatctl launch-apk --window-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`
+- `compatctl inspect-apk-window <apk-path> [staging-root]`
 - `compatctl launch-apk --self-heal-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`
 - `compatctl launch-apk-surface <apk-path> [staging-root]`
 
@@ -233,7 +235,11 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 
 `inspect-apk-process` now gives that P11 contract a focused operator surface. It reuses the same sandbox-backed session data, heals missing, malformed, stale, or incompatible process-manager artifacts before trusting them, and returns stable JSON that exposes `activity_manager`, `process_manager`, `activity_manager_health`, `process_health`, and the current recovery guidance for the Self-Healing Android Device path.
 
-`--self-heal-proof` now runs the existing Self-Healing Android Device watchdog on top of that same staged APK session, and **P11 Minimal ActivityManager/ProcessManager Contract** extends the inputs it consumes with `activity_manager_health` and `process_health` alongside the earlier storage/sandbox and permission/AppOps contracts. The watchdog can now record and replay deterministic `rebuild_process_manager_state` attempts for missing, malformed, incomplete, stale, or incompatible sandbox-backed process-manager files alongside `rebuild_permission_state`, `repair_app_storage`, `restage_assets`, `restart_surface`, `refresh_binder_services`, `rebuild_dex_bootstrap`, and `rerun_intent_resolution`, without pretending real Android framework recovery already exists.
+`--window-proof` now implements **P12 WindowManager + Wayland/EGL Surface Contract** for the same direct APK session path. It binds the staged session to a Linuxoid-owned `window_manager` contract, persists deterministic `window-state.json`, `window-session-map.json`, and `window-events.jsonl` artifacts under `sandbox/data/data/<package>/window-manager`, maps the resolved activity and process identity onto the existing native surface proof, and exposes explicit `created`, `attached`, `visible`, `resized`, `hidden`, `destroyed`, `failed`, and `recovered` states without requiring a live Wayland display in CI. When a live Wayland/EGL environment is available, Linuxoid records that best-effort availability through `backing_mode` and probe metadata while keeping the contract headless-safe and honest.
+
+`inspect-apk-window` now gives that P12 contract a focused operator surface. It reuses the same sandbox-backed session data, heals missing, malformed, stale, incompatible, or incomplete window-manager artifacts before trusting them, and returns stable JSON that exposes `window_manager`, `window_health`, current package/activity/process/surface mappings, and the current recovery guidance for the Self-Healing Android Device path.
+
+`--self-heal-proof` now runs the existing Self-Healing Android Device watchdog on top of that same staged APK session, and **P12 WindowManager + Wayland/EGL Surface Contract** extends the inputs it consumes with `window_health` alongside `activity_manager_health` and `process_health`. The watchdog can now record and replay deterministic `rebuild_window_manager_state` attempts for missing, malformed, incomplete, stale, or incompatible sandbox-backed window-manager files alongside `rebuild_process_manager_state`, `rebuild_permission_state`, `repair_app_storage`, `restage_assets`, `restart_surface`, `refresh_binder_services`, `rebuild_dex_bootstrap`, and `rerun_intent_resolution`, without pretending real Android framework recovery already exists.
 
 Current P10 inspection flow:
 
@@ -244,19 +250,20 @@ Current P10 inspection flow:
   - `sandbox/data/data/<package>/permissions/permission-state.json`
   - `sandbox/data/data/<package>/permissions/app-ops.json`
 
-What remains blocked after P11:
+What remains blocked after P12:
 
 - real host-side process creation and liveness beyond the current Linuxoid placeholder process identity
 - real Java/Kotlin ART execution
+- real Android WindowManagerService / SurfaceFlinger behavior and production compositor compatibility
 - full Android `ActivityManagerService` / `ProcessList` behavior
 - full Android framework permission manager and AppOps service semantics
 
-Next phase: **P12 Runtime Process Handoff + Resume Contract**
+Next phase: **P13 Runtime Process Handoff + Resume Contract**
 
-P12 handoff from P11:
+P13 handoff from P12:
 
-- reuse the existing sandbox-backed `package_manager`, `intent_resolution`, `activity_launch`, `storage`, `permissions`, `app_ops`, `activity_manager`, and `process_manager` session contracts as the stable inputs for real process handoff and resume sequencing
-- treat `activity_manager_health`, `process_health`, `permission_health`, `app_ops_health`, `storage_health`, `sandbox_health`, `binder_health`, `dex_health`, and `activity_health` as first-class gating signals for Linuxoid runtime start, stop, and restart decisions
+- reuse the existing sandbox-backed `package_manager`, `intent_resolution`, `activity_launch`, `storage`, `permissions`, `app_ops`, `activity_manager`, `process_manager`, and `window_manager` session contracts as the stable inputs for real process handoff and resume sequencing
+- treat `activity_manager_health`, `process_health`, `window_health`, `permission_health`, `app_ops_health`, `storage_health`, `sandbox_health`, `binder_health`, `dex_health`, and `activity_health` as first-class gating signals for Linuxoid runtime start, stop, and restart decisions
 - keep the current Self-Healing Android Device recovery loop honest by distinguishing:
   - contract-ready metadata and process planning
   - real process creation, supervision, and resume ownership

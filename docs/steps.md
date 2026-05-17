@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: P12 WindowManager + Wayland/EGL Surface Contract GREEN
+  Action: Added `launch-apk --window-proof` and `inspect-apk-window`, persisted deterministic sandbox-backed `window-state.json`, `window-session-map.json`, and `window-events.jsonl` artifacts, mapped resolved activity plus process identity onto the existing native surface proof, validated or healed malformed/incomplete/stale/incompatible window-manager state, and threaded `window_health` back into the Self-Healing Android Device watchdog with deterministic `rebuild_window_manager_state` recovery.
+  Result: Linuxoid now has a Linuxoid-owned WindowManager/surface contract for direct APK sessions, plus an honest Self-Healing Android Device repair loop that can rebuild blocked or malformed window-manager state after upstream surface, process, storage, permission/AppOps, Binder, lifecycle, or DEX/bootstrap repairs converge.
+  Timestamp: 2026-05-18T23:58:00+05:30
+
 - Step: P11 ActivityManager ProcessManager Contract GREEN
   Action: Added `launch-apk --process-proof` and `inspect-apk-process`, persisted deterministic sandbox-backed `activity_manager` plus `process_manager` artifacts, validated or healed malformed/incomplete/stale/incompatible process-manager state, and threaded `activity_manager_health` plus `process_health` back into the Self-Healing Android Device watchdog with deterministic `rebuild_process_manager_state` recovery.
   Result: Linuxoid now has a Linuxoid-owned ActivityManager/ProcessManager contract for direct APK sessions, plus an honest Self-Healing Android Device repair loop that can rebuild blocked process-manager state after upstream storage, permission/AppOps, surface, Binder, lifecycle, or DEX/bootstrap repairs converge.

@@ -245,6 +245,7 @@ int main(int argc, char** argv) {
       bool dex_proof_requested = false;
       bool activity_proof_requested = false;
       bool process_proof_requested = false;
+      bool window_proof_requested = false;
       bool storage_proof_requested = false;
       bool permissions_proof_requested = false;
       bool self_heal_proof_requested = false;
@@ -293,6 +294,11 @@ int main(int argc, char** argv) {
           ++apk_arg_index;
           continue;
         }
+        if (argument == "--window-proof") {
+          window_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
         if (argument == "--self-heal-proof") {
           self_heal_proof_requested = true;
           ++apk_arg_index;
@@ -330,6 +336,7 @@ int main(int argc, char** argv) {
           .dex_proof_requested = dex_proof_requested,
           .activity_proof_requested = activity_proof_requested,
           .process_proof_requested = process_proof_requested,
+          .window_proof_requested = window_proof_requested,
           .storage_proof_requested = storage_proof_requested,
           .permissions_proof_requested = permissions_proof_requested,
           .self_heal_proof_requested = self_heal_proof_requested,
@@ -353,7 +360,8 @@ int main(int argc, char** argv) {
            (report.package_manager.ready && report.intent_resolution.ready &&
             report.activity_launch.ready)) &&
           (!report.process_proof_requested ||
-           (report.activity_manager.ready && report.process_manager.ready));
+           (report.activity_manager.ready && report.process_manager.ready)) &&
+          (!report.window_proof_requested || report.window_manager.ready);
       const bool self_heal_converged =
           report.self_healing_android_device.ready &&
           (report.self_healing_android_device.final_health == "healthy" ||
@@ -412,6 +420,22 @@ int main(int argc, char** argv) {
       const bool success = report.activity_manager.ready &&
                            report.process_manager.ready;
       return success ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "inspect-apk-window") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const wfa::NativeApkLaunchOptions options{
+          .staging_root = argc == 4 ? argv[3] : "/tmp/linuxoid-apk-launch",
+          .watchdog_seconds = 1,
+          .window_proof_requested = true,
+      };
+      const auto report = wfa::LaunchNativeApk(argv[2], options);
+      std::cout << wfa::RenderNativeApkLaunchJson(report);
+      return report.window_manager.ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "plan-native-spike") {

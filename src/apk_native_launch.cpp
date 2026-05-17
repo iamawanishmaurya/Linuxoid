@@ -489,6 +489,7 @@ std::string DetermineRecommendedRecoveryAction(
     const NativeApkLaunchReport& report) {
   if (report.launch_ready &&
       (!report.surface_proof_requested || report.surface_proof_ready) &&
+      (!report.window_proof_requested || report.window_manager.ready) &&
       (!report.asset_proof_requested || report.asset_bridge.ready) &&
       (!report.asset_proof_requested || report.resource_bridge.ready) &&
       (!report.storage_proof_requested || report.storage.ready) &&
@@ -617,6 +618,12 @@ std::string DetermineRecommendedRecoveryAction(
        !report.process_manager.ready)) {
     return "rebuild_process_manager_state";
   }
+  if (report.window_proof_requested &&
+      (report.window_health != "ready" || !report.window_manager.ready)) {
+    return report.window_manager.recommended_recovery_action == "none"
+               ? "rebuild_window_manager_state"
+               : report.window_manager.recommended_recovery_action;
+  }
   if (report.surface_proof_requested && !report.surface_proof_ready) {
     return "recreate_native_surface_session";
   }
@@ -626,6 +633,7 @@ std::string DetermineRecommendedRecoveryAction(
 bool DetermineRecoverable(const NativeApkLaunchReport& report) {
   if (report.launch_ready &&
       (!report.surface_proof_requested || report.surface_proof_ready) &&
+      (!report.window_proof_requested || report.window_manager.ready) &&
       (!report.asset_proof_requested || report.asset_bridge.ready) &&
       (!report.asset_proof_requested || report.resource_bridge.ready) &&
       (!report.storage_proof_requested || report.storage.ready) &&
@@ -855,6 +863,84 @@ NativeApkProcessManagerSession BuildProcessManagerBridgeSession(
        .allow_persisted_contract_repair = allow_persisted_contract_repair});
 }
 
+NativeApkWindowManagerSession BuildWindowManagerBridgeSession(
+    const NativeApkLaunchReport& report, bool allow_persisted_contract_repair,
+    bool surface_recovered = false) {
+  const fs::path app_data_dir =
+      !report.storage.app_data_dir.empty()
+          ? fs::path(report.storage.app_data_dir)
+          : (fs::path(report.sandbox_root) / "data" / "data" /
+             report.package_name);
+  const fs::path artifact_root = app_data_dir / "window-manager";
+  return NativeApkWindowManagerSession(
+      {.session_id =
+           report.package_name + ":" + report.install_id + ":window-manager",
+       .package_name = report.package_name,
+       .requested_package_name = report.requested_package_name,
+       .requested_component = report.requested_component,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .sandbox_root = report.sandbox_root,
+       .app_data_dir = app_data_dir.string(),
+       .artifact_root = artifact_root.string(),
+       .install_id = report.install_id,
+       .version_name = report.version_name,
+       .version_code = report.version_code,
+       .user_id = report.permissions.user_id,
+       .app_id = report.permissions.app_id,
+       .uid_placeholder = report.storage.uid_placeholder,
+       .gid_placeholder = report.storage.gid_placeholder,
+       .launch_status = report.launch_status,
+       .launch_ready = report.launch_ready,
+       .recoverable = report.recoverable,
+       .launcher_component = report.launcher_component,
+       .resolved_component = report.intent_resolution.resolved_component,
+       .activity_launch_status = report.activity_launch.activity_launch_status,
+       .activity_launch_blocking_reason =
+           report.activity_launch.blocking_reason,
+       .activity_launch_recovery_action =
+           report.activity_launch.recommended_recovery_action,
+       .lifecycle_state = report.lifecycle.current_state,
+       .process_identity = report.process_manager.process_identity,
+       .process_name = report.process_manager.process_name,
+       .pid_value = report.process_manager.pid_value,
+       .pid_source = report.process_manager.pid_source,
+       .surface_session_id = report.surface.session_id,
+       .surface_session_root = report.surface.session_root,
+       .surface_metadata_path = report.surface.metadata_path,
+       .surface_event_log_path = report.surface.event_log_path,
+       .surface_marker_path = report.surface.marker_path,
+       .surface_state = report.surface.state,
+       .surface_backend = report.surface.backend,
+       .surface_backing_mode = report.surface.backing_mode,
+       .surface_width = report.surface.width,
+       .surface_height = report.surface.height,
+       .surface_format = report.surface.format,
+       .surface_first_frame_presented = report.surface.first_frame_presented,
+       .surface_created = report.surface.surface_created,
+       .wayland_surface_available = report.surface.wayland_surface_available,
+       .egl_surface_available = report.surface.egl_surface_available,
+       .surface_recovered = surface_recovered,
+       .storage_health = report.storage_health,
+       .sandbox_health = report.sandbox_health,
+       .permission_health = report.permission_health,
+       .app_ops_health = report.app_ops_health,
+       .binder_health = report.binder_health,
+       .surface_health = report.surface_health,
+       .lifecycle_health = report.lifecycle_health,
+       .looper_health = report.looper_health,
+       .input_health = report.input_health,
+       .dex_health = report.dex_health,
+       .art_health = report.art_health,
+       .activity_health = report.activity_health,
+       .activity_manager_health = report.activity_manager_health,
+       .process_health = report.process_health,
+       .activity_manager_ready = report.activity_manager.ready,
+       .process_ready = report.process_manager.ready,
+       .persisted_artifact_root_preexisting = fs::exists(artifact_root),
+       .allow_persisted_contract_repair = allow_persisted_contract_repair});
+}
+
 NativeApkActivityLaunchBridgeSession BuildActivityLaunchBridgeSession(
     const NativeApkLaunchReport& report, const ParsedManifestMetadata& manifest) {
   return NativeApkActivityLaunchBridgeSession(
@@ -973,6 +1059,12 @@ void PopulateRequestedProofFailures(NativeApkLaunchReport* report) {
   } else {
     report->activity_manager_health = "not_requested";
     report->process_health = "not_requested";
+  }
+  if (report->window_proof_requested) {
+    report->window_manager.errors = report->errors;
+    report->window_health = "blocked";
+  } else {
+    report->window_health = "not_requested";
   }
   if (report->activity_proof_requested) {
     report->binder_health = "blocked";
@@ -1110,6 +1202,12 @@ void WriteSurfaceSessionMetadata(const NativeApkSurfaceSession& surface) {
          << "  \"selected_library_path\": \""
          << EscapeJson(surface.selected_library_path) << "\",\n"
          << "  \"backend\": \"" << EscapeJson(surface.backend) << "\",\n"
+         << "  \"backing_mode\": \"" << EscapeJson(surface.backing_mode)
+         << "\",\n"
+         << "  \"bridge_metadata_path\": \""
+         << EscapeJson(surface.bridge_metadata_path) << "\",\n"
+         << "  \"bridge_event_log_path\": \""
+         << EscapeJson(surface.bridge_event_log_path) << "\",\n"
          << "  \"state\": \"" << EscapeJson(surface.state) << "\",\n"
          << "  \"width\": " << surface.width << ",\n"
          << "  \"height\": " << surface.height << ",\n"
@@ -1228,6 +1326,15 @@ NativeApkSurfaceSession RunNativeApkSurfaceProof(
   surface.event_log_path =
       (fs::path(surface.session_root) / "surface-events.jsonl").string();
   surface.backend = "headless";
+  surface.backing_mode = "headless_fallback";
+  surface.bridge_metadata_path =
+      (fs::path(surface.session_root) / "bridge" /
+       "native-window-bridge-metadata.json")
+          .string();
+  surface.bridge_event_log_path =
+      (fs::path(surface.session_root) / "bridge" /
+       "native-window-bridge-events.jsonl")
+          .string();
 
   fs::create_directories(surface.session_root);
 
@@ -1244,6 +1351,9 @@ NativeApkSurfaceSession RunNativeApkSurfaceProof(
   const NativeWindowMetadata metadata = BuildSurfaceMetadata(options);
   const auto bridge = RunNativeWindowBridgeFixture(
       (fs::path(surface.session_root) / "bridge").string(), metadata);
+  surface.backing_mode = bridge.backing_mode;
+  surface.bridge_metadata_path = bridge.metadata_path;
+  surface.bridge_event_log_path = bridge.event_log_path;
   surface.wayland_surface_available = bridge.wayland_surface_created;
   surface.egl_surface_available = bridge.egl_pbuffer_created;
   if (!bridge.native_window_bridge_ready) {
@@ -1299,8 +1409,11 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
   report.requested_package_name = options.requested_package_name;
   report.requested_component = options.requested_component;
   report.self_heal_proof_requested = options.self_heal_proof_requested;
+  report.window_proof_requested =
+      options.window_proof_requested || options.self_heal_proof_requested;
   report.process_proof_requested =
-      options.process_proof_requested || options.self_heal_proof_requested;
+      options.process_proof_requested || report.window_proof_requested ||
+      options.self_heal_proof_requested;
   report.activity_proof_requested =
       options.activity_proof_requested || report.process_proof_requested ||
       options.self_heal_proof_requested;
@@ -1312,7 +1425,7 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       options.self_heal_proof_requested;
   report.surface_proof_requested =
       options.surface_proof_requested || report.activity_proof_requested ||
-      options.self_heal_proof_requested;
+      report.window_proof_requested || options.self_heal_proof_requested;
   report.asset_proof_requested =
       options.asset_proof_requested || options.self_heal_proof_requested;
   report.lifecycle_proof_requested =
@@ -1350,6 +1463,12 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
                 "local_activity_manager_contract_only");
     AppendError(&report.limitations,
                 "local_process_manager_contract_only");
+  }
+  if (report.window_proof_requested) {
+    AppendError(&report.limitations,
+                "local_window_manager_contract_only");
+    AppendError(&report.limitations,
+                "wayland_egl_best_effort_probe_only");
   }
   if (report.self_heal_proof_requested) {
     AppendError(&report.limitations,
@@ -1726,6 +1845,18 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
     report.process_health = "not_requested";
   }
 
+  if (report.window_proof_requested) {
+    report.window_manager = BuildWindowManagerBridgeSession(
+        report, !report.self_heal_proof_requested)
+                                .BuildReport();
+    report.window_health = report.window_manager.ready ? "ready" : "blocked";
+    for (const auto& error : report.window_manager.errors) {
+      AppendError(&report.errors, error);
+    }
+  } else {
+    report.window_health = "not_requested";
+  }
+
   const bool asset_contract_ready =
       !report.asset_proof_requested ||
       (report.asset_bridge.ready && report.resource_bridge.ready);
@@ -1747,9 +1878,12 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
   const bool process_contract_ready =
       !report.process_proof_requested ||
       (report.activity_manager.ready && report.process_manager.ready);
+  const bool window_contract_ready =
+      !report.window_proof_requested || report.window_manager.ready;
   report.launch_health =
       report.launch_ready &&
               (!report.surface_proof_requested || report.surface_proof_ready) &&
+              window_contract_ready &&
               asset_contract_ready &&
               storage_contract_ready &&
               permissions_contract_ready &&
@@ -1801,6 +1935,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << (report.activity_proof_requested ? "true" : "false") << ",\n"
          << "  \"process_proof_requested\": "
          << (report.process_proof_requested ? "true" : "false") << ",\n"
+         << "  \"window_proof_requested\": "
+         << (report.window_proof_requested ? "true" : "false") << ",\n"
          << "  \"storage_proof_requested\": "
          << (report.storage_proof_requested ? "true" : "false") << ",\n"
          << "  \"permissions_proof_requested\": "
@@ -1844,6 +1980,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "  \"launch_ready\": "
          << (report.launch_ready ? "true" : "false") << ",\n"
          << "  \"surface_health\": \"" << EscapeJson(report.surface_health)
+         << "\",\n"
+         << "  \"window_health\": \"" << EscapeJson(report.window_health)
          << "\",\n"
          << "  \"asset_health\": \"" << EscapeJson(report.asset_health)
          << "\",\n"
@@ -1904,6 +2042,12 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "    \"backend\": \"" << EscapeJson(report.surface.backend)
          << "\",\n"
+         << "    \"backing_mode\": \""
+         << EscapeJson(report.surface.backing_mode) << "\",\n"
+         << "    \"bridge_metadata_path\": \""
+         << EscapeJson(report.surface.bridge_metadata_path) << "\",\n"
+         << "    \"bridge_event_log_path\": \""
+         << EscapeJson(report.surface.bridge_event_log_path) << "\",\n"
          << "    \"state\": \"" << EscapeJson(report.surface.state)
          << "\",\n"
          << "    \"width\": " << report.surface.width << ",\n"
@@ -2460,6 +2604,124 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"errors\": "
          << RenderJsonArray(report.process_manager.errors) << "\n"
          << "  },\n"
+         << "  \"window_manager\": {\n"
+         << "    \"schema_version\": \""
+         << EscapeJson(report.window_manager.schema_version) << "\",\n"
+         << "    \"ready\": "
+         << (report.window_manager.ready ? "true" : "false") << ",\n"
+         << "    \"contract_ready\": "
+         << (report.window_manager.contract_ready ? "true" : "false")
+         << ",\n"
+         << "    \"session_id\": \""
+         << EscapeJson(report.window_manager.session_id) << "\",\n"
+         << "    \"artifact_root\": \""
+         << EscapeJson(report.window_manager.artifact_root) << "\",\n"
+         << "    \"report_json_path\": \""
+         << EscapeJson(report.window_manager.report_json_path) << "\",\n"
+         << "    \"session_map_path\": \""
+         << EscapeJson(report.window_manager.session_map_path) << "\",\n"
+         << "    \"event_log_path\": \""
+         << EscapeJson(report.window_manager.event_log_path) << "\",\n"
+         << "    \"package_name\": \""
+         << EscapeJson(report.window_manager.package_name) << "\",\n"
+         << "    \"user_id\": " << report.window_manager.user_id << ",\n"
+         << "    \"app_id\": " << report.window_manager.app_id << ",\n"
+         << "    \"uid_placeholder\": "
+         << report.window_manager.uid_placeholder << ",\n"
+         << "    \"gid_placeholder\": "
+         << report.window_manager.gid_placeholder << ",\n"
+         << "    \"sandbox_root\": \""
+         << EscapeJson(report.window_manager.sandbox_root) << "\",\n"
+         << "    \"app_data_dir\": \""
+         << EscapeJson(report.window_manager.app_data_dir) << "\",\n"
+         << "    \"apk_path\": \""
+         << EscapeJson(report.window_manager.apk_path) << "\",\n"
+         << "    \"staged_dir\": \""
+         << EscapeJson(report.window_manager.staged_dir) << "\",\n"
+         << "    \"updated_at_unix_ms\": "
+         << report.window_manager.updated_at_unix_ms << ",\n"
+         << "    \"window_id\": \""
+         << EscapeJson(report.window_manager.window_id) << "\",\n"
+         << "    \"process_identity\": \""
+         << EscapeJson(report.window_manager.process_identity) << "\",\n"
+         << "    \"process_name\": \""
+         << EscapeJson(report.window_manager.process_name) << "\",\n"
+         << "    \"pid_value\": " << report.window_manager.pid_value << ",\n"
+         << "    \"pid_source\": \""
+         << EscapeJson(report.window_manager.pid_source) << "\",\n"
+         << "    \"launch_component\": \""
+         << EscapeJson(report.window_manager.launch_component) << "\",\n"
+         << "    \"activity_component\": \""
+         << EscapeJson(report.window_manager.activity_component) << "\",\n"
+         << "    \"lifecycle_state\": \""
+         << EscapeJson(report.window_manager.lifecycle_state) << "\",\n"
+         << "    \"surface_state\": \""
+         << EscapeJson(report.window_manager.surface_state) << "\",\n"
+         << "    \"backend\": \""
+         << EscapeJson(report.window_manager.backend) << "\",\n"
+         << "    \"backing_mode\": \""
+         << EscapeJson(report.window_manager.backing_mode) << "\",\n"
+         << "    \"headless_safe\": "
+         << (report.window_manager.headless_safe ? "true" : "false")
+         << ",\n"
+         << "    \"wayland_surface_available\": "
+         << (report.window_manager.wayland_surface_available ? "true"
+                                                             : "false")
+         << ",\n"
+         << "    \"egl_surface_available\": "
+         << (report.window_manager.egl_surface_available ? "true"
+                                                         : "false")
+         << ",\n"
+         << "    \"width\": " << report.window_manager.width << ",\n"
+         << "    \"height\": " << report.window_manager.height << ",\n"
+         << "    \"format\": " << report.window_manager.format << ",\n"
+         << "    \"surface_session_id\": \""
+         << EscapeJson(report.window_manager.surface_session_id) << "\",\n"
+         << "    \"surface_session_root\": \""
+         << EscapeJson(report.window_manager.surface_session_root)
+         << "\",\n"
+         << "    \"surface_metadata_path\": \""
+         << EscapeJson(report.window_manager.surface_metadata_path)
+         << "\",\n"
+         << "    \"surface_event_log_path\": \""
+         << EscapeJson(report.window_manager.surface_event_log_path)
+         << "\",\n"
+         << "    \"marker_path\": \""
+         << EscapeJson(report.window_manager.marker_path) << "\",\n"
+         << "    \"surface_created\": "
+         << (report.window_manager.surface_created ? "true" : "false")
+         << ",\n"
+         << "    \"attached\": "
+         << (report.window_manager.attached ? "true" : "false") << ",\n"
+         << "    \"visible\": "
+         << (report.window_manager.visible ? "true" : "false") << ",\n"
+         << "    \"hidden\": "
+         << (report.window_manager.hidden ? "true" : "false") << ",\n"
+         << "    \"resized\": "
+         << (report.window_manager.resized ? "true" : "false") << ",\n"
+         << "    \"destroyed\": "
+         << (report.window_manager.destroyed ? "true" : "false") << ",\n"
+         << "    \"failed\": "
+         << (report.window_manager.failed ? "true" : "false") << ",\n"
+         << "    \"recovered\": "
+         << (report.window_manager.recovered ? "true" : "false") << ",\n"
+         << "    \"window_state\": \""
+         << EscapeJson(report.window_manager.window_state) << "\",\n"
+         << "    \"blocking_reason\": \""
+         << EscapeJson(report.window_manager.blocking_reason) << "\",\n"
+         << "    \"recommended_recovery_action\": \""
+         << EscapeJson(report.window_manager.recommended_recovery_action)
+         << "\",\n"
+         << "    \"states_visited\": "
+         << RenderJsonArray(report.window_manager.states_visited) << ",\n"
+         << "    \"healing_actions\": "
+         << RenderJsonArray(report.window_manager.healing_actions)
+         << ",\n"
+         << "    \"diagnostics\": "
+         << RenderJsonArray(report.window_manager.diagnostics) << ",\n"
+         << "    \"errors\": "
+         << RenderJsonArray(report.window_manager.errors) << "\n"
+         << "  },\n"
          << "  \"storage\": {\n"
          << "    \"ready\": " << (report.storage.ready ? "true" : "false")
          << ",\n"
@@ -2655,6 +2917,9 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "    \"process_health\": \""
          << EscapeJson(report.self_healing_android_device.process_health)
+         << "\",\n"
+         << "    \"window_health\": \""
+         << EscapeJson(report.self_healing_android_device.window_health)
          << "\",\n"
          << "    \"recoverable\": "
          << (report.self_healing_android_device.recoverable ? "true"

@@ -69,8 +69,8 @@ std::string RenderProjectStatusReport() {
   output << "Scaffold Readiness: " << RenderLoadingBar(phase_progress) << "\n";
   output << "Native Execution Readiness: " << RenderLoadingBar(98) << "\n";
   output << "Execution Focus: P0 Freeze & Triage -> P1 NDK Execution Core -> P2 Window + Graphics\n";
-  output << "Current Direct Runtime Phase: P11 Minimal ActivityManager/ProcessManager Contract\n";
-  output << "Next Phase: P12 Runtime Process Handoff + Resume Contract (build on process/activity-manager session contracts)\n";
+  output << "Current Direct Runtime Phase: P12 WindowManager + Wayland/EGL Surface Contract\n";
+  output << "Next Phase: P13 Runtime Process Handoff + Resume Contract (build on process/activity-manager/window-manager session contracts)\n";
   output << "Legacy Scaffold Phases:\n";
 
   for (const auto& phase : phases) {

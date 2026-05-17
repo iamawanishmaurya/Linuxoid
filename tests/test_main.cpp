@@ -7985,6 +7985,193 @@ void TestLaunchApkSelfHealProofRebuildsProcessManagerState() {
   fs::remove_all(fixture.root);
 }
 
+void TestLaunchApkWindowProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-window-valid", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --window-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected launch-apk window proof command to succeed");
+  Expect(output.find("\"window_proof_requested\": true") != std::string::npos,
+         "expected window proof request flag in json");
+  Expect(output.find("\"window_health\": \"ready\"") != std::string::npos,
+         "expected ready window health in json");
+  Expect(output.find("\"window_manager\": {") != std::string::npos,
+         "expected window_manager section in json");
+  Expect(output.find("\"headless_safe\": true") != std::string::npos,
+         "expected headless-safe flag in window proof json");
+  Expect(output.find("\"surface_session_id\": \"com.example.launchapk:vc1-1.0.0:surface\"") !=
+             std::string::npos,
+         "expected deterministic surface session mapping in window proof json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkWindowProofTracksSessionArtifacts() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-window-artifacts", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .window_proof_requested = true});
+
+  Expect(report.window_manager.ready,
+         "expected direct window manager report to be ready");
+  const fs::path window_root =
+      fs::path(report.storage.app_data_dir) / "window-manager";
+  Expect(fs::exists(window_root / "window-state.json"),
+         "expected window-state artifact");
+  Expect(fs::exists(window_root / "window-session-map.json"),
+         "expected window-session-map artifact");
+  Expect(fs::exists(window_root / "window-events.jsonl"),
+         "expected window-events artifact");
+
+  const std::string session_map =
+      ReadTextFile(window_root / "window-session-map.json");
+  Expect(session_map.find(report.surface.session_id) != std::string::npos,
+         "expected session map to reference surface session");
+  Expect(session_map.find(report.process_manager.process_identity) !=
+             std::string::npos,
+         "expected session map to reference process identity");
+
+  const std::string event_log =
+      ReadTextFile(window_root / "window-events.jsonl");
+  Expect(event_log.find("\"state\": \"created\"") != std::string::npos,
+         "expected created state in window event log");
+  Expect(event_log.find("\"state\": \"destroyed\"") != std::string::npos,
+         "expected destroyed state in window event log");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestInspectApkWindowCommandReportsReadyContracts() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-inspect-apk-window-ready", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-window " + fixture.apk_path.string() +
+          " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected inspect-apk-window command to succeed");
+  Expect(!output.empty() && output.front() == '{',
+         "expected structured json from inspect-apk-window");
+  Expect(output.find("\"window_health\": \"ready\"") != std::string::npos,
+         "expected ready window health in inspect-apk-window json");
+  Expect(output.find("\"window_manager\": {") != std::string::npos,
+         "expected window_manager section in inspect-apk-window json");
+  Expect(output.find("\"window_state\": \"window_manager_contract_ready\"") !=
+             std::string::npos,
+         "expected ready window state in inspect-apk-window json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkWindowProofHealsMalformedFiles() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-window-heal-malformed", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+  int exit_code = 0;
+  ReadCommandOutput(compatctl.string() + " launch-apk --window-proof " +
+                        fixture.apk_path.string() + " " +
+                        fixture.staging_root.string(),
+                    &exit_code);
+  Expect(exit_code == 0, "expected initial window proof command to succeed");
+
+  const fs::path window_root =
+      fixture.staging_root / "users/0/packages/com.example.launchapk/vc1-1.0.0" /
+      "launch-apk/default/sandbox/data/data/com.example.launchapk/window-manager";
+  WriteTextFile(window_root / "window-state.json", "{malformed");
+
+  const std::string healed_output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-window " + fixture.apk_path.string() +
+          " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected malformed window-manager state to heal on inspect");
+  Expect(healed_output.find("rebuild_malformed_window_manager_state") !=
+             std::string::npos,
+         "expected window-manager malformed healing action in json");
+  Expect(healed_output.find("\"window_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready window health after healing");
+  Expect(healed_output.find("Self-Healing Android Device") !=
+             std::string::npos,
+         "expected Self-Healing Android Device wording in window healing json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRebuildsWindowManagerStateAfterSurfaceFailure() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-self-heal-window", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto healed = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true,
+       .simulate_blocked_surface_proof = true});
+
+  Expect(healed.self_healing_android_device.ready,
+         "expected self-heal report for blocked surface-backed window manager");
+  Expect(healed.self_healing_android_device.final_health == "recovered",
+         "expected window-manager self-heal recovery to converge");
+  Expect(healed.self_healing_android_device.window_health == "ready",
+         "expected window health to recover");
+  Expect(std::any_of(
+             healed.self_healing_android_device.actions.begin(),
+             healed.self_healing_android_device.actions.end(),
+             [](const wfa::SelfHealingAndroidDeviceRecoveryAction& action) {
+               return action.action == "restart_surface" &&
+                      action.result == "attempted_succeeded";
+             }),
+         "expected successful restart_surface action");
+  Expect(std::any_of(
+             healed.self_healing_android_device.actions.begin(),
+             healed.self_healing_android_device.actions.end(),
+             [](const wfa::SelfHealingAndroidDeviceRecoveryAction& action) {
+               return action.action == "rebuild_window_manager_state" &&
+                      action.result == "attempted_succeeded";
+             }),
+         "expected successful rebuild_window_manager_state action");
+  Expect(fs::exists(healed.self_healing_android_device.journal_path),
+         "expected window-manager recovery journal path");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeBridgeOutputParsers() {
   Expect(wfa::OutputContainsInstalledPackage("package:org.futo.inputmethod.latin\n",
                                              "org.futo.inputmethod.latin"),
@@ -12271,6 +12458,11 @@ int main() {
     TestLaunchApkProcessProofHealsMalformedFiles();
     TestLaunchApkSelfHealProofCommandRebuildsMalformedProcessManagerState();
     TestLaunchApkSelfHealProofRebuildsProcessManagerState();
+    TestLaunchApkWindowProofCommandRunsFixture();
+    TestLaunchApkWindowProofTracksSessionArtifacts();
+    TestInspectApkWindowCommandReportsReadyContracts();
+    TestLaunchApkWindowProofHealsMalformedFiles();
+    TestLaunchApkSelfHealProofRebuildsWindowManagerStateAfterSurfaceFailure();
     TestLaunchApkPermissionsProofEmitsDeniedAudioCaptureDiagnostics();
   TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();
