@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.54 - 2026-05-17
+
+- Split Linuxoid's post-class-resolution bootstrap seam cleanly into **activity-bootstrap planning** and **bootstrap execution** so `native-art-activity-bootstrap-fixture` now stays a deterministic planning artifact generator while `native-art-bootstrap-execution-fixture` owns the execution-context JSON, runner script, and per-phase execution logs.
+- Add a first-class `bootstrap_execution_readiness` runtime-health subsystem with deterministic `attempt_host_bootstrap_execution` recovery output, while making `activity_bootstrap_readiness` accurately represent the readiness of the planning seam instead of the still-blocked execution seam.
+- Add regression coverage that proves runtime health, recovery summaries, replay output, and JSON stability all reflect the new planning-versus-execution split honestly, then refresh the README Mermaid architecture, phased plan, self-healing runtime note, changelog, and status text so Linuxoid reports the deeper self-healing execution contract truthfully.
+
 ## v0.1.53 - 2026-05-18
 
 - Add a Linuxoid-owned `native-art-bootstrap-execution-fixture` seam so the post-class-resolution bootstrap path now writes deterministic `art/bootstrap-execution-plan.json`, `art/bootstrap-execution-trace.jsonl`, and `art/bootstrap-execution-result.json` artifacts instead of leaving host-side bootstrap execution implied by lower-level activity probes.

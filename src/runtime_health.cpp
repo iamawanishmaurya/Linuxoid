@@ -195,10 +195,18 @@ RecoveryActionTemplate BuildRecoveryActionTemplate(
   if (subsystem_name == "activity_bootstrap_readiness") {
     return {.action_name = "attempt_host_activity_bootstrap",
             .action_reason =
-                "Launcher activity targeting, Binder readiness, and class-resolution evidence are in place, so the next step is to attempt the first host-side activity bootstrap probe against the staged bundle.",
+                "Launcher activity targeting or bootstrap planning is incomplete, so Linuxoid should rebuild the bounded activity-bootstrap plan before execution continues.",
             .action_rank = 60,
             .retry_budget = 0,
             .recovery_scope = "activity_bootstrap"};
+  }
+  if (subsystem_name == "bootstrap_execution_readiness") {
+    return {.action_name = "attempt_host_bootstrap_execution",
+            .action_reason =
+                "The activity bootstrap plan is ready, so the next step is to attempt the first host-side application or launcher bootstrap execution against the staged bundle.",
+            .action_rank = 70,
+            .retry_budget = 0,
+            .recovery_scope = "bootstrap_execution"};
   }
   if (subsystem_name == "input_queue_readiness") {
     return {.action_name = "recreate_input_queue_after_surface_ready",
@@ -389,6 +397,45 @@ RuntimeHealthRecord BuildActivityBootstrapRecord(
   if (!context.has_classes_dex) {
     return MakeHealthRecord(
         "activity_bootstrap_readiness", "not_required", true,
+        context.activity_bootstrap.result_json_path, "",
+        "APK archive does not contain classes.dex entries.");
+  }
+
+  const auto& bootstrap = context.activity_bootstrap;
+  const bool ready = bootstrap.runtime_bootstrap_planned;
+  const std::string state = ready ? "ready" : "blocked";
+
+  return MakeHealthRecord(
+      "activity_bootstrap_readiness", state, ready,
+      bootstrap.result_json_path, ready ? "" : bootstrap.exit_reason,
+          "selected_application_class_name=" +
+          bootstrap.selected_application_class_name +
+          "; selected_activity_class_name=" +
+          bootstrap.selected_activity_class_name +
+          "; application_probe_attempted=" +
+          std::string(bootstrap.application_probe_attempted ? "true" : "false") +
+          "; application_probe_succeeded=" +
+          std::string(bootstrap.application_probe_succeeded ? "true" : "false") +
+          "; activity_probe_attempted=" +
+          std::string(bootstrap.activity_probe_attempted ? "true" : "false") +
+          "; activity_probe_succeeded=" +
+          std::string(bootstrap.activity_probe_succeeded ? "true" : "false") +
+          "; runtime_bootstrap_planned=" +
+          std::string(bootstrap.runtime_bootstrap_planned ? "true" : "false") +
+          "; runtime_bootstrap_attempted=" +
+          std::string(bootstrap.runtime_bootstrap_attempted ? "true" : "false") +
+          "; runtime_bootstrap_succeeded=" +
+          std::string(bootstrap.runtime_bootstrap_succeeded ? "true"
+                                                            : "false") +
+          "; dependency_count=" +
+          std::to_string(bootstrap.dependency_count));
+}
+
+RuntimeHealthRecord BuildBootstrapExecutionRecord(
+    const RuntimeObservationContext& context) {
+  if (!context.has_classes_dex) {
+    return MakeHealthRecord(
+        "bootstrap_execution_readiness", "not_required", true,
         context.bootstrap_execution.result_json_path, "",
         "APK archive does not contain classes.dex entries.");
   }
@@ -406,27 +453,31 @@ RuntimeHealthRecord BuildActivityBootstrapRecord(
   }
 
   return MakeHealthRecord(
-      "activity_bootstrap_readiness", state, ready,
-      bootstrap.result_json_path, bootstrap.exit_reason,
+      "bootstrap_execution_readiness", state, ready,
+      bootstrap.result_json_path, ready ? "" : bootstrap.exit_reason,
       "selected_application_class_name=" +
           bootstrap.selected_application_class_name +
           "; selected_activity_class_name=" +
           bootstrap.selected_activity_class_name +
           "; application_execution_attempted=" +
-          std::string(bootstrap.application_execution_attempted ? "true" : "false") +
+          std::string(bootstrap.application_execution_attempted ? "true"
+                                                                : "false") +
           "; application_execution_succeeded=" +
-          std::string(bootstrap.application_execution_succeeded ? "true" : "false") +
+          std::string(bootstrap.application_execution_succeeded ? "true"
+                                                                : "false") +
           "; activity_execution_attempted=" +
-          std::string(bootstrap.activity_execution_attempted ? "true" : "false") +
+          std::string(bootstrap.activity_execution_attempted ? "true"
+                                                             : "false") +
           "; activity_execution_succeeded=" +
-          std::string(bootstrap.activity_execution_succeeded ? "true" : "false") +
+          std::string(bootstrap.activity_execution_succeeded ? "true"
+                                                             : "false") +
           "; execution_attempt_planned=" +
-          std::string(bootstrap.execution_attempt_planned ? "true" : "false") +
+          std::string(bootstrap.execution_attempt_planned ? "true"
+                                                          : "false") +
           "; execution_attempted=" +
           std::string(bootstrap.execution_attempted ? "true" : "false") +
           "; execution_succeeded=" +
-          std::string(bootstrap.execution_succeeded ? "true"
-                                                            : "false") +
+          std::string(bootstrap.execution_succeeded ? "true" : "false") +
           "; dependency_count=" +
           std::to_string(bootstrap.dependency_count));
 }
@@ -696,6 +747,7 @@ RuntimeHealthReport RunRuntimeHealthFixture(
   report.records.push_back(BuildBinderRecord(context, scenario_name));
   report.records.push_back(BuildDexRecord(context));
   report.records.push_back(BuildActivityBootstrapRecord(context));
+  report.records.push_back(BuildBootstrapExecutionRecord(context));
 
   report.overall_ready = true;
   report.self_healing_ready = true;

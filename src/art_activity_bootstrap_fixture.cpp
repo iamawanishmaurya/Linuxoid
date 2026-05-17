@@ -4,13 +4,11 @@
 #include "wfa/art_runtime_smoke.hpp"
 #include "wfa/native_lifecycle.hpp"
 
-#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <sys/wait.h>
 #include <vector>
 
 namespace wfa {
@@ -118,53 +116,6 @@ std::string ClassNameToDescriptor(const std::string& class_name) {
   }
   descriptor.push_back(';');
   return descriptor;
-}
-
-bool LooksLikeResolvedClassWithoutMain(const std::string& output) {
-  return output.find("main") != std::string::npos &&
-         (output.find("No static") != std::string::npos ||
-          output.find("main method") != std::string::npos ||
-          output.find("Main method") != std::string::npos);
-}
-
-bool LooksLikeMissingClassFailure(const std::string& output) {
-  return output.find("ClassNotFoundException") != std::string::npos ||
-         output.find("Didn't find class") != std::string::npos ||
-         output.find("Could not find class") != std::string::npos;
-}
-
-bool ProbeCommandSucceeded(const CommandCaptureResult& result) {
-  if (result.exit_code == 0) {
-    return true;
-  }
-  if (LooksLikeMissingClassFailure(result.output)) {
-    return false;
-  }
-  return LooksLikeResolvedClassWithoutMain(result.output);
-}
-
-CommandCaptureResult RunCommandCapture(const std::string& command) {
-  const std::string wrapped_command = command + " 2>&1";
-  FILE* pipe = popen(wrapped_command.c_str(), "r");
-  if (pipe == nullptr) {
-    throw std::runtime_error("unable to open activity bootstrap probe command");
-  }
-
-  std::string output;
-  char buffer[256];
-  while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-    output += buffer;
-  }
-
-  const int raw_status = pclose(pipe);
-  CommandCaptureResult result;
-  if (WIFEXITED(raw_status)) {
-    result.exit_code = WEXITSTATUS(raw_status);
-  } else {
-    result.exit_code = raw_status;
-  }
-  result.output = output;
-  return result;
 }
 
 std::string BuildActivityBootstrapPlanJson(
@@ -488,8 +439,6 @@ NativeArtActivityBootstrapFixtureReport BuildNativeArtActivityBootstrapFixture(
         QuoteForShell(report.selected_activity_class_name);
   }
 
-  CommandCaptureResult application_capture;
-  CommandCaptureResult activity_capture;
   if (!report.manifest_targets_ready) {
     report.exit_reason = "activity_bootstrap_manifest_targets_not_ready";
   } else if (!report.classpath_plan_ready) {
@@ -507,34 +456,19 @@ NativeArtActivityBootstrapFixtureReport BuildNativeArtActivityBootstrapFixture(
   } else if (!report.runtime_class_resolution_succeeded) {
     report.exit_reason = "activity_bootstrap_class_resolution_probe_incomplete";
   } else {
-    if (!report.selected_application_class_name.empty() &&
-        !report.application_bootstrap_command.empty()) {
-      report.application_probe_attempted = true;
-      application_capture =
-          RunCommandCapture(report.application_bootstrap_command);
-      report.application_probe_succeeded =
-          ProbeCommandSucceeded(application_capture);
-    } else {
-      report.application_probe_succeeded = true;
-    }
-
-    report.activity_probe_attempted = true;
-    activity_capture = RunCommandCapture(report.activity_bootstrap_command);
-    report.activity_probe_succeeded = ProbeCommandSucceeded(activity_capture);
-    report.runtime_bootstrap_attempted =
-        report.application_probe_attempted || report.activity_probe_attempted;
-    report.runtime_bootstrap_succeeded =
-        report.application_probe_succeeded && report.activity_probe_succeeded;
-    report.dependency_blocked = !report.runtime_bootstrap_succeeded;
-    if (!report.application_probe_succeeded) {
-      report.exit_reason = "application_bootstrap_probe_failed";
-    } else if (!report.activity_probe_succeeded) {
-      report.exit_reason = "activity_bootstrap_probe_failed";
-    } else {
-      report.exit_reason = "application_activity_bootstrap_probe_succeeded";
-    }
+    report.application_probe_attempted = false;
+    report.application_probe_succeeded =
+        report.selected_application_class_name.empty();
+    report.activity_probe_attempted = false;
+    report.activity_probe_succeeded = false;
+    report.runtime_bootstrap_attempted = false;
+    report.runtime_bootstrap_succeeded = false;
+    report.dependency_blocked = false;
+    report.exit_reason = "activity_bootstrap_execution_deferred";
   }
 
+  CommandCaptureResult application_capture;
+  CommandCaptureResult activity_capture;
   fs::create_directories(report.artifact_root);
   WriteTextFile(report.activity_bootstrap_plan_path,
                 BuildActivityBootstrapPlanJson(report));

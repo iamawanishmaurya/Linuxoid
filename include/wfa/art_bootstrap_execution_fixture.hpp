@@ -16,6 +16,10 @@ struct NativeArtBootstrapExecutionFixtureReport {
   std::string artifact_root;
   std::string activity_bootstrap_result_json_path;
   std::string execution_plan_path;
+  std::string execution_context_json_path;
+  std::string runner_script_path;
+  std::string application_execution_log_path;
+  std::string activity_execution_log_path;
   std::string trace_jsonl_path;
   std::string result_json_path;
   std::string selected_application_class_name;

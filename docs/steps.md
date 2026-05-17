@@ -1477,3 +1477,33 @@
   Action: Updated the README Mermaid architecture, phased plan, self-healing runtime note, project status text, changelog, and release version for the new bootstrap-execution seam plus the live runtime-health performance fix.
   Result: GitHub-facing docs now describe the deterministic bootstrap-execution contract and the faster staged-bundle health path honestly, with release metadata bumped for the slice.
   Timestamp: 2026-05-17T07:53:10+05:30
+
+- Step: Bootstrap execution runner gate selection
+  Action: Chose the next native ART slice: separate activity-bootstrap planning from bootstrap execution so the execution fixture becomes the supervised runner seam with its own phase logs and runner artifacts.
+  Result: Linuxoid will next treat `native-art-activity-bootstrap-fixture` as the planning surface and `native-art-bootstrap-execution-fixture` as the actual execution-attempt surface instead of leaving execution implicit inside the lower-level activity fixture.
+  Timestamp: 2026-05-17T08:08:40+05:30
+
+- Step: Bootstrap execution runner red tests
+  Action: Added failing expectations for explicit execution context, runner script, and per-phase execution logs plus deferred execution in the lower-level activity planning seam.
+  Result: The build now fails because the bootstrap-execution report does not yet expose the new runner artifacts, confirming the next execution slice is genuinely missing.
+  Timestamp: 2026-05-17T08:12:05+05:30
+
+- Step: Bootstrap execution health subsystem RED
+  Action: Extending runtime-health expectations so bootstrap execution is tracked as its own subsystem instead of being folded into activity bootstrap.
+  Result: Starting red phase for health/replay summary and recovery ordering updates.
+  Timestamp: 2026-05-17T21:35:00+05:30
+
+- Step: Bootstrap execution health subsystem RED verified
+  Action: Ran full build/test after broadening runtime-health expectations.
+  Result: Tests failed as expected because runtime health still reports only seven subsystems and does not expose bootstrap_execution_readiness yet.
+  Timestamp: 2026-05-17T21:37:00+05:30
+
+- Step: Bootstrap execution health subsystem compile fix
+  Action: Rebuilt after wiring the new health record and hit a compile error from using execution-only field names on the planning report.
+  Result: Logging the mismatch and correcting the activity-bootstrap evidence fields.
+  Timestamp: 2026-05-17T21:40:00+05:30
+
+- Step: Bootstrap execution health subsystem GREEN
+  Action: Split runtime health into separate activity-bootstrap planning and bootstrap-execution records, added deterministic recovery wiring, refreshed docs/version metadata, and reverified live commands.
+  Result: Runtime health now reports activity planning as ready, bootstrap execution as pending, and recovery points at execution instead of the already-materialized plan.
+  Timestamp: 2026-05-17T21:50:00+05:30

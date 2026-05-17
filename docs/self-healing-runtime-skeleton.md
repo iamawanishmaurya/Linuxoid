@@ -17,7 +17,8 @@ What that means **today**:
   - unavailable display
   - failed service lookup
   - pending DEX/classloader bootstrap
-  - pending post-class-resolution activity bootstrap
+  - incomplete post-class-resolution activity-bootstrap planning
+  - pending post-class-resolution bootstrap execution
 - Every selected recovery action now carries deterministic machine-facing metadata:
   - `action_rank`
   - `retry_budget`
@@ -55,13 +56,21 @@ What that means **today**:
   - a manifest-derived application-plus-launcher target set plus Binder-readiness evidence for the first post-class-resolution bootstrap attempt
 - Linuxoid now also folds that activity-bootstrap seam back into self-healing runtime health and replay:
   - `activity_bootstrap_readiness`
-  - `attempt_host_activity_bootstrap`
+  - ready when the launcher/bootstrap plan is fully materialized
   - replay coverage through `art/activity-bootstrap-trace.jsonl`
 - Linuxoid now also exposes a deterministic bootstrap-execution seam on top of that activity-bootstrap plan:
   - `native-art-bootstrap-execution-fixture`
   - `art/bootstrap-execution-plan.json`
   - `art/bootstrap-execution-trace.jsonl`
   - `art/bootstrap-execution-result.json`
+  - `art/bootstrap-execution-context.json`
+  - `art/bootstrap-execution-runner.sh`
+  - `art/bootstrap-execution-application.log`
+  - `art/bootstrap-execution-activity.log`
+- Linuxoid now also folds that execution seam back into self-healing runtime health and replay:
+  - `bootstrap_execution_readiness`
+  - `attempt_host_bootstrap_execution`
+  - replay coverage through `art/bootstrap-execution-trace.jsonl`
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -87,8 +96,7 @@ What it **does not** mean yet:
 - Linuxoid does **not** yet self-heal by automatically making the app run after a failure.
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet own a full embedded ART runtime or a real in-process `PathClassLoader`.
-- Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, and write plus attempt a deterministic application/activity bootstrap probe sequence after class resolution.
-- Linuxoid does **not** yet execute full Android app startup through host-side ART even though it can now carry that evidence one seam further into a deterministic bootstrap-execution contract and keep the health plus replay system around it.
+- Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, separate activity-bootstrap planning from bootstrap execution, and keep deterministic execution-context plus runner/log artifacts around that execution seam.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
@@ -104,8 +112,9 @@ Current meaning of “self-healing” in Linuxoid:
 5. Merge the existing JSONL traces back into one diagnostic replay bundle.
 6. Refuse false success when a required dependency is still missing.
 7. Expose the self-healing summary directly so repeated runs produce stable machine-facing answers.
-8. Carry class-resolution evidence forward into a deterministic application/activity bootstrap attempt without pretending host ART already executed the target.
-9. Treat post-class-resolution activity bootstrap as a first-class health and replay subsystem instead of leaving it as a side artifact.
+8. Carry class-resolution evidence forward into a deterministic application/activity bootstrap planning seam without pretending host ART already executed the target.
+9. Treat post-class-resolution activity bootstrap planning as a first-class health and replay subsystem instead of leaving it as a side artifact.
+10. Treat bootstrap execution as its own bounded health and replay subsystem so recovery can point at execution instead of the already-materialized plan.
 
 ## Remaining Gaps Before Full Android App Execution
 
@@ -144,4 +153,4 @@ Current deterministic scenarios:
 
 Next gate after this skeleton:
 
-- use the existing offline class-resolution plus host-ART smoke seams and the upgraded activity-bootstrap attempt seam to drive the first real application or activity bootstrap execution step after class resolution, not just the first class-target lookup.
+- use the existing offline class-resolution plus host-ART smoke seams, the upgraded activity-bootstrap planning seam, and the deterministic bootstrap-execution seam to drive the first real application or activity bootstrap execution step after class resolution, not just the first class-target lookup.
