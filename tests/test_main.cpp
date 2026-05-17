@@ -3589,6 +3589,59 @@ void TestRuntimeDiagnosticFixtureCommandWritesStableJson() {
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeDiagnosticFixtureMaterializesReplayableTraceBundle() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-diagnostic-fixture-replayable-bundle", true, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int fixture_exit_code = 0;
+  const std::string fixture_output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-diagnostic-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &fixture_exit_code);
+  Expect(fixture_exit_code == 0,
+         "expected native-runtime-diagnostic-fixture success");
+  Expect(fixture_output.find("\"trace_sources_found\": 7") !=
+             std::string::npos,
+         "expected all replay trace sources in fixture json");
+
+  const auto lifecycle =
+      wfa::BuildNativeLifecycleShimFromManifest(
+          fixture.bootstrap.bootstrap_manifest_path);
+  const fs::path session_root = lifecycle.session_root;
+  const std::vector<fs::path> expected_trace_paths = {
+      session_root / "health" / "runtime-health-trace.jsonl",
+      session_root / "health" / "runtime-recovery-actions.jsonl",
+      session_root / "art" / "art-classloader-trace.jsonl",
+      session_root / "art" / "art-class-resolution-trace.jsonl",
+      session_root / "art" / "runtime-smoke-trace.jsonl",
+      session_root / "art" / "activity-bootstrap-trace.jsonl",
+      session_root / "art" / "bootstrap-execution-trace.jsonl",
+  };
+  for (const auto& trace_path : expected_trace_paths) {
+    Expect(fs::exists(trace_path),
+           "expected replayable trace artifact from diagnostic fixture");
+    Expect(fs::file_size(trace_path) > 0,
+           "expected non-empty replayable trace artifact");
+  }
+
+  int replay_exit_code = 0;
+  const std::string replay_output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-replay " +
+          (session_root / "health" / "runtime-health-trace.jsonl").string(),
+      &replay_exit_code);
+  Expect(replay_exit_code == 0, "expected native-runtime-health-replay success");
+  Expect(replay_output.find("\"subsystems_observed\": 8") !=
+             std::string::npos,
+         "expected replay to summarize the full runtime-health trace");
+  Expect(replay_output.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected replay to stay honest about remaining runtime gaps");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeHealthCommandWritesStableJson() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -6215,6 +6268,7 @@ int main() {
     TestRuntimeDiagnosticReplayReportsMissingNativeDependencyHonestly();
     TestRuntimeDiagnosticReplayCommandWritesStableJson();
     TestRuntimeDiagnosticFixtureCommandWritesStableJson();
+    TestRuntimeDiagnosticFixtureMaterializesReplayableTraceBundle();
     TestRuntimeHealthCommandWritesStableJson();
     TestRuntimeHealthCommandOutputIsStableAcrossRepeatedRuns();
     TestRuntimeHealthCommandSupportsLegacyBootstrapManifestWithoutNativeLibrarySummaryFields();

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.61 - 2026-05-17
+
+- Tighten the replayable-diagnostics contract by adding a CLI-level regression that proves `native-runtime-diagnostic-fixture` materializes the full seven-source JSONL trace bundle and that `native-runtime-health-replay` can diagnose the resulting runtime state later from those artifacts alone, without rerunning the full UI path.
+
 ## v0.1.60 - 2026-05-17
 
 - Strengthen the deterministic recovery contract at the public CLI surface by adding a scenario-matrix regression for `native-runtime-recovery-plan`, proving the four requested recovery cases stay mapped to the same action names and action ranks: missing artifact, failed native load, unavailable display, and failed service lookup.
