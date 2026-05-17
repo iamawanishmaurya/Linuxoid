@@ -52,7 +52,7 @@ What that means **today**:
   - `art/activity-bootstrap-plan.json`
   - `art/activity-bootstrap-trace.jsonl`
   - `art/activity-bootstrap-result.json`
-  - a manifest-derived launcher activity target plus Binder-readiness evidence for the first post-class-resolution bootstrap attempt
+  - a manifest-derived application-plus-launcher target set plus Binder-readiness evidence for the first post-class-resolution bootstrap attempt
 - Linuxoid now also folds that activity-bootstrap seam back into self-healing runtime health and replay:
   - `activity_bootstrap_readiness`
   - `attempt_host_activity_bootstrap`
@@ -81,7 +81,7 @@ What it **does not** mean yet:
 - Linuxoid does **not** yet self-heal by automatically making the app run after a failure.
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet own a full embedded ART runtime or a real in-process `PathClassLoader`.
-- Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, and write a deterministic activity-bootstrap plan for the launcher-derived target.
+- Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, and write plus attempt a deterministic application/activity bootstrap probe sequence after class resolution.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
@@ -97,7 +97,7 @@ Current meaning of “self-healing” in Linuxoid:
 5. Merge the existing JSONL traces back into one diagnostic replay bundle.
 6. Refuse false success when a required dependency is still missing.
 7. Expose the self-healing summary directly so repeated runs produce stable machine-facing answers.
-8. Carry class-resolution evidence forward into a deterministic activity-bootstrap plan without pretending host ART already executed the target.
+8. Carry class-resolution evidence forward into a deterministic application/activity bootstrap attempt without pretending host ART already executed the target.
 9. Treat post-class-resolution activity bootstrap as a first-class health and replay subsystem instead of leaving it as a side artifact.
 
 ## Remaining Gaps Before Full Android App Execution
@@ -136,4 +136,4 @@ Current deterministic scenarios:
 
 Next gate after this skeleton:
 
-- use the existing offline class-resolution plus host-ART smoke seams and the new activity-bootstrap plan seam to drive the first real application or activity bootstrap step after class resolution, not just the first class-target lookup.
+- use the existing offline class-resolution plus host-ART smoke seams and the upgraded activity-bootstrap attempt seam to drive the first real application or activity bootstrap execution step after class resolution, not just the first class-target lookup.

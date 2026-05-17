@@ -2304,16 +2304,48 @@ void TestNativeArtActivityBootstrapFixtureWritesStableArtifacts() {
   Expect(report.selected_activity_class_descriptor ==
              "Lcom/example/runtimehealth/MainActivity;",
          "expected launcher-derived activity descriptor");
+  Expect(report.selected_application_class_name ==
+             "com.example.runtimehealth.App",
+         "expected normalized application bootstrap class");
+  Expect(report.selected_application_class_descriptor ==
+             "Lcom/example/runtimehealth/App;",
+         "expected normalized application bootstrap descriptor");
+  const std::string rendered =
+      wfa::RenderNativeArtActivityBootstrapFixtureJson(report);
+  Expect(rendered.find("\"selected_application_class_name\": "
+                       "\"com.example.runtimehealth.App\"") !=
+             std::string::npos,
+         "expected normalized application class in activity bootstrap json");
+  Expect(rendered.find("\"selected_application_class_descriptor\": "
+                       "\"Lcom/example/runtimehealth/App;\"") !=
+             std::string::npos,
+         "expected normalized application descriptor in activity bootstrap json");
   Expect(report.launcher_component ==
              "com.example.runtimehealth/.MainActivity",
          "expected launcher component in activity bootstrap report");
 
-  const std::string rendered =
-      wfa::RenderNativeArtActivityBootstrapFixtureJson(report);
   Expect(rendered.find("\"activity_bootstrap_plan_path\": \"" +
                            report.activity_bootstrap_plan_path + "\"") !=
              std::string::npos,
          "expected bootstrap plan path in activity bootstrap json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtActivityBootstrapTraceCapturesApplicationBootstrapSequence() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-activity-bootstrap-trace", true, true);
+
+  const auto report = wfa::RunNativeArtActivityBootstrapFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+  const std::string trace = ReadTextFile(report.trace_jsonl_path);
+  Expect(trace.find("\"event_type\": \"application_bootstrap_") !=
+             std::string::npos,
+         "expected application bootstrap event in trace");
+  Expect(trace.find("\"event_type\": \"launcher_activity_bootstrap_") !=
+             std::string::npos,
+         "expected launcher activity bootstrap event in trace");
 
   fs::remove_all(fixture.root);
 }
@@ -2327,6 +2359,8 @@ void TestNativeArtActivityBootstrapFixtureHandlesRuntimeAvailabilityHonestly() {
       fixture.bootstrap.bootstrap_manifest_path);
 
   if (!report.art_runtime_detected) {
+    Expect(!report.application_probe_attempted,
+           "expected no application bootstrap attempt when ART is absent");
     Expect(!report.runtime_bootstrap_attempted,
            "expected no activity bootstrap attempt when ART is absent");
     Expect(!report.runtime_bootstrap_succeeded,
@@ -2336,6 +2370,13 @@ void TestNativeArtActivityBootstrapFixtureHandlesRuntimeAvailabilityHonestly() {
     Expect(report.exit_reason ==
                "activity_bootstrap_runtime_not_detected",
            "expected absent-art activity bootstrap exit reason");
+  } else if (report.safe_runtime_probe_available) {
+    Expect(report.activity_probe_attempted,
+           "expected launcher activity probe attempt when safe ART exists");
+    if (!report.selected_application_class_name.empty()) {
+      Expect(report.application_probe_attempted,
+             "expected application probe attempt when application class exists");
+    }
   }
 
   fs::remove_all(fixture.root);
@@ -2357,6 +2398,9 @@ void TestNativeArtActivityBootstrapCommandWritesStableJson() {
   Expect(output.find("\"runtime_bootstrap_planned\": true") !=
              std::string::npos,
          "expected bootstrap planned flag in activity bootstrap json");
+  Expect(output.find("\"selected_application_class_name\": ") !=
+             std::string::npos,
+         "expected selected application class in activity bootstrap json");
   Expect(output.find("\"selected_activity_class_name\": ") !=
              std::string::npos,
          "expected selected activity class in activity bootstrap json");
@@ -5188,6 +5232,7 @@ int main() {
     TestNativeArtRuntimeSmokeHandlesRuntimeAvailabilityHonestly();
     TestNativeArtRuntimeSmokeCommandWritesStableJson();
     TestNativeArtActivityBootstrapFixtureWritesStableArtifacts();
+    TestNativeArtActivityBootstrapTraceCapturesApplicationBootstrapSequence();
     TestNativeArtActivityBootstrapFixtureHandlesRuntimeAvailabilityHonestly();
     TestNativeArtActivityBootstrapCommandWritesStableJson();
     TestNativeArtClassResolutionFixtureResolvesManifestTargets();

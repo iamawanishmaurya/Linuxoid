@@ -398,6 +398,8 @@ RuntimeHealthRecord BuildActivityBootstrapRecord(
   if (bootstrap.runtime_bootstrap_succeeded) {
     state = "ready";
     ready = true;
+  } else if (bootstrap.runtime_bootstrap_attempted) {
+    state = "blocked";
   } else if (bootstrap.runtime_bootstrap_planned) {
     state = "pending";
   }
@@ -406,8 +408,18 @@ RuntimeHealthRecord BuildActivityBootstrapRecord(
       "activity_bootstrap_readiness", state, ready,
       bootstrap.result_json_path, bootstrap.exit_reason,
       "launcher_component=" + bootstrap.launcher_component +
+          "; selected_application_class_name=" +
+          bootstrap.selected_application_class_name +
           "; selected_activity_class_name=" +
           bootstrap.selected_activity_class_name +
+          "; application_probe_attempted=" +
+          std::string(bootstrap.application_probe_attempted ? "true" : "false") +
+          "; application_probe_succeeded=" +
+          std::string(bootstrap.application_probe_succeeded ? "true" : "false") +
+          "; activity_probe_attempted=" +
+          std::string(bootstrap.activity_probe_attempted ? "true" : "false") +
+          "; activity_probe_succeeded=" +
+          std::string(bootstrap.activity_probe_succeeded ? "true" : "false") +
           "; runtime_bootstrap_planned=" +
           std::string(bootstrap.runtime_bootstrap_planned ? "true" : "false") +
           "; runtime_bootstrap_attempted=" +

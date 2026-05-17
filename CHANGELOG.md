@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.52 - 2026-05-18
+
+- Upgrade `native-art-activity-bootstrap-fixture` from an activity-only planning seam into a host-side application-plus-launcher bootstrap attempt seam: Linuxoid now normalizes a manifest application class when present, emits explicit application and launcher activity probe events, and records probe-attempt plus probe-success state separately without faking ART success on hosts that lack ART.
+- Tighten bootstrap truthfulness so Linuxoid no longer infers an application class from arbitrary non-activity manifest targets when the APK does not actually declare one.
+- Add regression coverage that proves the activity-bootstrap JSON now includes normalized application-class output and the trace now captures both application and launcher-activity bootstrap sequence events.
+- Refresh the README Mermaid architecture, phased plan, self-healing runtime note, changelog, and status output so the repo now reflects the stronger post-class-resolution application/activity bootstrap attempt gate honestly.
+
 ## v0.1.51 - 2026-05-18
 
 - Thread the existing `native-art-activity-bootstrap-fixture` seam into `native-runtime-health-fixture` and diagnostic replay so Linuxoid now records `activity_bootstrap_readiness`, selects the deterministic recovery action `attempt_host_activity_bootstrap`, and merges `art/activity-bootstrap-trace.jsonl` into the replay bundle.

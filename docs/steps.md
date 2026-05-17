@@ -1407,3 +1407,33 @@
   Action: Updated stale regression expectations, rebuilt Linuxoid, reran the full test suite, and refreshed the docs/version/status metadata for the expanded self-healing runtime contract.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, and the runtime health plus replay surfaces now include activity-bootstrap readiness and trace coverage.
   Timestamp: 2026-05-17T06:01:55+05:30
+
+- Step: Application bootstrap execution-attempt seam selection
+  Action: Chose the next native gate: turn the current post-class-resolution activity bootstrap plan into a first-class host-side application/activity bootstrap execution-attempt fixture that reuses the existing ART, binder, and replay contracts.
+  Result: Linuxoid will next emit deterministic application bootstrap attempt artifacts and thread that attempt into runtime health without pretending real ART app execution is complete on hosts that lack ART.
+  Timestamp: 2026-05-17T06:20:53+05:30
+
+- Step: Application bootstrap execution-attempt red tests
+  Action: Added regression expectations for normalized application-class output and explicit application/activity bootstrap trace events to the existing activity-bootstrap fixture tests.
+  Result: The test harness went red immediately, exposing a local test wiring mistake before the product seam could be exercised.
+  Timestamp: 2026-05-17T06:23:05+05:30
+
+- Step: Application bootstrap product red capture
+  Action: Rebuilt Linuxoid after fixing the test harness and reran the full suite to expose the real missing behavior in the activity-bootstrap fixture.
+  Result: The suite now fails because the activity-bootstrap JSON does not yet include normalized application-class output or explicit application/bootstrap trace events.
+  Timestamp: 2026-05-17T06:23:54+05:30
+
+- Step: Application bootstrap manual probe review
+  Action: Ran the upgraded activity-bootstrap fixture against the staged Calculator bootstrap to sanity-check the new application/activity bootstrap report beyond the test fixture.
+  Result: The live probe exposed that Linuxoid was inferring an application class from the first non-activity target instead of only trusting an actual manifest application class.
+  Timestamp: 2026-05-17T06:27:19+05:30
+
+- Step: Application bootstrap sequence integration
+  Action: Extended the existing `native-art-activity-bootstrap-fixture` seam to emit normalized application-class metadata, explicit application and launcher-activity probe events, and separate attempt/success fields while tightening manifest-based application-class selection.
+  Result: Linuxoid now models post-class-resolution bootstrap as a truthful application-plus-activity probe sequence and leaves application-class fields empty when the APK does not declare one.
+  Timestamp: 2026-05-17T06:33:13+05:30
+
+- Step: Application bootstrap sequence verification
+  Action: Rebuilt Linuxoid, reran the full test suite, reran `compatctl status`, and exercised the live Calculator activity-bootstrap fixture to confirm the manifest-driven application-class behavior stayed honest.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, status now reports native execution `97/100`, and the live Calculator probe leaves `selected_application_class_name` empty because the APK does not declare one.
+  Timestamp: 2026-05-17T06:33:55+05:30

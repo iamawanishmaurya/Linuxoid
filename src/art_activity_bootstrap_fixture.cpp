@@ -1,5 +1,6 @@
 #include "wfa/art_activity_bootstrap_fixture.hpp"
 
+#include "wfa/apk_loader.hpp"
 #include "wfa/art_runtime_smoke.hpp"
 #include "wfa/native_lifecycle.hpp"
 
@@ -94,6 +95,17 @@ std::string ResolveActivityClassName(const std::string& launcher_component) {
   return class_name;
 }
 
+std::string NormalizeManifestClassName(const std::string& package_name,
+                                       const std::string& class_name) {
+  if (class_name.empty()) {
+    return "";
+  }
+  if (class_name.front() == '.') {
+    return package_name + class_name;
+  }
+  return class_name;
+}
+
 std::string ClassNameToDescriptor(const std::string& class_name) {
   if (class_name.empty()) {
     return "";
@@ -106,6 +118,29 @@ std::string ClassNameToDescriptor(const std::string& class_name) {
   }
   descriptor.push_back(';');
   return descriptor;
+}
+
+bool LooksLikeResolvedClassWithoutMain(const std::string& output) {
+  return output.find("main") != std::string::npos &&
+         (output.find("No static") != std::string::npos ||
+          output.find("main method") != std::string::npos ||
+          output.find("Main method") != std::string::npos);
+}
+
+bool LooksLikeMissingClassFailure(const std::string& output) {
+  return output.find("ClassNotFoundException") != std::string::npos ||
+         output.find("Didn't find class") != std::string::npos ||
+         output.find("Could not find class") != std::string::npos;
+}
+
+bool ProbeCommandSucceeded(const CommandCaptureResult& result) {
+  if (result.exit_code == 0) {
+    return true;
+  }
+  if (LooksLikeMissingClassFailure(result.output)) {
+    return false;
+  }
+  return LooksLikeResolvedClassWithoutMain(result.output);
 }
 
 CommandCaptureResult RunCommandCapture(const std::string& command) {
@@ -144,6 +179,11 @@ std::string BuildActivityBootstrapPlanJson(
          << EscapeJson(report.bootstrap_manifest_path) << "\",\n"
          << "  \"launcher_component\": \""
          << EscapeJson(report.launcher_component) << "\",\n"
+         << "  \"selected_application_class_name\": \""
+         << EscapeJson(report.selected_application_class_name) << "\",\n"
+         << "  \"selected_application_class_descriptor\": \""
+         << EscapeJson(report.selected_application_class_descriptor)
+         << "\",\n"
          << "  \"selected_activity_class_name\": \""
          << EscapeJson(report.selected_activity_class_name) << "\",\n"
          << "  \"selected_activity_class_descriptor\": \""
@@ -161,10 +201,22 @@ std::string BuildActivityBootstrapPlanJson(
          << "  \"runtime_class_resolution_succeeded\": "
          << (report.runtime_class_resolution_succeeded ? "true" : "false")
          << ",\n"
+         << "  \"application_bootstrap_command\": \""
+         << EscapeJson(report.application_bootstrap_command) << "\",\n"
          << "  \"runtime_bootstrap_planned\": "
          << (report.runtime_bootstrap_planned ? "true" : "false") << ",\n"
          << "  \"runtime_bootstrap_attempted\": "
          << (report.runtime_bootstrap_attempted ? "true" : "false") << ",\n"
+         << "  \"application_probe_attempted\": "
+         << (report.application_probe_attempted ? "true" : "false")
+         << ",\n"
+         << "  \"application_probe_succeeded\": "
+         << (report.application_probe_succeeded ? "true" : "false")
+         << ",\n"
+         << "  \"activity_probe_attempted\": "
+         << (report.activity_probe_attempted ? "true" : "false") << ",\n"
+         << "  \"activity_probe_succeeded\": "
+         << (report.activity_probe_succeeded ? "true" : "false") << ",\n"
          << "  \"activity_bootstrap_command\": \""
          << EscapeJson(report.activity_bootstrap_command) << "\",\n"
          << "  \"dependency_count\": " << report.dependency_count << ",\n"
@@ -180,31 +232,57 @@ std::string BuildActivityBootstrapPlanJson(
 
 std::string BuildActivityBootstrapTraceJsonl(
     const NativeArtActivityBootstrapFixtureReport& report,
-    const CommandCaptureResult& capture) {
+    const CommandCaptureResult& application_capture,
+    const CommandCaptureResult& activity_capture) {
   std::ostringstream output;
   output << "{\"event_type\": \"activity_bootstrap_started\", "
          << "\"launcher_component\": \""
          << EscapeJson(report.launcher_component) << "\", "
+         << "\"selected_application_class_name\": \""
+         << EscapeJson(report.selected_application_class_name) << "\", "
          << "\"selected_activity_class_name\": \""
          << EscapeJson(report.selected_activity_class_name) << "\", "
          << "\"runtime_bootstrap_planned\": "
          << (report.runtime_bootstrap_planned ? "true" : "false") << ", "
          << "\"dependency_count\": " << report.dependency_count << "}\n";
 
-  if (!report.runtime_bootstrap_attempted) {
-    output << "{\"event_type\": \"activity_bootstrap_skipped\", "
+  if (!report.application_probe_attempted) {
+    output << "{\"event_type\": \"application_bootstrap_skipped\", "
+           << "\"application_bootstrap_command\": \""
+           << EscapeJson(report.application_bootstrap_command) << "\", "
+           << "\"selected_application_class_name\": \""
+           << EscapeJson(report.selected_application_class_name) << "\", "
            << "\"exit_reason\": \"" << EscapeJson(report.exit_reason)
-           << "\", "
-           << "\"missing_dependencies\": "
-           << RenderJsonArray(report.missing_dependencies) << "}\n";
+           << "\"}\n";
   } else {
-    output << "{\"event_type\": \"activity_bootstrap_attempted\", "
+    output << "{\"event_type\": \"application_bootstrap_attempted\", "
+           << "\"application_bootstrap_command\": \""
+           << EscapeJson(report.application_bootstrap_command) << "\"}\n";
+    output << "{\"event_type\": \"application_bootstrap_result\", "
+           << "\"application_probe_succeeded\": "
+           << (report.application_probe_succeeded ? "true" : "false")
+           << ", "
+           << "\"captured_output\": \""
+           << EscapeJson(application_capture.output) << "\"}\n";
+  }
+
+  if (!report.activity_probe_attempted) {
+    output << "{\"event_type\": \"launcher_activity_bootstrap_skipped\", "
+           << "\"activity_bootstrap_command\": \""
+           << EscapeJson(report.activity_bootstrap_command) << "\", "
+           << "\"selected_activity_class_name\": \""
+           << EscapeJson(report.selected_activity_class_name) << "\", "
+           << "\"exit_reason\": \"" << EscapeJson(report.exit_reason)
+           << "\"}\n";
+  } else {
+    output << "{\"event_type\": \"launcher_activity_bootstrap_attempted\", "
            << "\"activity_bootstrap_command\": \""
            << EscapeJson(report.activity_bootstrap_command) << "\"}\n";
-    output << "{\"event_type\": \"activity_bootstrap_result\", "
-           << "\"runtime_bootstrap_succeeded\": "
-           << (report.runtime_bootstrap_succeeded ? "true" : "false") << ", "
-           << "\"captured_output\": \"" << EscapeJson(capture.output) << "\"}\n";
+    output << "{\"event_type\": \"launcher_activity_bootstrap_result\", "
+           << "\"activity_probe_succeeded\": "
+           << (report.activity_probe_succeeded ? "true" : "false") << ", "
+           << "\"captured_output\": \""
+           << EscapeJson(activity_capture.output) << "\"}\n";
   }
 
   output << "{\"event_type\": \"activity_bootstrap_complete\", "
@@ -230,6 +308,11 @@ std::string BuildActivityBootstrapResultJson(
          << "\",\n"
          << "  \"launcher_component\": \""
          << EscapeJson(report.launcher_component) << "\",\n"
+         << "  \"selected_application_class_name\": \""
+         << EscapeJson(report.selected_application_class_name) << "\",\n"
+         << "  \"selected_application_class_descriptor\": \""
+         << EscapeJson(report.selected_application_class_descriptor)
+         << "\",\n"
          << "  \"selected_activity_class_name\": \""
          << EscapeJson(report.selected_activity_class_name) << "\",\n"
          << "  \"selected_activity_class_descriptor\": \""
@@ -244,6 +327,8 @@ std::string BuildActivityBootstrapResultJson(
          << "\",\n"
          << "  \"result_json_path\": \"" << EscapeJson(report.result_json_path)
          << "\",\n"
+         << "  \"application_bootstrap_command\": \""
+         << EscapeJson(report.application_bootstrap_command) << "\",\n"
          << "  \"activity_bootstrap_command\": \""
          << EscapeJson(report.activity_bootstrap_command) << "\",\n"
          << "  \"manifest_targets_ready\": "
@@ -260,6 +345,16 @@ std::string BuildActivityBootstrapResultJson(
          << "  \"runtime_class_resolution_succeeded\": "
          << (report.runtime_class_resolution_succeeded ? "true" : "false")
          << ",\n"
+         << "  \"application_probe_attempted\": "
+         << (report.application_probe_attempted ? "true" : "false")
+         << ",\n"
+         << "  \"application_probe_succeeded\": "
+         << (report.application_probe_succeeded ? "true" : "false")
+         << ",\n"
+         << "  \"activity_probe_attempted\": "
+         << (report.activity_probe_attempted ? "true" : "false") << ",\n"
+         << "  \"activity_probe_succeeded\": "
+         << (report.activity_probe_succeeded ? "true" : "false") << ",\n"
          << "  \"runtime_bootstrap_planned\": "
          << (report.runtime_bootstrap_planned ? "true" : "false") << ",\n"
          << "  \"runtime_bootstrap_attempted\": "
@@ -289,6 +384,9 @@ NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
       BuildNativeLifecycleShimFromManifest(bootstrap_manifest_path);
   const NativeArtRuntimeSmokeReport runtime_smoke =
       RunNativeArtRuntimeSmokeFixture(bootstrap_manifest_path);
+  const ApkResourceReadinessReport resources = InspectApkResourceReadiness(
+      lifecycle.bootstrap.plan.bundle_apk_path,
+      lifecycle.bootstrap.plan.resource_root);
 
   NativeArtActivityBootstrapFixtureReport report;
   report.package_name = runtime_smoke.package_name;
@@ -299,6 +397,10 @@ NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
   report.launcher_component = lifecycle.bootstrap.plan.assessment.launcher_component;
   report.selected_activity_class_name =
       ResolveActivityClassName(report.launcher_component);
+  report.selected_application_class_name = NormalizeManifestClassName(
+      resources.manifest.package_name, resources.manifest.application_name);
+  report.selected_application_class_descriptor =
+      ClassNameToDescriptor(report.selected_application_class_name);
   report.selected_activity_class_descriptor =
       ClassNameToDescriptor(report.selected_activity_class_name);
   report.class_resolution_result_json_path =
@@ -329,7 +431,9 @@ NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
       lifecycle.binder_transport_log_path};
   report.planned_bootstrap_steps = {
       "load_application_class",
+      "verify_application_probe_result",
       "resolve_launcher_activity_target",
+      "load_launcher_activity_class",
       "bind_linuxoid_service_manager",
       "prepare_activity_bootstrap_probe"};
 
@@ -365,16 +469,28 @@ NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
       lifecycle.binder_service_manager_ready;
 
   if (report.safe_runtime_probe_available &&
+      !report.selected_application_class_name.empty()) {
+    report.application_bootstrap_command =
+        QuoteForShell(runtime_smoke.art_runtime_probe) +
+        " -Dlinuxoid.bootstrap.mode=application"
+        " -Dlinuxoid.bootstrap.application=" +
+        QuoteForShell(report.selected_application_class_name) + " -cp " +
+        QuoteForShell(lifecycle.bootstrap.plan.bundle_apk_path) + " " +
+        QuoteForShell(report.selected_application_class_name);
+  }
+  if (report.safe_runtime_probe_available &&
       !report.selected_activity_class_name.empty()) {
     report.activity_bootstrap_command =
         QuoteForShell(runtime_smoke.art_runtime_probe) +
+        " -Dlinuxoid.bootstrap.mode=activity"
         " -Dlinuxoid.bootstrap.activity=" +
         QuoteForShell(report.launcher_component) + " -cp " +
         QuoteForShell(lifecycle.bootstrap.plan.bundle_apk_path) + " " +
         QuoteForShell(report.selected_activity_class_name);
   }
 
-  CommandCaptureResult capture;
+  CommandCaptureResult application_capture;
+  CommandCaptureResult activity_capture;
   if (!report.manifest_targets_ready) {
     report.exit_reason = "activity_bootstrap_manifest_targets_not_ready";
   } else if (!report.classpath_plan_ready) {
@@ -392,20 +508,40 @@ NativeArtActivityBootstrapFixtureReport RunNativeArtActivityBootstrapFixture(
   } else if (!report.runtime_class_resolution_succeeded) {
     report.exit_reason = "activity_bootstrap_class_resolution_probe_incomplete";
   } else {
-    report.runtime_bootstrap_attempted = true;
-    capture = RunCommandCapture(report.activity_bootstrap_command);
-    report.runtime_bootstrap_succeeded = capture.exit_code == 0;
+    if (!report.selected_application_class_name.empty() &&
+        !report.application_bootstrap_command.empty()) {
+      report.application_probe_attempted = true;
+      application_capture =
+          RunCommandCapture(report.application_bootstrap_command);
+      report.application_probe_succeeded =
+          ProbeCommandSucceeded(application_capture);
+    } else {
+      report.application_probe_succeeded = true;
+    }
+
+    report.activity_probe_attempted = true;
+    activity_capture = RunCommandCapture(report.activity_bootstrap_command);
+    report.activity_probe_succeeded = ProbeCommandSucceeded(activity_capture);
+    report.runtime_bootstrap_attempted =
+        report.application_probe_attempted || report.activity_probe_attempted;
+    report.runtime_bootstrap_succeeded =
+        report.application_probe_succeeded && report.activity_probe_succeeded;
     report.dependency_blocked = !report.runtime_bootstrap_succeeded;
-    report.exit_reason = report.runtime_bootstrap_succeeded
-                             ? "activity_bootstrap_probe_succeeded"
-                             : "activity_bootstrap_probe_failed";
+    if (!report.application_probe_succeeded) {
+      report.exit_reason = "application_bootstrap_probe_failed";
+    } else if (!report.activity_probe_succeeded) {
+      report.exit_reason = "activity_bootstrap_probe_failed";
+    } else {
+      report.exit_reason = "application_activity_bootstrap_probe_succeeded";
+    }
   }
 
   fs::create_directories(report.artifact_root);
   WriteTextFile(report.activity_bootstrap_plan_path,
                 BuildActivityBootstrapPlanJson(report));
   WriteTextFile(report.trace_jsonl_path,
-                BuildActivityBootstrapTraceJsonl(report, capture));
+                BuildActivityBootstrapTraceJsonl(report, application_capture,
+                                                activity_capture));
   WriteTextFile(report.result_json_path,
                 BuildActivityBootstrapResultJson(report));
   return report;
