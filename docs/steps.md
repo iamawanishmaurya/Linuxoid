@@ -1542,3 +1542,8 @@
   Action: Replaced the `native` runtime bridge hard stub with a Linuxoid-owned local compat-root implementation for staged target discovery, staged package inspection, staged-package preflight, and bootstrap-execution handoff, then added regression coverage for override-backed success and honest non-candidate failure.
   Result: Linuxoid now exposes a real `linuxoid-native` target, can inspect and preflight staged packages without attached ADB or Waydroid, and can route candidate bundles into the supervised bootstrap-execution seam while still failing honestly when a staged package is not a native spike candidate.
   Timestamp: 2026-05-17T23:59:00+05:30
+
+- Step: Core runtime health subsystem contract GREEN
+  Action: Added an explicit regression that locks the six required runtime-health subsystem records into deterministic order with stable artifact paths and JSON presence.
+  Result: Linuxoid now has a single contract test proving baseline health always includes `apk_staging`, `native_loading`, `surface_readiness`, `input_queue_readiness`, `binder_service_readiness`, and `dex_classloader_readiness`.
+  Timestamp: 2026-05-17T23:59:30+05:30

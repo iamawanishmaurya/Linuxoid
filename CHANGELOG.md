@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.59 - 2026-05-17
+
+- Lock the Self-Healing Android Device runtime health contract more explicitly by adding a regression that proves the six core subsystem records appear in deterministic order with stable artifact paths and JSON output: `apk_staging`, `native_loading`, `surface_readiness`, `input_queue_readiness`, `binder_service_readiness`, and `dex_classloader_readiness`.
+
 ## v0.1.58 - 2026-05-17
 
 - Replace the `native` runtime bridge hard stub with a Linuxoid-owned local staged-package path: `discover-runtime native` now reports a deterministic `linuxoid-native` target, `inspect-package native` reads staged manifest metadata from the compat root, `preflight-runtime native` resolves staged launcher readiness, and `launch-package native` reuses the bootstrap-execution seam for candidate packages.

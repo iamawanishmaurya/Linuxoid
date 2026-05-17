@@ -3113,6 +3113,44 @@ void TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery() {
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeHealthFixtureIncludesCoreSubsystemRecords() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-core-subsystems", true, true);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+
+  const std::vector<std::string> expected_prefix = {
+      "apk_staging",
+      "native_loading",
+      "surface_readiness",
+      "input_queue_readiness",
+      "binder_service_readiness",
+      "dex_classloader_readiness",
+  };
+
+  Expect(report.records.size() >= expected_prefix.size(),
+         "expected runtime health records to include the core subsystem set");
+  for (std::size_t index = 0; index < expected_prefix.size(); ++index) {
+    Expect(report.records[index].subsystem_name == expected_prefix[index],
+           "expected deterministic core subsystem ordering in runtime health");
+    Expect(!report.records[index].artifact_path.empty(),
+           "expected core runtime health record artifact path");
+    Expect(!report.records[index].state.empty(),
+           "expected core runtime health record state");
+  }
+
+  const auto rendered = wfa::RenderRuntimeHealthReportJson(report);
+  for (const auto& subsystem_name : expected_prefix) {
+    Expect(rendered.find("\"subsystem_name\": \"" + subsystem_name + "\"") !=
+               std::string::npos,
+           "expected core subsystem name in runtime health json");
+  }
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeHealthFixtureTreatsDexOnlyNativeLoadingAsNotRequired() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -6082,6 +6120,7 @@ int main() {
     TestRuntimeHealthFixtureSelectsMissingArtifactRecovery();
     TestRuntimeHealthFixtureSelectsUnavailableDisplayRecovery();
     TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
+    TestRuntimeHealthFixtureIncludesCoreSubsystemRecords();
     TestRuntimeHealthFixtureTreatsDexOnlyNativeLoadingAsNotRequired();
     TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess();
     TestRuntimeHealthFixtureTracksActivityBootstrapReadiness();
