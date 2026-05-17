@@ -47,6 +47,9 @@ struct RecoveryActionTemplate {
   std::string recovery_scope;
 };
 
+RecoveryActionTemplate BuildRecoveryActionTemplate(
+    const std::string& subsystem_name);
+
 const std::vector<std::string>& CoreRuntimeSubsystemNames() {
   static const std::vector<std::string> names = {
       "apk_staging",
@@ -62,6 +65,36 @@ const std::vector<std::string>& CoreRuntimeSubsystemNames() {
 bool IsCoreRuntimeSubsystemName(const std::string& subsystem_name) {
   const auto& names = CoreRuntimeSubsystemNames();
   return std::find(names.begin(), names.end(), subsystem_name) != names.end();
+}
+
+std::vector<RuntimeRecoveryScenarioContract> BuildCanonicalRecoveryScenarios() {
+  struct ScenarioSeed {
+    const char* scenario_name;
+    const char* subsystem_name;
+  };
+
+  static const std::vector<ScenarioSeed> seeds = {
+      {"missing_artifact", "apk_staging"},
+      {"failed_native_load", "native_loading"},
+      {"unavailable_display", "surface_readiness"},
+      {"failed_service_lookup", "binder_service_readiness"},
+  };
+
+  std::vector<RuntimeRecoveryScenarioContract> scenarios;
+  scenarios.reserve(seeds.size());
+  for (const auto& seed : seeds) {
+    const auto recovery =
+        BuildRecoveryActionTemplate(seed.subsystem_name);
+    scenarios.push_back(
+        {.scenario_name = seed.scenario_name,
+         .subsystem_name = seed.subsystem_name,
+         .action_name = recovery.action_name,
+         .action_rank = recovery.action_rank,
+         .retry_budget = recovery.retry_budget,
+         .recovery_scope = recovery.recovery_scope,
+         .action_reason = recovery.action_reason});
+  }
+  return scenarios;
 }
 
 void WriteTextFile(const fs::path& path, const std::string& contents) {
@@ -158,6 +191,25 @@ void AppendRuntimeHealthRecordJson(std::ostringstream& output,
          << "\"selected_recovery_action\": \""
          << EscapeJson(record.selected_recovery_action) << "\", "
          << "\"recovery_reason\": \"" << EscapeJson(record.recovery_reason)
+         << "\""
+         << "}";
+}
+
+void AppendRecoveryScenarioContractJson(
+    std::ostringstream& output, const RuntimeRecoveryScenarioContract& scenario,
+    const std::string& indent) {
+  output << indent << "{"
+         << "\"scenario_name\": \"" << EscapeJson(scenario.scenario_name)
+         << "\", "
+         << "\"subsystem_name\": \"" << EscapeJson(scenario.subsystem_name)
+         << "\", "
+         << "\"action_name\": \"" << EscapeJson(scenario.action_name)
+         << "\", "
+         << "\"action_rank\": " << scenario.action_rank << ", "
+         << "\"retry_budget\": " << scenario.retry_budget << ", "
+         << "\"recovery_scope\": \"" << EscapeJson(scenario.recovery_scope)
+         << "\", "
+         << "\"action_reason\": \"" << EscapeJson(scenario.action_reason)
          << "\""
          << "}";
 }
@@ -840,6 +892,9 @@ RuntimeHealthReport RunRuntimeHealthFixture(
   report.core_subsystem_count = static_cast<int>(report.core_subsystems.size());
   report.core_subsystems_ready =
       report.core_ready_subsystem_count == report.core_subsystem_count;
+  report.canonical_recovery_scenarios = BuildCanonicalRecoveryScenarios();
+  report.canonical_recovery_scenario_count =
+      static_cast<int>(report.canonical_recovery_scenarios.size());
 
   report.overall_ready = true;
   report.self_healing_ready = true;
@@ -954,6 +1009,8 @@ std::string RenderRuntimeHealthReportJson(const RuntimeHealthReport& report) {
          << ",\n"
          << "  \"core_ready_subsystem_count\": "
          << report.core_ready_subsystem_count << ",\n"
+         << "  \"canonical_recovery_scenario_count\": "
+         << report.canonical_recovery_scenario_count << ",\n"
          << "  \"failing_subsystem_count\": " << report.failing_subsystem_count
          << ",\n"
          << "  \"recovery_actions_selected\": "
@@ -968,6 +1025,16 @@ std::string RenderRuntimeHealthReportJson(const RuntimeHealthReport& report) {
       output << ",\n";
     }
     AppendRuntimeHealthRecordJson(output, report.core_records[index], "    ");
+  }
+  output << "\n  ],\n"
+         << "  \"canonical_recovery_scenarios\": [\n";
+  for (std::size_t index = 0;
+       index < report.canonical_recovery_scenarios.size(); ++index) {
+    if (index != 0) {
+      output << ",\n";
+    }
+    AppendRecoveryScenarioContractJson(
+        output, report.canonical_recovery_scenarios[index], "    ");
   }
   output << "\n  ],\n"
          << "  \"records\": [\n";
@@ -1029,12 +1096,24 @@ std::string RenderRuntimeRecoveryPlanJson(const RuntimeHealthReport& report) {
          << "  \"overall_state\": \"" << EscapeJson(report.overall_state)
          << "\",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason) << "\",\n"
+         << "  \"canonical_recovery_scenario_count\": "
+         << report.canonical_recovery_scenario_count << ",\n"
          << "  \"failing_subsystem_count\": " << report.failing_subsystem_count
          << ",\n"
          << "  \"recovery_actions_selected\": "
          << report.recovery_actions_selected << ",\n"
          << "  \"failing_subsystems\": "
          << RenderJsonArray(report.failing_subsystems) << ",\n"
+         << "  \"canonical_recovery_scenarios\": [\n";
+  for (std::size_t index = 0;
+       index < report.canonical_recovery_scenarios.size(); ++index) {
+    if (index != 0) {
+      output << ",\n";
+    }
+    AppendRecoveryScenarioContractJson(
+        output, report.canonical_recovery_scenarios[index], "    ");
+  }
+  output << "\n  ],\n"
          << "  \"recovery_actions\": [\n";
   for (std::size_t index = 0; index < report.recovery_actions.size(); ++index) {
     const auto& action = report.recovery_actions[index];

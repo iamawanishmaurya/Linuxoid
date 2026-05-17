@@ -32,6 +32,16 @@ struct RuntimeRecoveryAction {
   std::string replay_trace_path;
 };
 
+struct RuntimeRecoveryScenarioContract {
+  std::string scenario_name;
+  std::string subsystem_name;
+  std::string action_name;
+  int action_rank = 0;
+  int retry_budget = 0;
+  std::string recovery_scope;
+  std::string action_reason;
+};
+
 struct RuntimeHealthReport {
   std::string package_name;
   std::string install_id;
@@ -54,11 +64,13 @@ struct RuntimeHealthReport {
   int core_ready_subsystem_count = 0;
   int failing_subsystem_count = 0;
   int recovery_actions_selected = 0;
+  int canonical_recovery_scenario_count = 0;
   std::vector<std::string> core_subsystems;
   std::vector<RuntimeHealthRecord> core_records;
   std::vector<std::string> failing_subsystems;
   std::vector<RuntimeHealthRecord> records;
   std::vector<RuntimeRecoveryAction> recovery_actions;
+  std::vector<RuntimeRecoveryScenarioContract> canonical_recovery_scenarios;
 };
 
 struct RuntimeHealthReplayReport {

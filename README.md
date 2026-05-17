@@ -211,6 +211,9 @@ Today, **self-healing** in Linuxoid means:
   - `core_ready_subsystem_count`
   - `core_subsystems_ready`
   - `core_subsystem_records`
+- Linuxoid now also exposes the four required deterministic recovery cases as an explicit scenario contract instead of leaving callers to reconstruct them from whichever actions happened to be selected in one run:
+  - `canonical_recovery_scenario_count`
+  - `canonical_recovery_scenarios`
 - Linuxoid can persist those decisions into stable artifacts for agents, harnesses, and replay tooling:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`

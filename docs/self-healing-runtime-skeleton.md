@@ -40,6 +40,9 @@ What that means **today**:
   - `core_ready_subsystem_count`
   - `core_subsystems_ready`
   - `core_subsystem_records`
+- Every recovery-plan report now also exposes the four required deterministic recovery cases as a stable scenario contract:
+  - `canonical_recovery_scenario_count`
+  - `canonical_recovery_scenarios`
 - Linuxoid can now materialize those actions into stable plan artifacts:
   - `runtime-recovery-plan.json`
   - `runtime-recovery-actions.jsonl`

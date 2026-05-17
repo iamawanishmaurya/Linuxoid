@@ -3909,10 +3909,48 @@ void TestRuntimeRecoveryPlanScenariosSelectDeterministicActions() {
   Expect(has_action(binder, "rebuild_service_registry_and_retry_lookup"),
          "expected registry rebuild action for failed service lookup");
 
+  const std::vector<std::string> expected_scenarios = {
+      "missing_artifact",
+      "failed_native_load",
+      "unavailable_display",
+      "failed_service_lookup",
+  };
+  const std::vector<std::string> expected_actions = {
+      "restage_apk_bundle",
+      "retry_native_load_after_bundle_refresh",
+      "fallback_to_headless_surface_probe",
+      "rebuild_service_registry_and_retry_lookup",
+  };
+  Expect(missing.canonical_recovery_scenario_count == 4,
+         "expected four canonical recovery scenarios");
+  Expect(missing.canonical_recovery_scenarios.size() == expected_scenarios.size(),
+         "expected explicit canonical recovery scenario contract");
+  for (std::size_t index = 0; index < expected_scenarios.size(); ++index) {
+    Expect(missing.canonical_recovery_scenarios[index].scenario_name ==
+               expected_scenarios[index],
+           "expected deterministic canonical recovery scenario ordering");
+    Expect(missing.canonical_recovery_scenarios[index].action_name ==
+               expected_actions[index],
+           "expected deterministic canonical recovery action mapping");
+  }
+
   const std::string missing_plan = ReadTextFile(missing.recovery_plan_path);
   const std::string native_plan = ReadTextFile(native.recovery_plan_path);
   const std::string display_plan = ReadTextFile(display.recovery_plan_path);
   const std::string binder_plan = ReadTextFile(binder.recovery_plan_path);
+  Expect(missing_plan.find("\"canonical_recovery_scenario_count\": 4") !=
+             std::string::npos,
+         "expected canonical recovery scenario count in recovery plan");
+  Expect(missing_plan.find("\"canonical_recovery_scenarios\": [") !=
+             std::string::npos,
+         "expected explicit canonical recovery scenarios in recovery plan");
+  Expect(missing_plan.find("\"scenario_name\": \"missing_artifact\"") !=
+             std::string::npos,
+         "expected missing-artifact scenario in recovery plan");
+  Expect(missing_plan.find(
+             "\"action_name\": \"restage_apk_bundle\"") !=
+             std::string::npos,
+         "expected missing-artifact action in recovery plan");
   Expect(missing_plan.find("\"action_rank\": 10") != std::string::npos,
          "expected deterministic missing-artifact rank");
   Expect(missing_plan.find("\"retry_budget\": 1") != std::string::npos,
@@ -3972,6 +4010,19 @@ void TestRuntimeRecoveryPlanCommandWritesStableJson() {
   Expect(output.find("\"recovery_scope\": \"art_bridge\"") !=
              std::string::npos,
          "expected deterministic recovery scope in recovery json");
+  Expect(output.find("\"canonical_recovery_scenario_count\": 4") !=
+             std::string::npos,
+         "expected canonical recovery scenario count in recovery json");
+  Expect(output.find("\"canonical_recovery_scenarios\": [") !=
+             std::string::npos,
+         "expected canonical recovery scenario contract in recovery json");
+  Expect(output.find("\"scenario_name\": \"failed_native_load\"") !=
+             std::string::npos,
+         "expected failed-native-load scenario in recovery json");
+  Expect(output.find(
+             "\"action_name\": \"retry_native_load_after_bundle_refresh\"") !=
+             std::string::npos,
+         "expected failed-native-load action in recovery json");
 
   fs::remove_all(fixture.root);
 }

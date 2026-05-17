@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Canonical recovery-scenario contract
+  Action: Extended the self-healing runtime recovery-plan report and JSON rendering so the four required deterministic recovery cases are exposed as an explicit scenario contract with stable ordering, action names, ranks, retry budgets, scopes, and reasons, then pinned that surface with report-level and CLI-level tests.
+  Result: Linuxoid now exposes `canonical_recovery_scenario_count` and `canonical_recovery_scenarios` in addition to selected recovery actions, making the recovery-plan contract easier for harnesses to consume deterministically.
+  Timestamp: 2026-05-17T23:58:00+05:30
+
 - Step: Core runtime-health projection contract
   Action: Extended the self-healing runtime-health report and JSON rendering so the six required subsystem areas are exposed as an explicit core projection with stable ordering, counts, readiness, and structured record entries, then pinned that surface with report-level and CLI-level tests.
   Result: Linuxoid now exposes `core_subsystems`, `core_subsystem_count`, `core_ready_subsystem_count`, `core_subsystems_ready`, and `core_subsystem_records` in addition to the deeper full `records` list, making the runtime-health contract easier for harnesses to consume deterministically.

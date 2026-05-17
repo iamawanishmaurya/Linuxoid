@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.67 - 2026-05-17
+
+- Strengthen the deterministic recovery-plan contract by exposing the four required recovery cases as an explicit scenario matrix: `missing_artifact`, `failed_native_load`, `unavailable_display`, and `failed_service_lookup` now surface through `canonical_recovery_scenarios` with stable action names, ranks, retry budgets, scopes, and reasons.
+- Add regression coverage that proves both the in-process recovery report and the public `native-runtime-recovery-plan` JSON expose that four-scenario contract deterministically, instead of forcing harnesses to infer it from whichever recovery actions were selected in one run.
+- Refresh the README, self-healing runtime note, phased plan, changelog, and step log so the repo describes the stronger public recovery contract honestly.
+
 ## v0.1.66 - 2026-05-17
 
 - Strengthen the self-healing runtime-health contract by exposing the six required core subsystems through an explicit summary projection: `core_subsystems`, `core_subsystem_count`, `core_ready_subsystem_count`, `core_subsystems_ready`, and `core_subsystem_records`, while keeping the full ordered `records` list intact for deeper diagnosis.
