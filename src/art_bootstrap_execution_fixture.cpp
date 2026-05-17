@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -24,6 +25,16 @@ void WriteTextFile(const fs::path& path, const std::string& contents) {
   output << contents;
 }
 
+std::string ReadTextFile(const fs::path& path) {
+  std::ifstream input(path);
+  if (!input) {
+    throw std::runtime_error("unable to read file: " + path.string());
+  }
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  return buffer.str();
+}
+
 void WriteExecutableFile(const fs::path& path, const std::string& contents) {
   WriteTextFile(path, contents);
   fs::permissions(path,
@@ -38,6 +49,19 @@ struct CommandCaptureResult {
   int exit_code = -1;
   std::string output;
 };
+
+std::string QuoteForShell(const std::string& value) {
+  std::string quoted = "'";
+  for (const char character : value) {
+    if (character == '\'') {
+      quoted += "'\\''";
+    } else {
+      quoted.push_back(character);
+    }
+  }
+  quoted += "'";
+  return quoted;
+}
 
 std::string EscapeJson(const std::string& value) {
   std::string escaped;
@@ -140,6 +164,8 @@ std::string BuildExecutionContextJson(
          << EscapeJson(report.application_bootstrap_command) << "\",\n"
          << "  \"activity_bootstrap_command\": \""
          << EscapeJson(report.activity_bootstrap_command) << "\",\n"
+         << "  \"runner_state_json_path\": \""
+         << EscapeJson(report.runner_state_json_path) << "\",\n"
          << "  \"application_execution_log_path\": \""
          << EscapeJson(report.application_execution_log_path) << "\",\n"
          << "  \"activity_execution_log_path\": \""
@@ -154,24 +180,99 @@ std::string BuildRunnerScript(
     const NativeArtBootstrapExecutionFixtureReport& report) {
   std::ostringstream output;
   output << "#!/bin/sh\n"
-         << "set -eu\n"
+         << "set +e\n"
          << "APP_LOG=" << "'" << report.application_execution_log_path << "'"
          << "\n"
          << "ACTIVITY_LOG=" << "'" << report.activity_execution_log_path << "'"
-         << "\n";
+         << "\n"
+         << "STATE_JSON=" << "'" << report.runner_state_json_path << "'"
+         << "\n"
+         << "app_attempted=false\n"
+         << "activity_attempted=false\n"
+         << "app_exit=-1\n"
+         << "activity_exit=-1\n";
   if (!report.application_bootstrap_command.empty()) {
-    output << report.application_bootstrap_command
-           << " > \"$APP_LOG\" 2>&1\n";
+    output << "app_attempted=true\n"
+           << report.application_bootstrap_command << " > \"$APP_LOG\" 2>&1\n"
+           << "app_exit=$?\n";
   } else {
-    output << "printf '%s\\n' 'application phase not required' > \"$APP_LOG\"\n";
+    output
+        << "printf '%s\\n' 'application phase not required' > \"$APP_LOG\"\n";
   }
   if (!report.activity_bootstrap_command.empty()) {
-    output << report.activity_bootstrap_command
-           << " > \"$ACTIVITY_LOG\" 2>&1\n";
+    output << "activity_attempted=true\n"
+           << report.activity_bootstrap_command
+           << " > \"$ACTIVITY_LOG\" 2>&1\n"
+           << "activity_exit=$?\n";
   } else {
     output << "printf '%s\\n' 'activity phase not configured' > \"$ACTIVITY_LOG\"\n";
   }
+  output << "runner_exit=0\n"
+         << "if [ \"$app_exit\" -ne -1 ] && [ \"$app_exit\" -ne 0 ]; then\n"
+         << "  runner_exit=$app_exit\n"
+         << "fi\n"
+         << "if [ \"$runner_exit\" -eq 0 ] && [ \"$activity_exit\" -ne -1 ] && [ \"$activity_exit\" -ne 0 ]; then\n"
+         << "  runner_exit=$activity_exit\n"
+         << "fi\n"
+         << "cat > \"$STATE_JSON\" <<EOF\n"
+         << "{\n"
+         << "  \"application_attempted\": $app_attempted,\n"
+         << "  \"application_exit_code\": $app_exit,\n"
+         << "  \"activity_attempted\": $activity_attempted,\n"
+         << "  \"activity_exit_code\": $activity_exit,\n"
+         << "  \"runner_exit_code\": $runner_exit\n"
+         << "}\n"
+         << "EOF\n"
+         << "exit \"$runner_exit\"\n";
   return output.str();
+}
+
+std::string BuildRunnerStateJson(
+    const NativeArtBootstrapExecutionFixtureReport& report) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"runner_invoked\": "
+         << (report.runner_invoked ? "true" : "false") << ",\n"
+         << "  \"runner_exit_code\": " << report.runner_exit_code << ",\n"
+         << "  \"application_attempted\": "
+         << (report.application_execution_attempted ? "true" : "false")
+         << ",\n"
+         << "  \"application_exit_code\": " << report.application_exit_code
+         << ",\n"
+         << "  \"activity_attempted\": "
+         << (report.activity_execution_attempted ? "true" : "false")
+         << ",\n"
+         << "  \"activity_exit_code\": " << report.activity_exit_code << "\n"
+         << "}\n";
+  return output.str();
+}
+
+void ApplyRunnerStateJson(const std::string& json,
+                          NativeArtBootstrapExecutionFixtureReport* report) {
+  const auto parse_bool = [&](const std::string& key, bool* value) {
+    const std::regex pattern("\"" + key + "\"\\s*:\\s*(true|false)");
+    std::smatch match;
+    if (std::regex_search(json, match, pattern) && match.size() == 2) {
+      *value = match[1].str() == "true";
+      return true;
+    }
+    return false;
+  };
+  const auto parse_int = [&](const std::string& key, int* value) {
+    const std::regex pattern("\"" + key + "\"\\s*:\\s*(-?[0-9]+)");
+    std::smatch match;
+    if (std::regex_search(json, match, pattern) && match.size() == 2) {
+      *value = std::stoi(match[1].str());
+      return true;
+    }
+    return false;
+  };
+
+  parse_bool("application_attempted", &report->application_execution_attempted);
+  parse_bool("activity_attempted", &report->activity_execution_attempted);
+  parse_int("application_exit_code", &report->application_exit_code);
+  parse_int("activity_exit_code", &report->activity_exit_code);
+  parse_int("runner_exit_code", &report->runner_exit_code);
 }
 
 std::string BuildExecutionPlanJson(
@@ -191,6 +292,8 @@ std::string BuildExecutionPlanJson(
          << EscapeJson(report.execution_context_json_path) << "\",\n"
          << "  \"runner_script_path\": \""
          << EscapeJson(report.runner_script_path) << "\",\n"
+         << "  \"runner_state_json_path\": \""
+         << EscapeJson(report.runner_state_json_path) << "\",\n"
          << "  \"application_execution_log_path\": \""
          << EscapeJson(report.application_execution_log_path) << "\",\n"
          << "  \"activity_execution_log_path\": \""
@@ -211,6 +314,8 @@ std::string BuildExecutionPlanJson(
          << EscapeJson(report.activity_bootstrap_command) << "\",\n"
          << "  \"execution_attempt_planned\": "
          << (report.execution_attempt_planned ? "true" : "false") << ",\n"
+         << "  \"runner_invoked\": "
+         << (report.runner_invoked ? "true" : "false") << ",\n"
          << "  \"bootstrap_sequence\": "
          << RenderJsonArray(report.bootstrap_sequence) << "\n"
          << "}\n";
@@ -248,6 +353,9 @@ std::string BuildExecutionTraceJsonl(
          << "\"}\n";
 
   output << "{\"event_type\": \"bootstrap_execution_complete\", "
+         << "\"runner_invoked\": "
+         << (report.runner_invoked ? "true" : "false") << ", "
+         << "\"runner_exit_code\": " << report.runner_exit_code << ", "
          << "\"execution_attempted\": "
          << (report.execution_attempted ? "true" : "false") << ", "
          << "\"execution_succeeded\": "
@@ -281,6 +389,8 @@ std::string BuildExecutionResultJson(
          << EscapeJson(report.execution_context_json_path) << "\",\n"
          << "  \"runner_script_path\": \""
          << EscapeJson(report.runner_script_path) << "\",\n"
+         << "  \"runner_state_json_path\": \""
+         << EscapeJson(report.runner_state_json_path) << "\",\n"
          << "  \"application_execution_log_path\": \""
          << EscapeJson(report.application_execution_log_path) << "\",\n"
          << "  \"activity_execution_log_path\": \""
@@ -313,18 +423,25 @@ std::string BuildExecutionResultJson(
          << ",\n"
          << "  \"execution_attempt_planned\": "
          << (report.execution_attempt_planned ? "true" : "false") << ",\n"
-         << "  \"execution_attempted\": "
+         << "  \"runner_invoked\": "
+         << (report.runner_invoked ? "true" : "false") << ",\n"
+         << "  \"runner_exit_code\": " << report.runner_exit_code << ",\n"
+        << "  \"execution_attempted\": "
          << (report.execution_attempted ? "true" : "false") << ",\n"
          << "  \"execution_succeeded\": "
          << (report.execution_succeeded ? "true" : "false") << ",\n"
          << "  \"application_execution_attempted\": "
          << (report.application_execution_attempted ? "true" : "false")
          << ",\n"
+         << "  \"application_exit_code\": " << report.application_exit_code
+         << ",\n"
          << "  \"application_execution_succeeded\": "
          << (report.application_execution_succeeded ? "true" : "false")
          << ",\n"
          << "  \"activity_execution_attempted\": "
          << (report.activity_execution_attempted ? "true" : "false") << ",\n"
+         << "  \"activity_exit_code\": " << report.activity_exit_code
+         << ",\n"
          << "  \"activity_execution_succeeded\": "
          << (report.activity_execution_succeeded ? "true" : "false")
          << ",\n"
@@ -362,6 +479,9 @@ BuildNativeArtBootstrapExecutionFixture(
   report.runner_script_path =
       (fs::path(report.artifact_root) / "bootstrap-execution-runner.sh")
           .string();
+  report.runner_state_json_path =
+      (fs::path(report.artifact_root) / "bootstrap-execution-runner-state.json")
+          .string();
   report.application_execution_log_path =
       (fs::path(report.artifact_root) / "bootstrap-execution-application.log")
           .string();
@@ -397,6 +517,10 @@ BuildNativeArtBootstrapExecutionFixture(
       activity.selected_application_class_name.empty();
   report.activity_execution_attempted = false;
   report.activity_execution_succeeded = false;
+  report.runner_invoked = false;
+  report.runner_exit_code = -1;
+  report.application_exit_code = -1;
+  report.activity_exit_code = -1;
   report.dependency_blocked = activity.dependency_blocked;
   report.dependency_count = activity.dependency_count;
   report.missing_dependencies = activity.missing_dependencies;
@@ -415,22 +539,33 @@ BuildNativeArtBootstrapExecutionFixture(
   } else if (!report.runtime_class_resolution_succeeded) {
     report.exit_reason = "bootstrap_execution_class_resolution_incomplete";
   } else {
-    if (!report.selected_application_class_name.empty() &&
-        !report.application_bootstrap_command.empty()) {
-      report.application_execution_attempted = true;
-      application_capture =
-          RunCommandCapture(report.application_bootstrap_command);
-      report.application_execution_succeeded =
-          ProbeCommandSucceeded(application_capture);
+    report.runner_invoked = true;
+  }
+
+  fs::create_directories(report.artifact_root);
+  WriteTextFile(report.execution_context_json_path,
+                BuildExecutionContextJson(report));
+  WriteExecutableFile(report.runner_script_path, BuildRunnerScript(report));
+  if (report.runner_invoked) {
+    static_cast<void>(
+        RunCommandCapture(QuoteForShell(report.runner_script_path)));
+    if (fs::exists(report.runner_state_json_path)) {
+      ApplyRunnerStateJson(ReadTextFile(report.runner_state_json_path), &report);
+    } else {
+      report.runner_exit_code = -2;
+      report.exit_reason = "bootstrap_execution_runner_state_missing";
     }
 
-    if (!report.activity_bootstrap_command.empty()) {
-      report.activity_execution_attempted = true;
-      activity_capture = RunCommandCapture(report.activity_bootstrap_command);
-      report.activity_execution_succeeded =
-          ProbeCommandSucceeded(activity_capture);
-    }
-
+    application_capture.exit_code = report.application_exit_code;
+    activity_capture.exit_code = report.activity_exit_code;
+    application_capture.output = ReadTextFile(report.application_execution_log_path);
+    activity_capture.output = ReadTextFile(report.activity_execution_log_path);
+    report.application_execution_succeeded =
+        !report.application_execution_attempted ||
+        ProbeCommandSucceeded(application_capture);
+    report.activity_execution_succeeded =
+        !report.activity_execution_attempted ||
+        ProbeCommandSucceeded(activity_capture);
     report.execution_attempted = report.application_execution_attempted ||
                                  report.activity_execution_attempted;
     report.execution_succeeded = report.application_execution_succeeded &&
@@ -445,20 +580,13 @@ BuildNativeArtBootstrapExecutionFixture(
     } else {
       report.exit_reason = "bootstrap_execution_succeeded";
     }
+  } else {
+    WriteTextFile(report.application_execution_log_path,
+                  "application phase not attempted\n");
+    WriteTextFile(report.activity_execution_log_path,
+                  "activity phase not attempted\n");
   }
-
-  fs::create_directories(report.artifact_root);
-  WriteTextFile(report.execution_context_json_path,
-                BuildExecutionContextJson(report));
-  WriteExecutableFile(report.runner_script_path, BuildRunnerScript(report));
-  WriteTextFile(report.application_execution_log_path,
-                report.application_execution_attempted
-                    ? application_capture.output
-                    : "application phase not attempted\n");
-  WriteTextFile(report.activity_execution_log_path,
-                report.activity_execution_attempted
-                    ? activity_capture.output
-                    : "activity phase not attempted\n");
+  WriteTextFile(report.runner_state_json_path, BuildRunnerStateJson(report));
   WriteTextFile(report.execution_plan_path, BuildExecutionPlanJson(report));
   WriteTextFile(report.trace_jsonl_path, BuildExecutionTraceJsonl(report));
   WriteTextFile(report.result_json_path, BuildExecutionResultJson(report));

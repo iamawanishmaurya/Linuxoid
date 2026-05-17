@@ -1507,3 +1507,18 @@
   Action: Split runtime health into separate activity-bootstrap planning and bootstrap-execution records, added deterministic recovery wiring, refreshed docs/version metadata, and reverified live commands.
   Result: Runtime health now reports activity planning as ready, bootstrap execution as pending, and recovery points at execution instead of the already-materialized plan.
   Timestamp: 2026-05-17T21:50:00+05:30
+
+- Step: Supervised bootstrap runner gate selection
+  Action: Choosing the next implementation slice: make bootstrap execution run through the generated runner script instead of bypassing it with direct per-command probes.
+  Result: Starting TDD for a supervised runner path with stable exit codes and phase logs.
+  Timestamp: 2026-05-17T22:05:00+05:30
+
+- Step: Supervised bootstrap runner RED verified
+  Action: Ran full build/test after extending bootstrap-execution expectations.
+  Result: Tests failed as expected because the execution report does not yet expose runner-state metadata or supervised runner execution fields.
+  Timestamp: 2026-05-17T22:07:00+05:30
+
+- Step: Supervised bootstrap runner GREEN
+  Action: Routed bootstrap execution through the generated runner script, added stable runner-state JSON plus per-phase exit codes, and reverified live CLI behavior.
+  Result: Linuxoid now has a real supervised execution seam with stable runner metadata while still reporting missing ART honestly on this host.
+  Timestamp: 2026-05-17T22:15:00+05:30

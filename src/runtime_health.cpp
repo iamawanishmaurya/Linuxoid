@@ -459,6 +459,10 @@ RuntimeHealthRecord BuildBootstrapExecutionRecord(
           bootstrap.selected_application_class_name +
           "; selected_activity_class_name=" +
           bootstrap.selected_activity_class_name +
+          "; runner_invoked=" +
+          std::string(bootstrap.runner_invoked ? "true" : "false") +
+          "; runner_exit_code=" +
+          std::to_string(bootstrap.runner_exit_code) +
           "; application_execution_attempted=" +
           std::string(bootstrap.application_execution_attempted ? "true"
                                                                 : "false") +

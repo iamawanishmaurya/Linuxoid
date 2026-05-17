@@ -18,6 +18,7 @@ struct NativeArtBootstrapExecutionFixtureReport {
   std::string execution_plan_path;
   std::string execution_context_json_path;
   std::string runner_script_path;
+  std::string runner_state_json_path;
   std::string application_execution_log_path;
   std::string activity_execution_log_path;
   std::string trace_jsonl_path;
@@ -32,12 +33,16 @@ struct NativeArtBootstrapExecutionFixtureReport {
   bool safe_runtime_probe_available = false;
   bool runtime_class_resolution_succeeded = false;
   bool execution_attempt_planned = false;
+  bool runner_invoked = false;
   bool execution_attempted = false;
   bool execution_succeeded = false;
   bool application_execution_attempted = false;
   bool application_execution_succeeded = false;
   bool activity_execution_attempted = false;
   bool activity_execution_succeeded = false;
+  int runner_exit_code = -1;
+  int application_exit_code = -1;
+  int activity_exit_code = -1;
   bool dependency_blocked = true;
   std::size_t dependency_count = 0;
   std::string exit_reason;

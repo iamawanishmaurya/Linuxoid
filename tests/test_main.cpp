@@ -2519,6 +2519,8 @@ void TestNativeArtBootstrapExecutionFixtureWritesStableArtifacts() {
          "expected bootstrap execution context artifact");
   Expect(fs::exists(report.runner_script_path),
          "expected bootstrap execution runner script artifact");
+  Expect(fs::exists(report.runner_state_json_path),
+         "expected bootstrap execution runner state artifact");
   Expect(fs::exists(report.application_execution_log_path),
          "expected application execution log artifact");
   Expect(fs::exists(report.activity_execution_log_path),
@@ -2534,6 +2536,9 @@ void TestNativeArtBootstrapExecutionFixtureWritesStableArtifacts() {
   Expect(rendered.find("\"runner_script_path\": \"") !=
              std::string::npos,
          "expected runner script path in bootstrap execution json");
+  Expect(rendered.find("\"runner_state_json_path\": \"") !=
+             std::string::npos,
+         "expected runner state path in bootstrap execution json");
   Expect(rendered.find("\"application_execution_log_path\": \"") !=
              std::string::npos,
          "expected application execution log path in bootstrap execution json");
@@ -2583,6 +2588,71 @@ void TestNativeArtBootstrapExecutionFixtureHandlesRuntimeAvailabilityHonestly() 
   fs::remove_all(fixture.root);
 }
 
+void TestNativeArtBootstrapExecutionFixtureRunsThroughSupervisedRunner() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-art-bootstrap-execution-runner";
+  fs::remove_all(root);
+  fs::create_directories(root / "art");
+
+  {
+    std::ofstream bootstrap_manifest(root / "bootstrap.json");
+    bootstrap_manifest << "{}\n";
+  }
+  {
+    std::ofstream activity_result(root / "art" / "activity-bootstrap-result.json");
+    activity_result << "{}\n";
+  }
+
+  wfa::NativeArtActivityBootstrapFixtureReport activity;
+  activity.package_name = "com.example.runner";
+  activity.install_id = "vc1-1.0";
+  activity.bootstrap_manifest_path = (root / "bootstrap.json").string();
+  activity.session_root = root.string();
+  activity.artifact_root = (root / "art").string();
+  activity.result_json_path =
+      (root / "art" / "activity-bootstrap-result.json").string();
+  activity.selected_application_class_name = "com.example.runner.App";
+  activity.selected_application_class_descriptor =
+      "Lcom/example/runner/App;";
+  activity.selected_activity_class_name = "com.example.runner.MainActivity";
+  activity.selected_activity_class_descriptor =
+      "Lcom/example/runner/MainActivity;";
+  activity.application_bootstrap_command = "printf 'application-ok\\n'";
+  activity.activity_bootstrap_command = "printf 'activity-ok\\n'";
+  activity.art_runtime_detected = true;
+  activity.safe_runtime_probe_available = true;
+  activity.runtime_class_resolution_succeeded = true;
+  activity.runtime_bootstrap_planned = true;
+  activity.dependency_blocked = false;
+  activity.dependency_count = 0;
+
+  const auto report =
+      wfa::BuildNativeArtBootstrapExecutionFixture(activity);
+
+  Expect(report.runner_invoked, "expected supervised runner invocation");
+  Expect(report.runner_exit_code == 0, "expected zero runner exit code");
+  Expect(report.application_exit_code == 0,
+         "expected zero application phase exit code");
+  Expect(report.activity_exit_code == 0,
+         "expected zero activity phase exit code");
+  Expect(report.execution_attempted,
+         "expected execution attempt through supervised runner");
+  Expect(report.execution_succeeded,
+         "expected successful supervised runner execution");
+  Expect(ReadTextFile(report.application_execution_log_path).find(
+             "application-ok") != std::string::npos,
+         "expected application log output");
+  Expect(ReadTextFile(report.activity_execution_log_path).find("activity-ok") !=
+             std::string::npos,
+         "expected activity log output");
+  Expect(ReadTextFile(report.runner_state_json_path).find(
+             "\"runner_exit_code\": 0") != std::string::npos,
+         "expected runner state json exit code");
+
+  fs::remove_all(root);
+}
+
 void TestNativeArtBootstrapExecutionCommandWritesStableJson() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -2602,6 +2672,9 @@ void TestNativeArtBootstrapExecutionCommandWritesStableJson() {
   Expect(output.find("\"execution_context_json_path\": ") !=
              std::string::npos,
          "expected execution context path in bootstrap execution command json");
+  Expect(output.find("\"runner_state_json_path\": ") !=
+             std::string::npos,
+         "expected runner state path in bootstrap execution command json");
   Expect(output.find("\"selected_activity_class_name\": ") !=
              std::string::npos,
          "expected selected activity class in bootstrap execution command json");
@@ -5478,6 +5551,7 @@ int main() {
     TestNativeArtBootstrapExecutionFixtureWritesStableArtifacts();
     TestNativeArtBootstrapExecutionFixtureCanReuseActivityBootstrapReport();
     TestNativeArtBootstrapExecutionFixtureHandlesRuntimeAvailabilityHonestly();
+    TestNativeArtBootstrapExecutionFixtureRunsThroughSupervisedRunner();
     TestNativeArtBootstrapExecutionCommandWritesStableJson();
     TestNativeArtClassResolutionFixtureResolvesManifestTargets();
     TestNativeArtClassResolutionFixtureHandlesMissingDexTargetsHonestly();

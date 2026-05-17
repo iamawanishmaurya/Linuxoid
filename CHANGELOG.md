@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.55 - 2026-05-17
+
+- Upgrade `native-art-bootstrap-execution-fixture` into a real supervised runner seam: Linuxoid now executes bootstrap phases through the generated runner script, writes `art/bootstrap-execution-runner-state.json`, and records raw runner, application, and activity exit codes alongside the existing plan, context, trace, result, and phase-log artifacts.
+- Add regression coverage that proves the supervised runner path is used, that the runner-state artifact is stable, and that bootstrap-execution command JSON now exposes the new runner metadata.
+- Refresh the README, phased plan, self-healing runtime note, changelog, and status text so Linuxoid now describes bootstrap execution as a supervised runner-backed seam while still reporting missing host ART honestly on this machine.
+
 ## v0.1.54 - 2026-05-17
 
 - Split Linuxoid's post-class-resolution bootstrap seam cleanly into **activity-bootstrap planning** and **bootstrap execution** so `native-art-activity-bootstrap-fixture` now stays a deterministic planning artifact generator while `native-art-bootstrap-execution-fixture` owns the execution-context JSON, runner script, and per-phase execution logs.
