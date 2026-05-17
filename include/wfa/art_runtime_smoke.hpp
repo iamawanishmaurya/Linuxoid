@@ -42,6 +42,7 @@ struct NativeArtRuntimeSmokeReport {
   std::string art_runtime_probe;
   std::string art_runtime_probe_source;
   std::string art_runtime_probe_detection_reason;
+  std::string art_runtime_probe_capability;
   std::string runtime_probe_command;
   std::string resolved_target_class_name;
   std::string resolved_target_class_descriptor;

@@ -79,7 +79,13 @@ What that means **today**:
 - Linuxoid now also records the host ART gate itself as a diagnosable contract instead of a black box:
   - candidate inventory for override, fixed host paths, and PATH lookups
   - explicit `art_runtime_probe_detection_reason`
+  - explicit `art_runtime_probe_capability`
   - public `ART Runtime Probe Inventory Path` and `ART Runtime Probe Detection Reason` lines in native preflight and launch reports
+- Linuxoid now also distinguishes between **host ART detection** and **host ART bootstrap capability**:
+  - `override_bootstrap_capable`
+  - `host_dalvikvm_bootstrap_capable`
+  - `host_app_process_detection_only`
+- That means a host can now be reported as “ART probe detected” without Linuxoid overstating that the same probe is ready to bootstrap a staged foreground app.
 - Linuxoid now also has a deterministic activity-bootstrap seam on top of that runtime-smoke evidence:
   - `native-art-activity-bootstrap-fixture`
   - `art/activity-bootstrap-plan.json`
@@ -110,6 +116,7 @@ What that means **today**:
 - Runtime health now also treats DEX-only bundles more honestly: if a staged APK declares no native libraries, `native_loading` is classified as `not_required` instead of being treated like a failed native-loader dependency.
 - Linuxoid now also exposes a real local `native` runtime bridge for staged target discovery, staged package inspection, staged-package preflight, and bootstrap-execution handoff. That means self-healing no longer depends only on attached Android targets to exercise the public runtime surface.
 - Linuxoid now also carries the ART probe inventory and detection rationale through that native bridge, so a blocked default-path host startup can show exactly which probe candidates were examined and why no usable host runtime was selected.
+- Linuxoid now also carries the probe-capability classification through that bridge, so native preflight and launch can explain the difference between “ART exists somewhere on this host” and “Linuxoid can safely bootstrap through it right now.”
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -151,7 +158,7 @@ What it **does not** mean yet:
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet own a full embedded ART runtime or a real in-process `PathClassLoader`.
 - Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, exercise the runner-backed execution seam through a Linuxoid-owned override probe in fixtures, separate activity-bootstrap planning from bootstrap execution, and keep deterministic execution-context, runner-state, runner-script, and per-phase log artifacts around that execution seam.
-- Linuxoid does **not** yet prove real host-side ART startup for a staged foreground app by default; the strongest successful path today is still an override-backed Linuxoid fixture seam.
+- Linuxoid does **not** yet prove real host-side ART startup for a staged foreground app by default; even a detected host `app_process` probe is still reported as detection-only, and the strongest successful path today is still an override-backed Linuxoid fixture seam.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.

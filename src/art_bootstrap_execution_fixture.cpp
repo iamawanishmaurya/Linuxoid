@@ -170,6 +170,8 @@ std::string BuildExecutionContextJson(
          << EscapeJson(report.art_runtime_probe_inventory_path) << "\",\n"
          << "  \"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason) << "\",\n"
+         << "  \"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability) << "\",\n"
          << "  \"runner_state_json_path\": \""
          << EscapeJson(report.runner_state_json_path) << "\",\n"
          << "  \"application_execution_log_path\": \""
@@ -342,6 +344,8 @@ std::string BuildExecutionTraceJsonl(
          << EscapeJson(report.art_runtime_probe_inventory_path) << "\", "
          << "\"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason) << "\", "
+         << "\"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability) << "\", "
          << "\"execution_attempt_planned\": "
          << (report.execution_attempt_planned ? "true" : "false") << "}\n";
 
@@ -431,6 +435,8 @@ std::string BuildExecutionResultJson(
          << EscapeJson(report.art_runtime_probe_inventory_path) << "\",\n"
          << "  \"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason) << "\",\n"
+         << "  \"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability) << "\",\n"
          << "  \"art_runtime_detected\": "
          << (report.art_runtime_detected ? "true" : "false") << ",\n"
          << "  \"safe_runtime_probe_available\": "
@@ -527,6 +533,8 @@ BuildNativeArtBootstrapExecutionFixture(
       activity.art_runtime_probe_inventory_path;
   report.art_runtime_probe_detection_reason =
       activity.art_runtime_probe_detection_reason;
+  report.art_runtime_probe_capability =
+      activity.art_runtime_probe_capability;
   report.art_runtime_detected = activity.art_runtime_detected;
   report.safe_runtime_probe_available = activity.safe_runtime_probe_available;
   report.runtime_class_resolution_succeeded =

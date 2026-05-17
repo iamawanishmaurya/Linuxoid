@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.78 - 2026-05-17
+
+- Distinguish host ART **detection** from host ART **bootstrap capability** across the native runtime seams: Linuxoid now classifies selected probes as `override_bootstrap_capable`, `host_dalvikvm_bootstrap_capable`, `host_app_process_detection_only`, or `missing` instead of treating every detected host probe as equally launch-ready.
+- Thread that capability through `native-art-runtime-smoke`, activity-bootstrap, bootstrap-execution, `preflight-runtime native`, and `launch-package native`, so the public reports can explain why a detected host `app_process` surface still leaves the staged native launch path blocked.
+- Add regression coverage for override-backed capability success plus honest host-`app_process` detection-only reporting in runtime smoke, native preflight, and native launch, then refresh the README, phased plan, self-healing runtime note, status text, and step log to keep the repo honest about the narrower but more truthful host ART gate.
+
 ## v0.1.77 - 2026-05-17
 
 - Record the host ART gate as a first-class diagnostic contract: `native-art-classloader-fixture` and `native-art-runtime-smoke` now materialize `art/art-runtime-probe-inventory.json` and a deterministic probe-detection reason that explain which override, fixed-path, and PATH-based probe candidates were examined and why one was selected or none was usable.

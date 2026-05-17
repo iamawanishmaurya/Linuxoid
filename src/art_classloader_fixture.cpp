@@ -314,6 +314,9 @@ std::string BuildArtRuntimeProbeInventoryJson(
          << "  \"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason)
          << "\",\n"
+         << "  \"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability)
+         << "\",\n"
          << "  \"candidates\": [\n";
   for (std::size_t index = 0; index < candidates.size(); ++index) {
     const auto& candidate = candidates[index];
@@ -406,6 +409,9 @@ std::string BuildClassloaderPlanJson(
          << "  \"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason)
          << "\",\n"
+         << "  \"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability)
+         << "\",\n"
          << "  \"dex_paths\": " << RenderJsonArray(dex_paths) << ",\n"
          << "  \"target_class_names\": "
          << RenderJsonArray(report.target_class_names) << ",\n"
@@ -438,6 +444,9 @@ void WriteTrace(const NativeArtClassloaderFixtureReport& report) {
         << EscapeJson(report.art_runtime_probe_inventory_path) << "\", "
         << "\"art_runtime_probe_detection_reason\": \""
         << EscapeJson(report.art_runtime_probe_detection_reason)
+        << "\", "
+        << "\"art_runtime_probe_capability\": \""
+        << EscapeJson(report.art_runtime_probe_capability)
         << "\"}\n";
   trace << "{\"event_type\": \"classloader_plan_written\", "
         << "\"classpath_plan_ready\": "
@@ -485,6 +494,28 @@ DexEntryMetadata InspectDexArchiveEntry(const OpenedApkArchive& archive,
   metadata.type_ids_size = ReadLe32(read_result.contents, 64);
   metadata.class_defs_size = ReadLe32(read_result.contents, 96);
   return metadata;
+}
+
+std::string ClassifyArtRuntimeProbeCapability(const std::string& runtime_probe,
+                                              bool detected) {
+  if (!detected || runtime_probe.empty() ||
+      runtime_probe == "art_runtime_not_detected") {
+    return "missing";
+  }
+  const char* override_path = std::getenv("LINUXOID_ART_RUNTIME_PROBE_OVERRIDE");
+  if (override_path != nullptr && override_path[0] != '\0' &&
+      runtime_probe == override_path) {
+    return "override_bootstrap_capable";
+  }
+  const fs::path runtime_path(runtime_probe);
+  const std::string filename = runtime_path.filename().string();
+  if (filename == "dalvikvm") {
+    return "host_dalvikvm_bootstrap_capable";
+  }
+  if (filename == "app_process") {
+    return "host_app_process_detection_only";
+  }
+  return "host_probe_detection_only";
 }
 
 }  // namespace
@@ -559,6 +590,8 @@ NativeArtClassloaderFixtureReport RunNativeArtClassloaderFixture(
   report.art_runtime_probe = art_runtime_probe_selection.selected_probe;
   report.art_runtime_probe_detection_reason =
       art_runtime_probe_selection.detection_reason;
+  report.art_runtime_probe_capability = ClassifyArtRuntimeProbeCapability(
+      report.art_runtime_probe, report.art_runtime_detected);
   report.pathclassloader_probe_ready =
       report.classpath_plan_ready && report.art_runtime_detected;
 
@@ -616,6 +649,9 @@ std::string RenderNativeArtClassloaderFixtureJson(
          << "\",\n"
          << "  \"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason)
+         << "\",\n"
+         << "  \"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability)
          << "\",\n"
          << "  \"target_class_names\": "
          << RenderJsonArray(report.target_class_names) << ",\n"

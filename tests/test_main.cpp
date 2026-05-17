@@ -2567,9 +2567,60 @@ void TestNativeArtRuntimeSmokeUsesFixtureRuntimeOverride() {
          "expected zero exit code from override runtime probe");
   Expect(report.art_runtime_probe == runtime_probe.string(),
          "expected runtime probe path to match override");
+  Expect(report.art_runtime_probe_capability ==
+             "override_bootstrap_capable",
+         "expected override probe capability classification");
   Expect(ReadTextFile(report.invocation_log_path).find("runtime-fixture:") !=
              std::string::npos,
          "expected invocation log to capture override runtime output");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeArtRuntimeSmokeClassifiesHostAppProcessAsDetectionOnly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-runtime-app-process", true, true);
+  const fs::path app_process = fixture.root / "app_process";
+  {
+    std::ofstream output(app_process);
+    output << "#!/bin/sh\n";
+    output << "printf '%s\\n' \"host-app-process:$*\"\n";
+    output << "exit 0\n";
+  }
+  fs::permissions(app_process,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable path_override("PATH", fixture.root.string());
+  const auto report = wfa::RunNativeArtRuntimeSmokeFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.art_runtime_detected,
+         "expected host app_process candidate to count as detected ART path");
+  Expect(report.art_runtime_probe_source == "host",
+         "expected host runtime probe source");
+  Expect(report.art_runtime_probe_detection_reason ==
+             "host_app_process_selected",
+         "expected app_process detection reason");
+  Expect(report.art_runtime_probe_capability ==
+             "host_app_process_detection_only",
+         "expected app_process capability classification");
+  Expect(!report.safe_runtime_probe_available,
+         "expected app_process host probe to stay non-bootstrap-capable");
+  Expect(!report.runtime_probe_attempted,
+         "expected no runtime probe attempt for detection-only app_process");
+  Expect(report.art_runtime_probe.find("app_process") != std::string::npos,
+         "expected selected probe path to mention app_process");
+  const std::string inventory_json =
+      ReadTextFile(report.art_runtime_probe_inventory_path);
+  Expect(inventory_json.find("\"selected\": true") != std::string::npos,
+         "expected selected app_process candidate in inventory");
+  Expect(inventory_json.find("app_process") != std::string::npos,
+         "expected app_process candidate in inventory json");
 
   fs::remove_all(fixture.root);
 }
@@ -5110,6 +5161,58 @@ void TestNativeRuntimePreflightBlocksWithoutHostArt() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeRuntimePreflightReportsHostAppProcessCapabilityHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight-app-process");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path app_process = fixture.root / "app_process";
+  {
+    std::ofstream output(app_process);
+    output << "#!/bin/sh\n";
+    output << "printf '%s\\n' 'host-app-process'\n";
+    output << "exit 0\n";
+  }
+  fs::permissions(app_process,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable path_override("PATH", fixture.root.string());
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native preflight should not shell out");
+      });
+
+  Expect(report.art_runtime_probe_source == "host",
+         "expected host probe source in native preflight");
+  Expect(report.runtime_probe_detection_reason == "host_app_process_selected",
+         "expected app_process detection reason in native preflight");
+  Expect(report.art_runtime_probe_capability ==
+             "host_app_process_detection_only",
+         "expected app_process capability in native preflight");
+  Expect(!report.runtime_probe_ready,
+         "expected detection-only app_process not to mark preflight ready");
+  Expect(report.notes.find("not yet bootstrap-capable") != std::string::npos,
+         "expected capability-specific native preflight note");
+  const auto rendered = wfa::RenderRuntimePreflightReport(report);
+  Expect(rendered.find(
+             "ART Runtime Probe Capability: host_app_process_detection_only") !=
+             std::string::npos,
+         "expected app_process capability line in native preflight render");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeRuntimePreflightSurfacesProbeInventoryAndReason() {
   namespace fs = std::filesystem;
   auto fixture = CreateNativeRuntimePackageFixture(
@@ -5463,6 +5566,57 @@ void TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt() {
                    "bootstrap_execution_readiness") !=
              report.runtime_failing_subsystems.end(),
          "expected bootstrap execution failure without host ART");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchReportsHostAppProcessCapabilityHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-app-process");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path app_process = fixture.root / "app_process";
+  {
+    std::ofstream output(app_process);
+    output << "#!/bin/sh\n";
+    output << "printf '%s\\n' 'host-app-process'\n";
+    output << "exit 0\n";
+  }
+  fs::permissions(app_process,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable path_override("PATH", fixture.root.string());
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native launch should not shell out through runtime bridge runner");
+      });
+
+  Expect(!report.launch_ok,
+         "expected native launch to stay blocked with app_process-only host probe");
+  Expect(report.art_runtime_probe_source == "host",
+         "expected host probe source in native launch");
+  Expect(report.runtime_probe_detection_reason == "host_app_process_selected",
+         "expected app_process detection reason in native launch");
+  Expect(report.art_runtime_probe_capability ==
+             "host_app_process_detection_only",
+         "expected app_process capability in native launch");
+  const auto rendered = wfa::RenderInstalledAppLaunchReport(report);
+  Expect(rendered.find(
+             "ART Runtime Probe Capability: host_app_process_detection_only") !=
+             std::string::npos,
+         "expected app_process capability line in native launch render");
 
   fs::remove_all(fixture.root);
 }
@@ -7479,6 +7633,7 @@ int main() {
     TestNativeArtRuntimeSmokeCommandWritesStableJson();
     TestNativeArtRuntimeSmokeUsesFixtureRuntimeOverride();
     TestNativeArtRuntimeSmokeRecordsProbeInventoryAndReason();
+    TestNativeArtRuntimeSmokeClassifiesHostAppProcessAsDetectionOnly();
     TestNativeArtActivityBootstrapFixtureWritesStableArtifacts();
     TestNativeArtActivityBootstrapTraceCapturesApplicationBootstrapSequence();
     TestNativeArtActivityBootstrapFixtureHandlesRuntimeAvailabilityHonestly();
@@ -7503,11 +7658,13 @@ int main() {
     TestNativeRuntimePreflightUsesStagedMetadata();
     TestNativeRuntimePreflightBlocksWithoutHostArt();
     TestNativeRuntimePreflightSurfacesProbeInventoryAndReason();
+    TestNativeRuntimePreflightReportsHostAppProcessCapabilityHonestly();
     TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
     TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault();
     TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();
     TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt();
     TestNativeRuntimeLaunchSurfacesProbeInventoryAndReason();
+    TestNativeRuntimeLaunchReportsHostAppProcessCapabilityHonestly();
     TestDesktopLaunchArtifactsForImeApp();
     TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();
     TestDesktopLaunchArtifactsRejectCrossPackageComponent();

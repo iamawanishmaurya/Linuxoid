@@ -147,6 +147,8 @@ std::string BuildActivityBootstrapPlanJson(
          << EscapeJson(report.art_runtime_probe_inventory_path) << "\",\n"
          << "  \"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason) << "\",\n"
+         << "  \"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability) << "\",\n"
          << "  \"manifest_targets_ready\": "
          << (report.manifest_targets_ready ? "true" : "false") << ",\n"
          << "  \"classpath_plan_ready\": "
@@ -199,6 +201,8 @@ std::string BuildActivityBootstrapTraceJsonl(
          << EscapeJson(report.selected_activity_class_name) << "\", "
          << "\"runtime_bootstrap_planned\": "
          << (report.runtime_bootstrap_planned ? "true" : "false") << ", "
+         << "\"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability) << "\", "
          << "\"dependency_count\": " << report.dependency_count << "}\n";
 
   if (!report.application_probe_attempted) {
@@ -306,6 +310,9 @@ std::string BuildActivityBootstrapResultJson(
          << "  \"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason)
          << "\",\n"
+         << "  \"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability)
+         << "\",\n"
          << "  \"runtime_class_resolution_succeeded\": "
          << (report.runtime_class_resolution_succeeded ? "true" : "false")
          << ",\n"
@@ -388,6 +395,8 @@ NativeArtActivityBootstrapFixtureReport BuildNativeArtActivityBootstrapFixture(
       runtime_smoke.art_runtime_probe_inventory_path;
   report.art_runtime_probe_detection_reason =
       runtime_smoke.art_runtime_probe_detection_reason;
+  report.art_runtime_probe_capability =
+      runtime_smoke.art_runtime_probe_capability;
   report.runtime_class_resolution_succeeded =
       runtime_smoke.runtime_class_resolution_succeeded;
   report.bootstrap_dependencies = {

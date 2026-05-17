@@ -70,6 +70,7 @@ struct NativePreflightDiagnostics {
   bool bootstrap_planned = false;
   bool dependency_blocked = false;
   std::string art_runtime_probe_source;
+  std::string art_runtime_probe_capability;
   std::string runtime_probe_inventory_json_path;
   std::string runtime_probe_detection_reason;
   std::string bootstrap_manifest_path;
@@ -503,6 +504,8 @@ NativePreflightDiagnostics BuildNativePreflightDiagnostics(
 
   NativePreflightDiagnostics diagnostics;
   diagnostics.art_runtime_probe_source = runtime_smoke.art_runtime_probe_source;
+  diagnostics.art_runtime_probe_capability =
+      runtime_smoke.art_runtime_probe_capability;
   diagnostics.runtime_probe_inventory_json_path =
       runtime_smoke.art_runtime_probe_inventory_path;
   diagnostics.runtime_probe_detection_reason =
@@ -547,6 +550,11 @@ NativePreflightDiagnostics BuildNativePreflightDiagnostics(
   if (runtime_smoke.art_runtime_probe_source == "missing") {
     diagnostics.notes =
         "host ART runtime is not detected for the staged native launch path";
+  } else if (runtime_smoke.art_runtime_probe_capability ==
+             "host_app_process_detection_only") {
+    diagnostics.notes =
+        "host ART probe was detected but is not yet bootstrap-capable for the "
+        "staged native launch path";
   } else if (fixture_only_probe) {
     diagnostics.notes =
         "runtime probe resolved through the Linuxoid override seam; set "
@@ -914,6 +922,10 @@ std::string RenderInstalledAppLaunchReport(
     output << "ART Runtime Probe Source: " << report.art_runtime_probe_source
            << '\n';
   }
+  if (!report.art_runtime_probe_capability.empty()) {
+    output << "ART Runtime Probe Capability: "
+           << report.art_runtime_probe_capability << '\n';
+  }
   if (!report.runtime_probe_inventory_json_path.empty()) {
     output << "ART Runtime Probe Inventory Path: "
            << report.runtime_probe_inventory_json_path << '\n';
@@ -1079,6 +1091,10 @@ std::string RenderRuntimePreflightReport(
     if (!report.art_runtime_probe_source.empty()) {
       output << "ART Runtime Probe Source: " << report.art_runtime_probe_source
              << '\n';
+    }
+    if (!report.art_runtime_probe_capability.empty()) {
+      output << "ART Runtime Probe Capability: "
+             << report.art_runtime_probe_capability << '\n';
     }
     if (!report.runtime_probe_inventory_json_path.empty()) {
       output << "ART Runtime Probe Inventory Path: "
@@ -1399,6 +1415,8 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
         const auto diagnostics = BuildNativePreflightDiagnostics(
             spec.package_name);
         report.art_runtime_probe_source = diagnostics.art_runtime_probe_source;
+        report.art_runtime_probe_capability =
+            diagnostics.art_runtime_probe_capability;
         report.runtime_probe_inventory_json_path =
             diagnostics.runtime_probe_inventory_json_path;
         report.runtime_probe_detection_reason =
@@ -1712,6 +1730,8 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
         report.bootstrap_execution_runner_state_json_path =
             execution.runner_state_json_path;
         report.art_runtime_probe_source = execution.art_runtime_probe_source;
+        report.art_runtime_probe_capability =
+            execution.art_runtime_probe_capability;
         report.runtime_probe_inventory_json_path =
             execution.art_runtime_probe_inventory_path;
         report.runtime_probe_detection_reason =

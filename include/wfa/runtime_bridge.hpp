@@ -82,6 +82,7 @@ struct InstalledAppLaunchReport {
   bool launch_ok = false;
   std::string launch_classification;
   std::string art_runtime_probe_source;
+  std::string art_runtime_probe_capability;
   std::string runtime_probe_inventory_json_path;
   std::string runtime_probe_detection_reason;
   std::string bootstrap_manifest_path;
@@ -178,6 +179,7 @@ struct RuntimePreflightReport {
   std::string android_release;
   std::string abi;
   std::string art_runtime_probe_source;
+  std::string art_runtime_probe_capability;
   std::string runtime_probe_inventory_json_path;
   std::string runtime_probe_detection_reason;
   std::string bootstrap_manifest_path;

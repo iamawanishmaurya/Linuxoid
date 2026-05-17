@@ -1578,6 +1578,11 @@
   Result: Linuxoid now has a single contract test proving baseline health always includes `apk_staging`, `native_loading`, `surface_readiness`, `input_queue_readiness`, `binder_service_readiness`, and `dex_classloader_readiness`.
   Timestamp: 2026-05-17T23:59:30+05:30
 
+- Step: Host ART capability classification GREEN
+  Action: Taught the ART runtime smoke, activity-bootstrap, bootstrap-execution, and native bridge seams to distinguish host ART detection from host ART bootstrap capability, then pinned that behavior with red-first regressions for override-backed success plus honest host `app_process` detection-only preflight and launch output.
+  Result: Linuxoid now reports `ART Runtime Probe Capability` directly and keeps a detected host `app_process` path blocked with an explicit “not yet bootstrap-capable” note instead of overstating staged native launch readiness.
+  Timestamp: 2026-05-17T23:40:00+05:30
+
 - Step: Recovery-plan CLI scenario matrix GREEN
   Action: Added a CLI-level regression for `native-runtime-recovery-plan` that runs the four required scenarios and locks their public JSON outputs to the same deterministic action names and action ranks.
   Result: Linuxoid now proves the recovery contract both inside the in-process health fixture and at the command surface harnesses actually consume.

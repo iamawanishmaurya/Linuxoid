@@ -32,6 +32,7 @@ struct NativeArtBootstrapExecutionFixtureReport {
   std::string art_runtime_probe_source;
   std::string art_runtime_probe_inventory_path;
   std::string art_runtime_probe_detection_reason;
+  std::string art_runtime_probe_capability;
   bool art_runtime_detected = false;
   bool safe_runtime_probe_available = false;
   bool runtime_class_resolution_succeeded = false;

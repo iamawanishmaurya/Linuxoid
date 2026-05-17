@@ -82,17 +82,9 @@ std::string QuoteForShell(const std::string& value) {
   return quoted;
 }
 
-bool IsSafeRuntimeProbe(const std::string& runtime_probe_path) {
-  if (runtime_probe_path.empty()) {
-    return false;
-  }
-  const char* override_path = std::getenv("LINUXOID_ART_RUNTIME_PROBE_OVERRIDE");
-  if (override_path != nullptr && override_path[0] != '\0' &&
-      runtime_probe_path == override_path) {
-    return true;
-  }
-  const fs::path runtime_path(runtime_probe_path);
-  return runtime_path.filename() == "dalvikvm";
+bool IsBootstrapCapableArtRuntimeProbe(const std::string& capability) {
+  return capability == "override_bootstrap_capable" ||
+         capability == "host_dalvikvm_bootstrap_capable";
 }
 
 std::string ClassifyArtRuntimeProbeSource(const std::string& runtime_probe_path) {
@@ -174,6 +166,8 @@ std::string BuildInvocationPlanJson(const NativeArtRuntimeSmokeReport& report) {
          << EscapeJson(report.art_runtime_probe_inventory_path) << "\",\n"
          << "  \"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason) << "\",\n"
+         << "  \"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability) << "\",\n"
          << "  \"runtime_probe_command\": \""
          << EscapeJson(report.runtime_probe_command) << "\",\n"
          << "  \"resolved_target_class_name\": \""
@@ -254,6 +248,8 @@ std::string BuildRuntimeTraceJsonl(const NativeArtRuntimeSmokeReport& report,
          << EscapeJson(report.art_runtime_probe_inventory_path) << "\", "
          << "\"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason) << "\", "
+         << "\"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability) << "\", "
          << "\"resolved_target_class_name\": \""
          << EscapeJson(report.resolved_target_class_name) << "\", "
          << "\"resolved_target_class_descriptor\": \""
@@ -372,9 +368,10 @@ NativeArtRuntimeSmokeReport BuildNativeArtRuntimeSmokeFixture(
       classloader_report.art_runtime_probe_inventory_path;
   report.art_runtime_probe_detection_reason =
       classloader_report.art_runtime_probe_detection_reason;
+  report.art_runtime_probe_capability =
+      classloader_report.art_runtime_probe_capability;
   report.safe_runtime_probe_available =
-      classloader_report.art_runtime_detected &&
-      IsSafeRuntimeProbe(classloader_report.art_runtime_probe);
+      IsBootstrapCapableArtRuntimeProbe(report.art_runtime_probe_capability);
   report.pathclassloader_resolution_planned =
       report.offline_resolution_ready;
   report.pathclassloader_resolution_attempted = false;
@@ -506,6 +503,9 @@ std::string RenderNativeArtRuntimeSmokeFixtureJson(
          << "\",\n"
          << "  \"art_runtime_probe_source\": \""
          << EscapeJson(report.art_runtime_probe_source)
+         << "\",\n"
+         << "  \"art_runtime_probe_capability\": \""
+         << EscapeJson(report.art_runtime_probe_capability)
          << "\",\n"
          << "  \"art_runtime_probe_detection_reason\": \""
          << EscapeJson(report.art_runtime_probe_detection_reason)
