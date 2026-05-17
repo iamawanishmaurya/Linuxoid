@@ -73,6 +73,33 @@ std::string ReadTextFile(const std::filesystem::path& path) {
   return buffer.str();
 }
 
+class ScopedEnvironmentVariable {
+ public:
+  ScopedEnvironmentVariable(const std::string& name,
+                            const std::string& value)
+      : name_(name) {
+    const char* existing = std::getenv(name.c_str());
+    if (existing != nullptr) {
+      had_original_value_ = true;
+      original_value_ = existing;
+    }
+    setenv(name_.c_str(), value.c_str(), 1);
+  }
+
+  ~ScopedEnvironmentVariable() {
+    if (had_original_value_) {
+      setenv(name_.c_str(), original_value_.c_str(), 1);
+    } else {
+      unsetenv(name_.c_str());
+    }
+  }
+
+ private:
+  std::string name_;
+  std::string original_value_;
+  bool had_original_value_ = false;
+};
+
 std::filesystem::path ResolveBuildDirFromTestBinary() {
   namespace fs = std::filesystem;
   std::error_code error;
@@ -2363,6 +2390,52 @@ void TestNativeArtRuntimeSmokeCommandWritesStableJson() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeArtRuntimeSmokeUsesFixtureRuntimeOverride() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-runtime-override", true, true);
+  const fs::path runtime_probe = fixture.root / "linuxoid-art-runtime-probe";
+  {
+    std::ofstream output(runtime_probe);
+    output << "#!/bin/sh\n";
+    output << "printf '%s\\n' \"runtime-fixture:$*\"\n";
+    output << "exit 0\n";
+  }
+  fs::permissions(runtime_probe,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable runtime_override(
+      "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+  const auto report = wfa::RunNativeArtRuntimeSmokeFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.art_runtime_detected,
+         "expected runtime override to mark ART probe as detected");
+  Expect(report.safe_runtime_probe_available,
+         "expected runtime override probe to be treated as safe");
+  Expect(report.runtime_probe_attempted,
+         "expected runtime probe attempt through override");
+  Expect(report.pathclassloader_resolution_attempted,
+         "expected class-resolution attempt through override");
+  Expect(report.runtime_probe_succeeded,
+         "expected successful override runtime probe");
+  Expect(report.runtime_class_resolution_succeeded,
+         "expected successful override class resolution");
+  Expect(report.runtime_exit_code == 0,
+         "expected zero exit code from override runtime probe");
+  Expect(report.art_runtime_probe == runtime_probe.string(),
+         "expected runtime probe path to match override");
+  Expect(ReadTextFile(report.invocation_log_path).find("runtime-fixture:") !=
+             std::string::npos,
+         "expected invocation log to capture override runtime output");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeArtActivityBootstrapFixtureWritesStableArtifacts() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -2653,6 +2726,62 @@ void TestNativeArtBootstrapExecutionFixtureRunsThroughSupervisedRunner() {
   fs::remove_all(root);
 }
 
+void TestNativeArtBootstrapExecutionFixtureAttemptsRuntimeThroughOverride() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-bootstrap-execution-override", true, true);
+  const fs::path runtime_probe = fixture.root / "linuxoid-art-runtime-probe";
+  {
+    std::ofstream output(runtime_probe);
+    output << "#!/bin/sh\n";
+    output << "case \"$*\" in\n";
+    output << "  *linuxoid.bootstrap.mode=application*) printf '%s\\n' "
+              "'application-runtime-ok'; exit 0 ;;\n";
+    output << "  *linuxoid.bootstrap.mode=activity*) printf '%s\\n' "
+              "'activity-runtime-ok'; exit 0 ;;\n";
+    output << "  *) printf '%s\\n' 'runtime-fixture-ok'; exit 0 ;;\n";
+    output << "esac\n";
+  }
+  fs::permissions(runtime_probe,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable runtime_override(
+      "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+  const auto report = wfa::RunNativeArtBootstrapExecutionFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.runner_invoked,
+         "expected supervised runner to be invoked through override");
+  Expect(report.execution_attempted,
+         "expected bootstrap execution attempt through override");
+  Expect(report.execution_succeeded,
+         "expected bootstrap execution success through override");
+  Expect(report.application_execution_attempted,
+         "expected application phase attempt through override");
+  Expect(report.application_execution_succeeded,
+         "expected application phase success through override");
+  Expect(report.activity_execution_attempted,
+         "expected activity phase attempt through override");
+  Expect(report.activity_execution_succeeded,
+         "expected activity phase success through override");
+  Expect(report.runner_exit_code == 0,
+         "expected zero runner exit code through override");
+  Expect(report.exit_reason == "bootstrap_execution_succeeded",
+         "expected successful bootstrap execution exit reason");
+  Expect(ReadTextFile(report.application_execution_log_path).find(
+             "application-runtime-ok") != std::string::npos,
+         "expected application runtime log output");
+  Expect(ReadTextFile(report.activity_execution_log_path).find(
+             "activity-runtime-ok") != std::string::npos,
+         "expected activity runtime log output");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeArtBootstrapExecutionCommandWritesStableJson() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -2926,6 +3055,77 @@ void TestRuntimeHealthFixtureCarriesBootstrapExecutionEvidence() {
   Expect(bootstrap_record->selected_recovery_action ==
              "attempt_host_bootstrap_execution",
          "expected deterministic bootstrap execution recovery action");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestRuntimeHealthFixtureBecomesReadyWithRuntimeOverride() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-override-ready", true, true);
+  const fs::path runtime_probe = fixture.root / "linuxoid-art-runtime-probe";
+  {
+    std::ofstream output(runtime_probe);
+    output << "#!/bin/sh\n";
+    output << "case \"$*\" in\n";
+    output << "  *linuxoid.bootstrap.mode=application*) printf '%s\\n' "
+              "'application-runtime-ok'; exit 0 ;;\n";
+    output << "  *linuxoid.bootstrap.mode=activity*) printf '%s\\n' "
+              "'activity-runtime-ok'; exit 0 ;;\n";
+    output << "  *) printf '%s\\n' 'runtime-fixture-ok'; exit 0 ;;\n";
+    output << "esac\n";
+  }
+  fs::permissions(runtime_probe,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable runtime_override(
+      "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+
+  Expect(report.self_healing_ready,
+         "expected runtime health seam to stay available");
+  Expect(report.overall_ready,
+         "expected override-backed runtime path to satisfy runtime health");
+  Expect(!report.dependency_blocked,
+         "expected no dependency block once override-backed execution succeeds");
+  Expect(report.overall_state == "ready",
+         "expected ready overall state with successful override-backed execution");
+  Expect(report.failing_subsystem_count == 0,
+         "expected no failing subsystems after successful override-backed execution");
+  Expect(report.recovery_actions_selected == 0,
+         "expected no recovery actions after successful override-backed execution");
+
+  const auto dex_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "dex_classloader_readiness";
+      });
+  Expect(dex_record != report.records.end(),
+         "expected dex/classloader health record");
+  Expect(dex_record->ready, "expected dex/classloader readiness");
+  Expect(dex_record->state == "ready",
+         "expected ready dex/classloader state");
+  Expect(dex_record->selected_recovery_action.empty(),
+         "expected no dex recovery action after success");
+
+  const auto bootstrap_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "bootstrap_execution_readiness";
+      });
+  Expect(bootstrap_record != report.records.end(),
+         "expected bootstrap execution readiness record");
+  Expect(bootstrap_record->ready,
+         "expected ready bootstrap execution state");
+  Expect(bootstrap_record->state == "ready",
+         "expected ready bootstrap execution status");
+  Expect(bootstrap_record->selected_recovery_action.empty(),
+         "expected no bootstrap execution recovery action after success");
 
   fs::remove_all(fixture.root);
 }
@@ -5524,6 +5724,7 @@ int main() {
     TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess();
     TestRuntimeHealthFixtureTracksActivityBootstrapReadiness();
     TestRuntimeHealthFixtureCarriesBootstrapExecutionEvidence();
+    TestRuntimeHealthFixtureBecomesReadyWithRuntimeOverride();
     TestRuntimeHealthSummaryFieldsStayDeterministic();
     TestRuntimeHealthReplaySummarizesTrace();
     TestNativeArtRuntimeSmokeWritesTraceJsonl();
@@ -5544,6 +5745,7 @@ int main() {
     TestNativeArtRuntimeSmokeWritesStableArtifacts();
     TestNativeArtRuntimeSmokeHandlesRuntimeAvailabilityHonestly();
     TestNativeArtRuntimeSmokeCommandWritesStableJson();
+    TestNativeArtRuntimeSmokeUsesFixtureRuntimeOverride();
     TestNativeArtActivityBootstrapFixtureWritesStableArtifacts();
     TestNativeArtActivityBootstrapTraceCapturesApplicationBootstrapSequence();
     TestNativeArtActivityBootstrapFixtureHandlesRuntimeAvailabilityHonestly();
@@ -5552,6 +5754,7 @@ int main() {
     TestNativeArtBootstrapExecutionFixtureCanReuseActivityBootstrapReport();
     TestNativeArtBootstrapExecutionFixtureHandlesRuntimeAvailabilityHonestly();
     TestNativeArtBootstrapExecutionFixtureRunsThroughSupervisedRunner();
+    TestNativeArtBootstrapExecutionFixtureAttemptsRuntimeThroughOverride();
     TestNativeArtBootstrapExecutionCommandWritesStableJson();
     TestNativeArtClassResolutionFixtureResolvesManifestTargets();
     TestNativeArtClassResolutionFixtureHandlesMissingDexTargetsHonestly();

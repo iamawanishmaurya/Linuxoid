@@ -1522,3 +1522,13 @@
   Action: Routed bootstrap execution through the generated runner script, added stable runner-state JSON plus per-phase exit codes, and reverified live CLI behavior.
   Result: Linuxoid now has a real supervised execution seam with stable runner metadata while still reporting missing ART honestly on this host.
   Timestamp: 2026-05-17T22:15:00+05:30
+
+- Step: Override-backed ART execution seam GREEN
+  Action: Added a Linuxoid-owned ART probe override for the classloader detector and runtime-smoke safety gate, then extended tests and live fixture runs to exercise bootstrap execution through the supervised runner end to end without requiring host ART.
+  Result: Linuxoid can now prove the runtime-smoke and bootstrap-execution seams through deterministic override-backed fixtures while still distinguishing that path from real host ART execution.
+  Timestamp: 2026-05-17T23:05:00+05:30
+
+- Step: Override-backed runtime health convergence GREEN
+  Action: Added a red test for a fully satisfied override-backed runtime path, then taught `dex_classloader_readiness` to resolve to `ready` when runtime class resolution actually succeeds instead of staying generically pending.
+  Result: Runtime health can now converge to `overall_ready: true` in deterministic override-backed fixtures when the deeper ART-style class-resolution and supervised bootstrap seams both succeed.
+  Timestamp: 2026-05-17T23:25:00+05:30

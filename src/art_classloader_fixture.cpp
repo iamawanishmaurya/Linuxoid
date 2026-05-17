@@ -66,6 +66,20 @@ bool FileExists(const std::string& path) {
   return !path.empty() && fs::exists(path);
 }
 
+bool IsExecutableFile(const std::string& path) {
+  if (!FileExists(path)) {
+    return false;
+  }
+  std::error_code error;
+  const auto status = fs::status(path, error);
+  if (error) {
+    return false;
+  }
+  const auto executable_bits = fs::perms::owner_exec | fs::perms::group_exec |
+                               fs::perms::others_exec;
+  return (status.permissions() & executable_bits) != fs::perms::none;
+}
+
 bool IsDexArchiveEntry(const std::string& path) {
   if (path.size() < 10) {
     return false;
@@ -160,6 +174,13 @@ bool ExecutableExistsInPath(const std::string& executable_name,
 }
 
 std::string DetectArtRuntimeProbe(bool* detected) {
+  const char* override_path = std::getenv("LINUXOID_ART_RUNTIME_PROBE_OVERRIDE");
+  if (override_path != nullptr && override_path[0] != '\0' &&
+      IsExecutableFile(override_path)) {
+    *detected = true;
+    return override_path;
+  }
+
   const std::vector<std::string> file_candidates = {
       "/apex/com.android.art/bin/dalvikvm",
       "/apex/com.android.art/lib64/libart.so",

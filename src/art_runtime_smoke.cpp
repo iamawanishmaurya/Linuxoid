@@ -86,6 +86,11 @@ bool IsSafeRuntimeProbe(const std::string& runtime_probe_path) {
   if (runtime_probe_path.empty()) {
     return false;
   }
+  const char* override_path = std::getenv("LINUXOID_ART_RUNTIME_PROBE_OVERRIDE");
+  if (override_path != nullptr && override_path[0] != '\0' &&
+      runtime_probe_path == override_path) {
+    return true;
+  }
   const fs::path runtime_path(runtime_probe_path);
   return runtime_path.filename() == "dalvikvm";
 }

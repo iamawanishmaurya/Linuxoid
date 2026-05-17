@@ -365,10 +365,32 @@ RuntimeHealthRecord BuildDexRecord(const RuntimeObservationContext& context) {
                             "APK archive does not contain classes.dex entries.");
   }
 
+  const std::string artifact_path =
+      context.art_runtime.result_json_path.empty()
+          ? context.art_resolution.result_json_path
+          : context.art_runtime.result_json_path;
+  std::string state = "pending";
+  bool ready = false;
+  std::string failure_reason = "dex_classloader_runtime_pending";
+
+  if (context.art_runtime.runtime_class_resolution_succeeded) {
+    state = "ready";
+    ready = true;
+    failure_reason.clear();
+  } else if (!context.art_resolution.classpath_plan_ready ||
+             !context.art_resolution.offline_resolution_ready ||
+             context.art_resolution.missing_target_count != 0) {
+    state = "blocked";
+    failure_reason = context.art_resolution.exit_reason;
+  } else if (context.art_runtime.pathclassloader_resolution_attempted ||
+             context.art_runtime.runtime_probe_attempted) {
+    state = "blocked";
+    failure_reason = context.art_runtime.exit_reason;
+  }
+
   return MakeHealthRecord(
-      "dex_classloader_readiness", "pending", false,
-      context.art_resolution.result_json_path,
-      "dex_classloader_unimplemented",
+      "dex_classloader_readiness", state, ready, artifact_path,
+      failure_reason,
       "classpath_plan_ready=" +
           std::string(context.art_resolution.classpath_plan_ready ? "true"
                                                                   : "false") +

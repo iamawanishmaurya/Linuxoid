@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.56 - 2026-05-17
+
+- Add a Linuxoid-owned `LINUXOID_ART_RUNTIME_PROBE_OVERRIDE` seam so the ART classloader detector, runtime-smoke path, and supervised bootstrap-execution runner can all exercise a deterministic host-style runtime probe during fixtures even on machines that do not ship ART locally.
+- Add regression coverage that proves the override-backed runtime-smoke path reaches real probe execution and that bootstrap execution can now run end to end through the supervised runner with stable application/activity logs and success classification.
+- Teach runtime health to recognize that deeper success path too, so `dex_classloader_readiness` and `bootstrap_execution_readiness` can now resolve to `ready` when override-backed or real runtime class resolution plus supervised bootstrap execution succeed.
+- Add regression coverage that proves override-backed runtime health can converge all the way to `overall_ready: true` instead of getting stuck in a generic pending state.
+- Refresh the README, phased plan, self-healing runtime note, changelog, and status text so Linuxoid now describes the override-backed execution seam honestly while still distinguishing it from real host ART app execution.
+
 ## v0.1.55 - 2026-05-17
 
 - Upgrade `native-art-bootstrap-execution-fixture` into a real supervised runner seam: Linuxoid now executes bootstrap phases through the generated runner script, writes `art/bootstrap-execution-runner-state.json`, and records raw runner, application, and activity exit codes alongside the existing plan, context, trace, result, and phase-log artifacts.

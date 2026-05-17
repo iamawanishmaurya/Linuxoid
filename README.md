@@ -235,6 +235,8 @@ Today, **self-healing** in Linuxoid means:
   - `bootstrap_execution_readiness`
   - `attempt_host_bootstrap_execution`
 - Linuxoid now executes that seam through the generated runner script when a safe host runtime is available, and it preserves raw runner plus per-phase exit codes for replay and diagnosis.
+- Linuxoid now also supports a Linuxoid-owned ART probe override for deterministic fixture runs, so the runtime-smoke and bootstrap-execution seams can be exercised end to end even on hosts that do not ship ART locally.
+- Linuxoid runtime health now recognizes that deeper success path too: when the ART-style class-resolution seam and supervised bootstrap-execution seam both succeed, `dex_classloader_readiness` and `bootstrap_execution_readiness` now converge to `ready` instead of staying stuck in a generic pending state.
 - Linuxoid can replay and merge those traces later without rerunning the full UI path.
 - Linuxoid can now fingerprint each trace source and record first/last event types so failures can be compared offline across runs.
 - Linuxoid now reuses one opened APK archive plus the already-staged bundle manifest while building those runtime records, so live health and replay commands stay fast enough to rerun on real staged bundles without falling back to repeated full-archive scans and repeated `apktool` decode work.
@@ -254,7 +256,7 @@ Linuxoid is still **not** at “run Android apps directly on Linux end to end”
 
 1. **Real ART / DEX execution**
    - host-side `PathClassLoader` or equivalent class resolution still needs to move from planning/smoke to actual execution
-   - application code is not yet running through a real ART-owned path
+   - application code is not yet running through a real ART-owned path by default; the current override-backed fixture path is a Linuxoid test seam, not proof of embedded ART execution on this host
 
 2. **Android framework and services**
    - the Binder-shaped local manager is still a Linuxoid-owned seam, not full Android Binder semantics

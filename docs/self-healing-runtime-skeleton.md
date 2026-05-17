@@ -73,6 +73,8 @@ What that means **today**:
   - `attempt_host_bootstrap_execution`
   - replay coverage through `art/bootstrap-execution-trace.jsonl`
 - Linuxoid now executes that seam through the generated runner script when a safe host runtime is available, and it preserves raw runner plus per-phase exit codes even when later success classification still depends on higher-level output checks.
+- Linuxoid now also accepts a Linuxoid-owned ART probe override for deterministic fixture runs, which lets runtime-smoke and bootstrap-execution exercise the real runner-backed execution contract on hosts that do not provide ART locally.
+- Runtime health now treats that deeper success path honestly too: when override-backed or real runtime class resolution succeeds and the supervised bootstrap runner completes, `dex_classloader_readiness` and `bootstrap_execution_readiness` can now resolve to `ready` instead of remaining generically pending.
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -98,7 +100,7 @@ What it **does not** mean yet:
 - Linuxoid does **not** yet self-heal by automatically making the app run after a failure.
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet own a full embedded ART runtime or a real in-process `PathClassLoader`.
-- Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, separate activity-bootstrap planning from bootstrap execution, and keep deterministic execution-context, runner-state, runner-script, and per-phase log artifacts around that execution seam.
+- Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, exercise the runner-backed execution seam through a Linuxoid-owned override probe in fixtures, separate activity-bootstrap planning from bootstrap execution, and keep deterministic execution-context, runner-state, runner-script, and per-phase log artifacts around that execution seam.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
