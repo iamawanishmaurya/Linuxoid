@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Native bridge replay source detail GREEN
+  Action: Added red-first regressions for blocked native preflight and blocked native launch, then threaded per-source replay summaries with source name, trace path, event count, event boundaries, and deterministic fingerprints through the bridge renderers.
+  Result: Linuxoid’s public native reports now expose which JSONL traces make up the replay bundle, so operators can diagnose blocked launches without opening the deeper replay JSON or trace-index files first.
+  Timestamp: 2026-05-18T00:18:00+05:30
+
 - Step: Host ART probe inventory contract
   Action: Added failing regressions for probe-inventory artifact paths and detection-reason fields, then extended the ART classloader/runtime-smoke seam to write `art-runtime-probe-inventory.json` and threaded that evidence through native preflight and native launch rendering.
   Result: Linuxoid can now explain which ART probe candidates were examined and why a host startup stayed blocked, and that explanation is visible directly in `native-art-runtime-smoke`, `preflight-runtime native`, and `launch-package native` without reopening deeper artifacts by hand.

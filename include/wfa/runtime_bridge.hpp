@@ -112,6 +112,7 @@ struct InstalledAppLaunchReport {
   std::vector<std::string> runtime_selected_recovery_action_details;
   std::vector<std::string> runtime_canonical_recovery_scenarios;
   std::vector<std::string> runtime_canonical_recovery_scenario_details;
+  std::vector<std::string> runtime_trace_source_details;
   std::string output;
 };
 
@@ -209,6 +210,7 @@ struct RuntimePreflightReport {
   std::vector<std::string> selected_recovery_action_details;
   std::vector<std::string> canonical_recovery_scenarios;
   std::vector<std::string> canonical_recovery_scenario_details;
+  std::vector<std::string> runtime_trace_source_details;
 };
 
 RuntimeBackendKind ParseRuntimeBackendKind(const std::string& backend_name);

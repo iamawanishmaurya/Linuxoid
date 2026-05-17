@@ -232,6 +232,7 @@ Today, **self-healing** in Linuxoid means:
   - host `dalvikvm` probes are `host_dalvikvm_bootstrap_capable`
   - host `app_process` probes are recorded honestly as `host_app_process_detection_only`
 - Linuxoid now also surfaces that replay contract directly through the public native bridge, so `preflight-runtime native`, `verify-package native`, and `launch-package native` name the health trace JSONL, recovery-actions JSONL, merged diagnostic events JSONL, trace index, and replay completeness counts without forcing callers to open the deeper health JSON first.
+- Those native bridge reports now also include per-source replay details, so operators can see which JSONL traces were merged, where each one lives, how many events it contributed, and which deterministic fingerprint Linuxoid computed for it.
 - Linuxoid can persist those decisions into stable artifacts for agents, harnesses, and replay tooling:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`

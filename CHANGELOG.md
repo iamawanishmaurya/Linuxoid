@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.80 - 2026-05-17
+
+- Surface replayable trace-source details directly through the native bridge: `preflight-runtime native` and `launch-package native` now render per-source trace summaries with source name, trace path, event count, first and last event types, and deterministic fingerprints instead of stopping at bundle-level counts.
+- Add regression coverage that pins those bridge-level trace details on blocked native preflight and blocked native launch paths, keeping the public replay contract aligned with the deeper diagnostic replay artifacts.
+
 ## v0.1.79 - 2026-05-17
 
 - Surface deterministic recovery metadata more directly through the native bridge: `preflight-runtime native` and `launch-package native` now render detailed selected-recovery and canonical-scenario lines with stable action rank, retry budget, and recovery scope instead of only compressed `scenario=>action` summaries.

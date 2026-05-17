@@ -5296,6 +5296,38 @@ void TestNativeRuntimePreflightRendersDetailedRecoveryContract() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeRuntimePreflightRendersTraceSourceDetails() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight-trace-details");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native preflight should not shell out");
+      });
+
+  const auto rendered = wfa::RenderRuntimePreflightReport(report);
+  Expect(rendered.find("Runtime Trace Source Details: ") != std::string::npos,
+         "expected runtime trace source details in native preflight render");
+  Expect(rendered.find("runtime_health_trace=>") != std::string::npos,
+         "expected runtime health trace source detail in native preflight render");
+  Expect(rendered.find("art_bootstrap_execution_trace=>") !=
+             std::string::npos,
+         "expected bootstrap execution trace source detail in native preflight render");
+  Expect(rendered.find("fingerprint=fnv1a64:") != std::string::npos,
+         "expected trace source fingerprint in native preflight render");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution() {
   namespace fs = std::filesystem;
   auto fixture = CreateNativeRuntimePackageFixture(
@@ -5740,6 +5772,38 @@ void TestNativeRuntimeLaunchRendersDetailedRecoveryContract() {
              "unavailable_display=>fallback_to_headless_surface_probe "
              "[rank=30 retry=0 scope=graphics_probe]") != std::string::npos,
          "expected detailed unavailable-display scenario in native launch render");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchRendersTraceSourceDetails() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-trace-details");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native launch should not shell out through runtime bridge runner");
+      });
+
+  const auto rendered = wfa::RenderInstalledAppLaunchReport(report);
+  Expect(rendered.find("Runtime Trace Source Details: ") != std::string::npos,
+         "expected runtime trace source details in native launch render");
+  Expect(rendered.find("runtime_health_trace=>") != std::string::npos,
+         "expected runtime health trace source detail in native launch render");
+  Expect(rendered.find("art_runtime_smoke_trace=>") != std::string::npos,
+         "expected runtime smoke trace source detail in native launch render");
+  Expect(rendered.find("events=") != std::string::npos,
+         "expected event count in native launch trace source detail");
 
   fs::remove_all(fixture.root);
 }
@@ -7745,6 +7809,7 @@ int main() {
     TestNativeRuntimePreflightSurfacesProbeInventoryAndReason();
     TestNativeRuntimePreflightReportsHostAppProcessCapabilityHonestly();
     TestNativeRuntimePreflightRendersDetailedRecoveryContract();
+    TestNativeRuntimePreflightRendersTraceSourceDetails();
     TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
     TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault();
     TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();
@@ -7752,6 +7817,7 @@ int main() {
     TestNativeRuntimeLaunchSurfacesProbeInventoryAndReason();
     TestNativeRuntimeLaunchReportsHostAppProcessCapabilityHonestly();
     TestNativeRuntimeLaunchRendersDetailedRecoveryContract();
+    TestNativeRuntimeLaunchRendersTraceSourceDetails();
     TestDesktopLaunchArtifactsForImeApp();
     TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();
     TestDesktopLaunchArtifactsRejectCrossPackageComponent();

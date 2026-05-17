@@ -94,6 +94,7 @@ struct NativePreflightDiagnostics {
   std::vector<std::string> selected_recovery_action_details;
   std::vector<std::string> canonical_recovery_scenarios;
   std::vector<std::string> canonical_recovery_scenario_details;
+  std::vector<std::string> runtime_trace_source_details;
   std::string notes;
 };
 
@@ -289,6 +290,27 @@ std::string RenderRecoveryActionDetail(const RuntimeRecoveryAction& action) {
   return output.str();
 }
 
+std::string RenderTraceSourceDetail(const RuntimeDiagnosticTraceSource& source) {
+  std::ostringstream output;
+  output << source.source_name << "=>" << source.trace_path << " [present="
+         << (source.present ? "yes" : "no") << " events="
+         << source.events_read;
+  if (!source.first_event_type.empty()) {
+    output << " first=" << source.first_event_type;
+  }
+  if (!source.last_event_type.empty()) {
+    output << " last=" << source.last_event_type;
+  }
+  if (!source.source_fingerprint.empty()) {
+    output << " fingerprint=" << source.source_fingerprint;
+  }
+  if (!source.failure_reason.empty()) {
+    output << " reason=" << source.failure_reason;
+  }
+  output << "]";
+  return output.str();
+}
+
 std::vector<std::string> CollectRecoveryActionNames(
     const RuntimeHealthReport& report) {
   std::vector<std::string> actions;
@@ -327,6 +349,16 @@ std::vector<std::string> CollectCanonicalRecoveryScenarioDetails(
     scenarios.push_back(RenderRecoveryScenarioDetail(scenario));
   }
   return scenarios;
+}
+
+std::vector<std::string> CollectTraceSourceDetails(
+    const RuntimeDiagnosticReplayReport& report) {
+  std::vector<std::string> sources;
+  sources.reserve(report.trace_sources.size());
+  for (const auto& source : report.trace_sources) {
+    sources.push_back(RenderTraceSourceDetail(source));
+  }
+  return sources;
 }
 
 std::string ExtractJsonStringOrEmpty(const std::string& json,
@@ -574,6 +606,8 @@ NativePreflightDiagnostics BuildNativePreflightDiagnostics(
   diagnostics.runtime_trace_sources_found = diagnostic.trace_sources_found;
   diagnostics.runtime_missing_trace_source_count =
       diagnostic.missing_trace_source_count;
+  diagnostics.runtime_trace_source_details =
+      CollectTraceSourceDetails(diagnostic);
   diagnostics.failing_subsystems = health.failing_subsystems;
   diagnostics.selected_recovery_actions = CollectRecoveryActionNames(health);
   diagnostics.selected_recovery_action_details =
@@ -1066,6 +1100,11 @@ std::string RenderInstalledAppLaunchReport(
            << report.runtime_trace_sources_found << '\n';
     output << "Runtime Missing Trace Source Count: "
            << report.runtime_missing_trace_source_count << '\n';
+    output << "Runtime Trace Source Details: "
+           << (report.runtime_trace_source_details.empty()
+                   ? "none"
+                   : JoinStrings(report.runtime_trace_source_details, ", "))
+           << '\n';
   }
   if (!report.runtime_diagnostic_trace_index_path.empty()) {
     output << "Runtime Diagnostic Trace Index Path: "
@@ -1240,6 +1279,11 @@ std::string RenderRuntimePreflightReport(
              << report.runtime_trace_sources_found << '\n';
       output << "Runtime Missing Trace Source Count: "
              << report.runtime_missing_trace_source_count << '\n';
+      output << "Runtime Trace Source Details: "
+             << (report.runtime_trace_source_details.empty()
+                     ? "none"
+                     : JoinStrings(report.runtime_trace_source_details, ", "))
+             << '\n';
     }
     if (!report.runtime_diagnostic_trace_index_path.empty()) {
       output << "Runtime Diagnostic Trace Index Path: "
@@ -1522,6 +1566,8 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
             diagnostics.runtime_trace_sources_found;
         report.runtime_missing_trace_source_count =
             diagnostics.runtime_missing_trace_source_count;
+        report.runtime_trace_source_details =
+            diagnostics.runtime_trace_source_details;
         report.failing_subsystems = diagnostics.failing_subsystems;
         report.selected_recovery_actions =
             diagnostics.selected_recovery_actions;
@@ -1849,6 +1895,8 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
         report.runtime_trace_sources_found = diagnostic.trace_sources_found;
         report.runtime_missing_trace_source_count =
             diagnostic.missing_trace_source_count;
+        report.runtime_trace_source_details =
+            CollectTraceSourceDetails(diagnostic);
         const bool override_allowed =
             EnvFlagEnabled("LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE");
         const bool override_only_success =

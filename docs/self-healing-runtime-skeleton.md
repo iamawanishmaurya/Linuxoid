@@ -56,6 +56,7 @@ What that means **today**:
   - `launch-package native`
   - direct health-trace, recovery-actions-trace, merged-diagnostic-events, and replay-completeness fields in the public report
   - detailed selected-recovery and canonical-scenario lines with rank, retry budget, and scope metadata in the public report
+  - per-source replay detail lines with source name, trace path, event count, and deterministic fingerprint metadata in the public report
 - Linuxoid can now materialize those actions into stable plan artifacts:
   - `runtime-recovery-plan.json`
   - `runtime-recovery-actions.jsonl`
