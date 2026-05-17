@@ -1588,6 +1588,11 @@
   Result: Linuxoid now proves the self-healing health surface stays honest and stable where harnesses actually consume it, not only through in-process fixture helpers.
   Timestamp: 2026-05-18T00:01:10+05:30
 
+- Step: Native bridge replay surface GREEN
+  Action: Threaded health-trace, recovery-actions-trace, health-replay, merged diagnostic events, trace-index, and replay-completeness fields through the public native preflight and launch reports, then pinned that bridge-level contract with red-first regressions for native preflight, native launch, report rendering, and native verification.
+  Result: `preflight-runtime native`, `verify-package native`, and `launch-package native` now expose the JSONL trace bundle needed for diagnosis directly in the public report, so a blocked staged launch can be replayed and investigated without opening the deeper health JSON by hand.
+  Timestamp: 2026-05-18T02:05:00+05:30
+
 - Step: Self-healing docs clarification GREEN
   Action: Refreshed the README, self-healing runtime note, and phased plan to explain the public self-healing command surface, the Linuxoid-owned local `native` runtime bridge, and the exact line between override-backed fixture success and real host-side Android app execution.
   Result: The repo now says more plainly what self-healing means today and what still blocks full Android app startup on Linux.

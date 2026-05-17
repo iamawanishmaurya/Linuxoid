@@ -4814,8 +4814,28 @@ void TestNativeRuntimePreflightUsesStagedMetadata() {
          "expected bootstrap manifest path in native preflight");
   Expect(!report.runtime_health_json_path.empty(),
          "expected runtime health path in native preflight");
+  Expect(!report.runtime_health_trace_jsonl_path.empty(),
+         "expected runtime health trace path in native preflight");
+  Expect(!report.runtime_recovery_actions_jsonl_path.empty(),
+         "expected runtime recovery actions path in native preflight");
+  Expect(!report.runtime_health_replay_json_path.empty(),
+         "expected runtime health replay path in native preflight");
   Expect(!report.runtime_diagnostic_replay_json_path.empty(),
          "expected diagnostic replay path in native preflight");
+  Expect(!report.runtime_diagnostic_trace_index_path.empty(),
+         "expected diagnostic trace index path in native preflight");
+  Expect(!report.runtime_diagnostic_events_jsonl_path.empty(),
+         "expected diagnostic events path in native preflight");
+  Expect(report.runtime_diagnostic_replay_ready,
+         "expected diagnostic replay readiness in native preflight");
+  Expect(report.runtime_trace_bundle_complete,
+         "expected complete trace bundle in native preflight");
+  Expect(report.runtime_canonical_trace_source_count == 7,
+         "expected seven canonical trace sources in native preflight");
+  Expect(report.runtime_trace_sources_found == 7,
+         "expected full trace-source coverage in native preflight");
+  Expect(report.runtime_missing_trace_source_count == 0,
+         "expected no missing trace sources in native preflight");
   Expect(report.recovery_actions_selected == 0,
          "expected no selected recovery actions in ready native preflight");
   Expect(report.selected_recovery_actions.empty(),
@@ -4864,6 +4884,26 @@ void TestNativeRuntimePreflightBlocksWithoutHostArt() {
          "expected bootstrap planning even when host ART is unavailable");
   Expect(report.art_runtime_probe_source == "missing",
          "expected missing runtime probe source without host ART");
+  Expect(!report.runtime_health_trace_jsonl_path.empty(),
+         "expected runtime health trace path without host ART");
+  Expect(!report.runtime_recovery_actions_jsonl_path.empty(),
+         "expected runtime recovery actions path without host ART");
+  Expect(!report.runtime_health_replay_json_path.empty(),
+         "expected runtime health replay path without host ART");
+  Expect(!report.runtime_diagnostic_trace_index_path.empty(),
+         "expected diagnostic trace index path without host ART");
+  Expect(!report.runtime_diagnostic_events_jsonl_path.empty(),
+         "expected diagnostic events path without host ART");
+  Expect(report.runtime_diagnostic_replay_ready,
+         "expected diagnostic replay readiness without host ART");
+  Expect(report.runtime_trace_bundle_complete,
+         "expected complete trace bundle without host ART");
+  Expect(report.runtime_canonical_trace_source_count == 7,
+         "expected seven canonical trace sources without host ART");
+  Expect(report.runtime_trace_sources_found == 7,
+         "expected full trace-source coverage without host ART");
+  Expect(report.runtime_missing_trace_source_count == 0,
+         "expected no missing trace sources without host ART");
   Expect(report.dependency_blocked,
          "expected dependency block without host ART");
   Expect(report.failing_subsystem_count == 2,
@@ -4963,18 +5003,32 @@ void TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution() {
          "expected bootstrap runner state path on successful native launch");
   Expect(!report.runtime_health_json_path.empty(),
          "expected runtime health artifact path on successful native launch");
+  Expect(!report.runtime_health_trace_jsonl_path.empty(),
+         "expected runtime health trace path on successful native launch");
   Expect(!report.runtime_recovery_plan_path.empty(),
          "expected runtime recovery plan path on successful native launch");
+  Expect(!report.runtime_recovery_actions_jsonl_path.empty(),
+         "expected runtime recovery actions trace path on successful native launch");
+  Expect(!report.runtime_health_replay_json_path.empty(),
+         "expected runtime health replay path on successful native launch");
   Expect(!report.runtime_diagnostic_replay_json_path.empty(),
          "expected diagnostic replay artifact path on successful native launch");
   Expect(!report.runtime_diagnostic_trace_index_path.empty(),
          "expected diagnostic trace index path on successful native launch");
+  Expect(!report.runtime_diagnostic_events_jsonl_path.empty(),
+         "expected diagnostic events path on successful native launch");
   Expect(report.runtime_health_ready,
          "expected runtime health report on successful native launch");
   Expect(report.runtime_diagnostic_replay_ready,
          "expected diagnostic replay readiness on successful native launch");
   Expect(report.runtime_trace_bundle_complete,
          "expected complete trace bundle on successful native launch");
+  Expect(report.runtime_canonical_trace_source_count == 7,
+         "expected seven canonical trace sources on successful native launch");
+  Expect(report.runtime_trace_sources_found == 7,
+         "expected full trace-source coverage on successful native launch");
+  Expect(report.runtime_missing_trace_source_count == 0,
+         "expected no missing trace sources on successful native launch");
   Expect(!report.runtime_dependency_blocked,
          "expected no blocked runtime dependency on successful native launch");
   Expect(report.runtime_failing_subsystem_count == 0,
@@ -5043,18 +5097,32 @@ void TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault() {
          "expected bootstrap execution result path on rejected override launch");
   Expect(!report.runtime_health_json_path.empty(),
          "expected runtime health artifact path on rejected override launch");
+  Expect(!report.runtime_health_trace_jsonl_path.empty(),
+         "expected runtime health trace path on rejected override launch");
   Expect(!report.runtime_recovery_plan_path.empty(),
          "expected runtime recovery plan path on rejected override launch");
+  Expect(!report.runtime_recovery_actions_jsonl_path.empty(),
+         "expected runtime recovery actions trace path on rejected override launch");
+  Expect(!report.runtime_health_replay_json_path.empty(),
+         "expected runtime health replay path on rejected override launch");
   Expect(!report.runtime_diagnostic_replay_json_path.empty(),
          "expected diagnostic replay artifact path on rejected override launch");
   Expect(!report.runtime_diagnostic_trace_index_path.empty(),
          "expected diagnostic trace index path on rejected override launch");
+  Expect(!report.runtime_diagnostic_events_jsonl_path.empty(),
+         "expected diagnostic events path on rejected override launch");
   Expect(report.runtime_health_ready,
          "expected runtime health readiness on rejected override launch");
   Expect(report.runtime_diagnostic_replay_ready,
          "expected diagnostic replay readiness on rejected override launch");
   Expect(report.runtime_trace_bundle_complete,
          "expected complete replay trace bundle on rejected override launch");
+  Expect(report.runtime_canonical_trace_source_count == 7,
+         "expected seven canonical trace sources on rejected override launch");
+  Expect(report.runtime_trace_sources_found == 7,
+         "expected full trace-source coverage on rejected override launch");
+  Expect(report.runtime_missing_trace_source_count == 0,
+         "expected no missing trace sources on rejected override launch");
   Expect(!report.runtime_dependency_blocked,
          "expected no blocked runtime dependency on rejected override launch");
   Expect(report.runtime_failing_subsystem_count == 0,
@@ -5134,12 +5202,20 @@ void TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt() {
          "expected bootstrap execution result path without host ART");
   Expect(!report.runtime_health_json_path.empty(),
          "expected runtime health artifact path without host ART");
+  Expect(!report.runtime_health_trace_jsonl_path.empty(),
+         "expected runtime health trace path without host ART");
   Expect(!report.runtime_recovery_plan_path.empty(),
          "expected runtime recovery plan path without host ART");
+  Expect(!report.runtime_recovery_actions_jsonl_path.empty(),
+         "expected runtime recovery actions trace path without host ART");
+  Expect(!report.runtime_health_replay_json_path.empty(),
+         "expected runtime health replay path without host ART");
   Expect(!report.runtime_diagnostic_replay_json_path.empty(),
          "expected diagnostic replay artifact path without host ART");
   Expect(!report.runtime_diagnostic_trace_index_path.empty(),
          "expected diagnostic trace index path without host ART");
+  Expect(!report.runtime_diagnostic_events_jsonl_path.empty(),
+         "expected diagnostic events path without host ART");
   Expect(report.runtime_health_ready,
          "expected runtime health artifact generation without host ART");
   Expect(report.runtime_dependency_blocked,
@@ -5148,6 +5224,12 @@ void TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt() {
          "expected diagnostic replay readiness without host ART");
   Expect(report.runtime_trace_bundle_complete,
          "expected complete replay trace bundle without host ART");
+  Expect(report.runtime_canonical_trace_source_count == 7,
+         "expected seven canonical trace sources without host ART");
+  Expect(report.runtime_trace_sources_found == 7,
+         "expected full trace-source coverage without host ART");
+  Expect(report.runtime_missing_trace_source_count == 0,
+         "expected no missing trace sources without host ART");
   Expect(report.runtime_failing_subsystem_count == 2,
          "expected dex and bootstrap execution to remain blocked without host ART");
   Expect(report.runtime_recovery_actions_selected == 2,
@@ -5685,6 +5767,56 @@ void TestInstalledAppLaunchReportRendering() {
   Expect(rendered.find("Package: com.android.calculator2") !=
              std::string::npos,
          "expected package in installed app launch report");
+}
+
+void TestInstalledAppLaunchReportRenderingIncludesRuntimeTraceBundle() {
+  wfa::InstalledAppLaunchReport report;
+  report.backend_name = "native";
+  report.serial = "linuxoid-native";
+  report.package_name = "com.example.demo";
+  report.component = "com.example.demo/.MainActivity";
+  report.launch_classification = "native_bootstrap_execution_failed";
+  report.runtime_health_json_path = "/tmp/linuxoid/health/runtime-health.json";
+  report.runtime_health_trace_jsonl_path =
+      "/tmp/linuxoid/health/runtime-health-trace.jsonl";
+  report.runtime_recovery_plan_path =
+      "/tmp/linuxoid/health/runtime-recovery-plan.json";
+  report.runtime_recovery_actions_jsonl_path =
+      "/tmp/linuxoid/health/runtime-recovery-actions.jsonl";
+  report.runtime_health_replay_json_path =
+      "/tmp/linuxoid/health/runtime-health-replay.json";
+  report.runtime_diagnostic_replay_json_path =
+      "/tmp/linuxoid/health/runtime-diagnostic-replay.json";
+  report.runtime_diagnostic_trace_index_path =
+      "/tmp/linuxoid/health/runtime-diagnostic-trace-index.json";
+  report.runtime_diagnostic_events_jsonl_path =
+      "/tmp/linuxoid/health/runtime-diagnostic-events.jsonl";
+  report.runtime_diagnostic_replay_ready = true;
+  report.runtime_trace_bundle_complete = true;
+  report.runtime_canonical_trace_source_count = 7;
+  report.runtime_trace_sources_found = 7;
+  report.runtime_missing_trace_source_count = 0;
+
+  const auto rendered = wfa::RenderInstalledAppLaunchReport(report);
+  Expect(rendered.find("Runtime Health Trace Path: "
+                       "/tmp/linuxoid/health/runtime-health-trace.jsonl") !=
+             std::string::npos,
+         "expected runtime health trace path in installed app launch report");
+  Expect(rendered.find(
+             "Runtime Recovery Actions Trace Path: "
+             "/tmp/linuxoid/health/runtime-recovery-actions.jsonl") !=
+             std::string::npos,
+         "expected recovery actions trace path in installed app launch report");
+  Expect(rendered.find("Runtime Diagnostic Events Path: "
+                       "/tmp/linuxoid/health/runtime-diagnostic-events.jsonl") !=
+             std::string::npos,
+         "expected diagnostic events path in installed app launch report");
+  Expect(rendered.find("Runtime Trace Bundle Complete: yes") !=
+             std::string::npos,
+         "expected trace bundle completeness in installed app launch report");
+  Expect(rendered.find("Runtime Canonical Trace Source Count: 7") !=
+             std::string::npos,
+         "expected canonical trace source count in installed app launch report");
 }
 
 void TestAttachedAdbInstalledAppLaunchUsesExplicitComponent() {
@@ -6471,6 +6603,14 @@ void TestNativeInstalledPackageVerificationUsesPreflightAndOverrideBackedLaunch(
          "expected runtime probe readiness in native verification preflight");
   Expect(rendered.find("Bootstrap Planned: yes") != std::string::npos,
          "expected bootstrap planning in native verification preflight");
+  Expect(rendered.find("Runtime Health Trace Path: ") != std::string::npos,
+         "expected runtime health trace path in native verification preflight");
+  Expect(rendered.find("Runtime Diagnostic Events Path: ") !=
+             std::string::npos,
+         "expected diagnostic events path in native verification preflight");
+  Expect(rendered.find("Runtime Trace Bundle Complete: yes") !=
+             std::string::npos,
+         "expected complete trace bundle in native verification preflight");
   Expect(rendered.find("Component: com.example.nativebridge/.MainActivity") !=
              std::string::npos,
          "expected native launcher component in verification report");
@@ -7133,6 +7273,7 @@ int main() {
     TestAutoDesktopLaunchArtifactsRejectHeadlessApp();
     TestWaydroidAppLaunchReportRendering();
     TestInstalledAppLaunchReportRendering();
+    TestInstalledAppLaunchReportRenderingIncludesRuntimeTraceBundle();
     TestAttachedAdbInstalledAppLaunchUsesExplicitComponent();
     TestAttachedAdbInstalledAppLaunchAutoResolvesComponent();
     TestAttachedAdbPackageMetadataLookupExtractsLauncherAndVersion();

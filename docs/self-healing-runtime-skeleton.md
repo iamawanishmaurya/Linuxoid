@@ -50,6 +50,11 @@ What that means **today**:
   - `canonical_trace_source_names`
   - `missing_trace_source_count`
   - `trace_bundle_complete`
+- The Linuxoid-owned `native` bridge now carries that same replay contract back out to operators:
+  - `preflight-runtime native`
+  - `verify-package native`
+  - `launch-package native`
+  - direct health-trace, recovery-actions-trace, merged-diagnostic-events, and replay-completeness fields in the public report
 - Linuxoid can now materialize those actions into stable plan artifacts:
   - `runtime-recovery-plan.json`
   - `runtime-recovery-actions.jsonl`

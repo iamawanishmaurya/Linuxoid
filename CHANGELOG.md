@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.74 - 2026-05-18
+
+- Extend the public native bridge so `preflight-runtime native`, `verify-package native`, and `launch-package native` now surface the replayable trace bundle directly: health trace JSONL, recovery-actions JSONL, health replay JSON, merged diagnostic events JSONL, trace index JSON, and replay completeness counts are all emitted at the bridge layer instead of only inside deeper health artifacts.
+- Add regression coverage that pins those trace and replay fields across ready, override-backed, and host-ART-missing native preflight or launch paths, plus a rendering test for the installed-app launch report and a verification-surface check that the native preflight output exposes the replay bundle cleanly.
+
 ## v0.1.73 - 2026-05-18
 
 - Surface deterministic recovery policy directly in the public native bridge: `preflight-runtime native`, `verify-package native`, and `launch-package native` now expose both the currently selected recovery actions and the canonical four-scenario recovery mapping instead of hiding that detail in the deeper health JSON only.

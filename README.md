@@ -221,6 +221,7 @@ Today, **self-healing** in Linuxoid means:
   - `canonical_trace_source_names`
   - `missing_trace_source_count`
   - `trace_bundle_complete`
+- Linuxoid now also surfaces that replay contract directly through the public native bridge, so `preflight-runtime native`, `verify-package native`, and `launch-package native` name the health trace JSONL, recovery-actions JSONL, merged diagnostic events JSONL, trace index, and replay completeness counts without forcing callers to open the deeper health JSON first.
 - Linuxoid can persist those decisions into stable artifacts for agents, harnesses, and replay tooling:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`

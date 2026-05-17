@@ -72,10 +72,20 @@ struct NativePreflightDiagnostics {
   std::string art_runtime_probe_source;
   std::string bootstrap_manifest_path;
   std::string runtime_health_json_path;
+  std::string runtime_health_trace_jsonl_path;
+  std::string runtime_recovery_actions_jsonl_path;
+  std::string runtime_health_replay_json_path;
   std::string runtime_diagnostic_replay_json_path;
+  std::string runtime_diagnostic_trace_index_path;
+  std::string runtime_diagnostic_events_jsonl_path;
   int failing_subsystem_count = 0;
   int recovery_actions_selected = 0;
   int canonical_recovery_scenario_count = 0;
+  bool runtime_diagnostic_replay_ready = false;
+  bool runtime_trace_bundle_complete = false;
+  int runtime_canonical_trace_source_count = 0;
+  int runtime_trace_sources_found = 0;
+  int runtime_missing_trace_source_count = 0;
   std::vector<std::string> failing_subsystems;
   std::vector<std::string> selected_recovery_actions;
   std::vector<std::string> canonical_recovery_scenarios;
@@ -493,12 +503,28 @@ NativePreflightDiagnostics BuildNativePreflightDiagnostics(
   diagnostics.art_runtime_probe_source = runtime_smoke.art_runtime_probe_source;
   diagnostics.bootstrap_manifest_path = bootstrap.bootstrap_manifest_path;
   diagnostics.runtime_health_json_path = health.health_json_path;
+  diagnostics.runtime_health_trace_jsonl_path = health.trace_jsonl_path;
+  diagnostics.runtime_recovery_actions_jsonl_path =
+      health.recovery_actions_jsonl_path;
+  diagnostics.runtime_health_replay_json_path = health.replay_json_path;
   diagnostics.runtime_diagnostic_replay_json_path = diagnostic.result_json_path;
+  diagnostics.runtime_diagnostic_trace_index_path =
+      diagnostic.trace_index_json_path;
+  diagnostics.runtime_diagnostic_events_jsonl_path =
+      diagnostic.merged_trace_jsonl_path;
   diagnostics.dependency_blocked = health.dependency_blocked;
   diagnostics.failing_subsystem_count = health.failing_subsystem_count;
   diagnostics.recovery_actions_selected = health.recovery_actions_selected;
   diagnostics.canonical_recovery_scenario_count =
       health.canonical_recovery_scenario_count;
+  diagnostics.runtime_diagnostic_replay_ready = diagnostic.replay_ready;
+  diagnostics.runtime_trace_bundle_complete =
+      diagnostic.trace_bundle_complete;
+  diagnostics.runtime_canonical_trace_source_count =
+      diagnostic.canonical_trace_source_count;
+  diagnostics.runtime_trace_sources_found = diagnostic.trace_sources_found;
+  diagnostics.runtime_missing_trace_source_count =
+      diagnostic.missing_trace_source_count;
   diagnostics.failing_subsystems = health.failing_subsystems;
   diagnostics.selected_recovery_actions = CollectRecoveryActionNames(health);
   diagnostics.canonical_recovery_scenarios =
@@ -901,6 +927,14 @@ std::string RenderInstalledAppLaunchReport(
   if (!report.runtime_health_json_path.empty()) {
     output << "Runtime Health JSON Path: " << report.runtime_health_json_path
            << '\n';
+    if (!report.runtime_health_trace_jsonl_path.empty()) {
+      output << "Runtime Health Trace Path: "
+             << report.runtime_health_trace_jsonl_path << '\n';
+    }
+    if (!report.runtime_health_replay_json_path.empty()) {
+      output << "Runtime Health Replay Path: "
+             << report.runtime_health_replay_json_path << '\n';
+    }
     output << "Runtime Health Ready: "
            << (report.runtime_health_ready ? "yes" : "no") << '\n';
     output << "Runtime Dependency Blocked: "
@@ -932,6 +966,10 @@ std::string RenderInstalledAppLaunchReport(
     output << "Runtime Recovery Plan Path: "
            << report.runtime_recovery_plan_path << '\n';
   }
+  if (!report.runtime_recovery_actions_jsonl_path.empty()) {
+    output << "Runtime Recovery Actions Trace Path: "
+           << report.runtime_recovery_actions_jsonl_path << '\n';
+  }
   if (!report.runtime_diagnostic_replay_json_path.empty()) {
     output << "Runtime Diagnostic Replay Path: "
            << report.runtime_diagnostic_replay_json_path << '\n';
@@ -939,10 +977,20 @@ std::string RenderInstalledAppLaunchReport(
            << (report.runtime_diagnostic_replay_ready ? "yes" : "no") << '\n';
     output << "Runtime Trace Bundle Complete: "
            << (report.runtime_trace_bundle_complete ? "yes" : "no") << '\n';
+    output << "Runtime Canonical Trace Source Count: "
+           << report.runtime_canonical_trace_source_count << '\n';
+    output << "Runtime Trace Sources Found: "
+           << report.runtime_trace_sources_found << '\n';
+    output << "Runtime Missing Trace Source Count: "
+           << report.runtime_missing_trace_source_count << '\n';
   }
   if (!report.runtime_diagnostic_trace_index_path.empty()) {
     output << "Runtime Diagnostic Trace Index Path: "
            << report.runtime_diagnostic_trace_index_path << '\n';
+  }
+  if (!report.runtime_diagnostic_events_jsonl_path.empty()) {
+    output << "Runtime Diagnostic Events Path: "
+           << report.runtime_diagnostic_events_jsonl_path << '\n';
   }
   output << "Launch OK: " << (report.launch_ok ? "yes" : "no") << '\n';
   output << "Launch Output:\n" << report.output;
@@ -1058,10 +1106,42 @@ std::string RenderRuntimePreflightReport(
     if (!report.runtime_health_json_path.empty()) {
       output << "Runtime Health JSON Path: " << report.runtime_health_json_path
              << '\n';
+      if (!report.runtime_health_trace_jsonl_path.empty()) {
+        output << "Runtime Health Trace Path: "
+               << report.runtime_health_trace_jsonl_path << '\n';
+      }
+      if (!report.runtime_health_replay_json_path.empty()) {
+        output << "Runtime Health Replay Path: "
+               << report.runtime_health_replay_json_path << '\n';
+      }
+    }
+    if (!report.runtime_recovery_actions_jsonl_path.empty()) {
+      output << "Runtime Recovery Actions Trace Path: "
+             << report.runtime_recovery_actions_jsonl_path << '\n';
     }
     if (!report.runtime_diagnostic_replay_json_path.empty()) {
       output << "Runtime Diagnostic Replay Path: "
              << report.runtime_diagnostic_replay_json_path << '\n';
+      output << "Runtime Diagnostic Replay Ready: "
+             << (report.runtime_diagnostic_replay_ready ? "yes" : "no")
+             << '\n';
+      output << "Runtime Trace Bundle Complete: "
+             << (report.runtime_trace_bundle_complete ? "yes" : "no")
+             << '\n';
+      output << "Runtime Canonical Trace Source Count: "
+             << report.runtime_canonical_trace_source_count << '\n';
+      output << "Runtime Trace Sources Found: "
+             << report.runtime_trace_sources_found << '\n';
+      output << "Runtime Missing Trace Source Count: "
+             << report.runtime_missing_trace_source_count << '\n';
+    }
+    if (!report.runtime_diagnostic_trace_index_path.empty()) {
+      output << "Runtime Diagnostic Trace Index Path: "
+             << report.runtime_diagnostic_trace_index_path << '\n';
+    }
+    if (!report.runtime_diagnostic_events_jsonl_path.empty()) {
+      output << "Runtime Diagnostic Events Path: "
+             << report.runtime_diagnostic_events_jsonl_path << '\n';
     }
   }
   output << "Model: " << report.model << '\n';
@@ -1299,8 +1379,18 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
         report.art_runtime_probe_source = diagnostics.art_runtime_probe_source;
         report.bootstrap_manifest_path = diagnostics.bootstrap_manifest_path;
         report.runtime_health_json_path = diagnostics.runtime_health_json_path;
+        report.runtime_health_trace_jsonl_path =
+            diagnostics.runtime_health_trace_jsonl_path;
+        report.runtime_recovery_actions_jsonl_path =
+            diagnostics.runtime_recovery_actions_jsonl_path;
+        report.runtime_health_replay_json_path =
+            diagnostics.runtime_health_replay_json_path;
         report.runtime_diagnostic_replay_json_path =
             diagnostics.runtime_diagnostic_replay_json_path;
+        report.runtime_diagnostic_trace_index_path =
+            diagnostics.runtime_diagnostic_trace_index_path;
+        report.runtime_diagnostic_events_jsonl_path =
+            diagnostics.runtime_diagnostic_events_jsonl_path;
         report.runtime_probe_ready = diagnostics.runtime_probe_ready;
         report.bootstrap_planned = diagnostics.bootstrap_planned;
         report.dependency_blocked = diagnostics.dependency_blocked;
@@ -1310,6 +1400,16 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
             diagnostics.recovery_actions_selected;
         report.canonical_recovery_scenario_count =
             diagnostics.canonical_recovery_scenario_count;
+        report.runtime_diagnostic_replay_ready =
+            diagnostics.runtime_diagnostic_replay_ready;
+        report.runtime_trace_bundle_complete =
+            diagnostics.runtime_trace_bundle_complete;
+        report.runtime_canonical_trace_source_count =
+            diagnostics.runtime_canonical_trace_source_count;
+        report.runtime_trace_sources_found =
+            diagnostics.runtime_trace_sources_found;
+        report.runtime_missing_trace_source_count =
+            diagnostics.runtime_missing_trace_source_count;
         report.failing_subsystems = diagnostics.failing_subsystems;
         report.selected_recovery_actions =
             diagnostics.selected_recovery_actions;
@@ -1589,7 +1689,11 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
         const auto health = RunRuntimeHealthFixture(
             bootstrap.bootstrap_manifest_path, "baseline");
         report.runtime_health_json_path = health.health_json_path;
+        report.runtime_health_trace_jsonl_path = health.trace_jsonl_path;
         report.runtime_recovery_plan_path = health.recovery_plan_path;
+        report.runtime_recovery_actions_jsonl_path =
+            health.recovery_actions_jsonl_path;
+        report.runtime_health_replay_json_path = health.replay_json_path;
         report.runtime_health_ready = health.self_healing_ready;
         report.runtime_dependency_blocked = health.dependency_blocked;
         report.runtime_failing_subsystem_count =
@@ -1609,9 +1713,16 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
             diagnostic.result_json_path;
         report.runtime_diagnostic_trace_index_path =
             diagnostic.trace_index_json_path;
+        report.runtime_diagnostic_events_jsonl_path =
+            diagnostic.merged_trace_jsonl_path;
         report.runtime_diagnostic_replay_ready = diagnostic.replay_ready;
         report.runtime_trace_bundle_complete =
             diagnostic.trace_bundle_complete;
+        report.runtime_canonical_trace_source_count =
+            diagnostic.canonical_trace_source_count;
+        report.runtime_trace_sources_found = diagnostic.trace_sources_found;
+        report.runtime_missing_trace_source_count =
+            diagnostic.missing_trace_source_count;
         const bool override_allowed =
             EnvFlagEnabled("LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE");
         const bool override_only_success =

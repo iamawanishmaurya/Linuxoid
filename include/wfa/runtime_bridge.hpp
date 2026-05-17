@@ -87,9 +87,13 @@ struct InstalledAppLaunchReport {
   std::string bootstrap_execution_trace_jsonl_path;
   std::string bootstrap_execution_runner_state_json_path;
   std::string runtime_health_json_path;
+  std::string runtime_health_trace_jsonl_path;
   std::string runtime_recovery_plan_path;
+  std::string runtime_recovery_actions_jsonl_path;
+  std::string runtime_health_replay_json_path;
   std::string runtime_diagnostic_replay_json_path;
   std::string runtime_diagnostic_trace_index_path;
+  std::string runtime_diagnostic_events_jsonl_path;
   bool runtime_health_ready = false;
   bool runtime_dependency_blocked = false;
   int runtime_failing_subsystem_count = 0;
@@ -97,6 +101,9 @@ struct InstalledAppLaunchReport {
   int runtime_canonical_recovery_scenario_count = 0;
   bool runtime_diagnostic_replay_ready = false;
   bool runtime_trace_bundle_complete = false;
+  int runtime_canonical_trace_source_count = 0;
+  int runtime_trace_sources_found = 0;
+  int runtime_missing_trace_source_count = 0;
   std::vector<std::string> runtime_failing_subsystems;
   std::vector<std::string> runtime_selected_recovery_actions;
   std::vector<std::string> runtime_canonical_recovery_scenarios;
@@ -171,7 +178,12 @@ struct RuntimePreflightReport {
   std::string art_runtime_probe_source;
   std::string bootstrap_manifest_path;
   std::string runtime_health_json_path;
+  std::string runtime_health_trace_jsonl_path;
+  std::string runtime_recovery_actions_jsonl_path;
+  std::string runtime_health_replay_json_path;
   std::string runtime_diagnostic_replay_json_path;
+  std::string runtime_diagnostic_trace_index_path;
+  std::string runtime_diagnostic_events_jsonl_path;
   std::string backend_check_output;
   std::string discovery_output;
   std::string package_check_output;
@@ -179,6 +191,11 @@ struct RuntimePreflightReport {
   int failing_subsystem_count = 0;
   int recovery_actions_selected = 0;
   int canonical_recovery_scenario_count = 0;
+  bool runtime_diagnostic_replay_ready = false;
+  bool runtime_trace_bundle_complete = false;
+  int runtime_canonical_trace_source_count = 0;
+  int runtime_trace_sources_found = 0;
+  int runtime_missing_trace_source_count = 0;
   std::vector<std::string> failing_subsystems;
   std::vector<std::string> selected_recovery_actions;
   std::vector<std::string> canonical_recovery_scenarios;
