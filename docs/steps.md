@@ -1357,3 +1357,23 @@
   Action: Rebuilt Linuxoid, reran the full test suite, exercised `native-runtime-health-fixture` against the staged Calculator bootstrap, and refreshed the docs/version/status metadata for the stronger self-healing summary contract.
   Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the runtime-health JSON now includes `dependency_blocked`, `failing_subsystem_count`, `recovery_actions_selected`, and `failing_subsystems`, and repeated command output remains stable.
   Timestamp: 2026-05-18T00:39:00+05:30
+
+- Step: Activity bootstrap seam red test
+  Action: Added failing tests for a Linuxoid-owned `native-art-activity-bootstrap-fixture` command that should write deterministic activity-bootstrap plan, trace, and result artifacts on top of the existing class-resolution and runtime-smoke seams.
+  Result: Linuxoid now has a red test that requires a real post-class-resolution activity-bootstrap planning surface instead of only a class-resolution probe.
+  Timestamp: 2026-05-18T00:49:00+05:30
+
+- Step: Activity bootstrap seam failure capture
+  Action: Ran `cmake --build build && ctest --test-dir build --output-on-failure` immediately after adding the new activity-bootstrap tests.
+  Result: The build failed at link time because `RunNativeArtActivityBootstrapFixture` and `RenderNativeArtActivityBootstrapFixtureJson` do not exist yet, confirming that the next bootstrap seam still needs implementation and build wiring.
+  Timestamp: 2026-05-18T00:50:00+05:30
+
+- Step: Activity bootstrap seam implementation
+  Action: Implemented `native-art-activity-bootstrap-fixture`, wired it into `wfa_core` and `compatctl`, and connected it to the existing lifecycle, class-resolution, and runtime-smoke seams so Linuxoid can write deterministic activity bootstrap artifacts.
+  Result: Linuxoid now materializes stable `art/activity-bootstrap-plan.json`, `art/activity-bootstrap-trace.jsonl`, and `art/activity-bootstrap-result.json` files while keeping host ART absence as an honest blocker.
+  Timestamp: 2026-05-17T05:50:03+05:30
+
+- Step: Activity bootstrap seam verification
+  Action: Rebuilt Linuxoid, reran the full test suite, exercised `bootstrap-native-spike`, exercised `native-art-activity-bootstrap-fixture` against the staged Calculator bootstrap, and refreshed the docs/version/status metadata for the new activity bootstrap seam.
+  Result: `cmake --build build && ctest --test-dir build --output-on-failure` passed, the new activity bootstrap fixture returned a deterministic launcher-derived target with `runtime_bootstrap_planned: true`, and Linuxoid now reports `execution 96/100` while still leaving real host ART execution pending.
+  Timestamp: 2026-05-17T05:50:03+05:30

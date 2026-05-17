@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 
 project(
   Linuxoid
-  VERSION 0.1.49
+  VERSION 0.1.50
   LANGUAGES CXX
 )
 
@@ -20,6 +20,7 @@ find_library(EGL_LIBRARY EGL)
 add_library(
   wfa_core
   src/apk_host_integration.cpp
+  src/art_activity_bootstrap_fixture.cpp
   src/art_classloader_fixture.cpp
   src/art_class_resolution_fixture.cpp
   src/art_runtime_smoke.cpp

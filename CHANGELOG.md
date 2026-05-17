@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.50 - 2026-05-18
+
+- Add a Linuxoid-owned `native-art-activity-bootstrap-fixture` seam so launcher resolution, Binder-readiness evidence, and host-ART runtime-smoke artifacts now flow into deterministic `art/activity-bootstrap-plan.json`, `art/activity-bootstrap-trace.jsonl`, and `art/activity-bootstrap-result.json` outputs for the first post-class-resolution activity bootstrap step.
+- Add regression coverage that proves the new activity-bootstrap seam writes stable artifacts, keeps launcher-derived activity targeting deterministic, and stays honest when host ART is absent.
+- Refresh the README Mermaid architecture, phased plan, self-healing runtime note, changelog, and status output so Linuxoid now reports the post-class-resolution activity-bootstrap planning gate honestly while still marking real host ART app execution as pending.
+
 ## v0.1.49 - 2026-05-18
 
 - Add explicit self-healing summary fields to `runtime-health.json` and CLI output so Linuxoid now reports `dependency_blocked`, `failing_subsystem_count`, `recovery_actions_selected`, and a deterministic `failing_subsystems` list directly instead of forcing harnesses to derive them from raw records.
