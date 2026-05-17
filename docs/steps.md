@@ -1593,6 +1593,11 @@
   Result: The repo now says more plainly what self-healing means today and what still blocks full Android app startup on Linux.
   Timestamp: 2026-05-18T00:01:40+05:30
 
+- Step: Native launch report artifact surface GREEN
+  Action: Extended `launch-package native` to surface bootstrap, health, recovery, and replay artifact paths directly in the launch report, then fixed replay completeness on healthy paths by treating an existing but empty `runtime-recovery-actions.jsonl` as a valid trace source.
+  Result: A failed staged native launch now immediately names its blocked subsystems and the exact JSON or JSONL artifacts needed for diagnosis, while healthy override-backed fixture runs can still report a complete replay bundle without fabricating recovery actions.
+  Timestamp: 2026-05-18T00:25:00+05:30
+
 - Step: Backend-neutral verification preflight contract GREEN
   Action: Added red-first regression coverage for attached-ADB, Waydroid, and local `native` installed-package verification, then taught `verify-package` and `verify-package-matrix` to run runtime preflight first, expose runtime-target selection plus package visibility plus component readiness in the public report, and keep native verification on the same contract through the staged-package bridge.
   Result: Linuxoid now verifies staged native packages through the same preflight-backed installed-package surface as the other backends, including override-backed native success and honest non-candidate native failure without collapsing back to a launch-only shortcut.

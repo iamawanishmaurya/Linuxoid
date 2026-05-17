@@ -4,6 +4,7 @@
 #include "wfa/apk_loader.hpp"
 #include "wfa/checkpoint.hpp"
 #include "wfa/native_spike.hpp"
+#include "wfa/runtime_health.hpp"
 
 #include <array>
 #include <cmath>
@@ -209,6 +210,18 @@ std::string TrimWhitespace(std::string value) {
     value.pop_back();
   }
   return value;
+}
+
+std::string JoinStrings(const std::vector<std::string>& values,
+                        const std::string& delimiter) {
+  std::ostringstream output;
+  for (std::size_t index = 0; index < values.size(); ++index) {
+    if (index != 0) {
+      output << delimiter;
+    }
+    output << values[index];
+  }
+  return output.str();
 }
 
 std::string ExtractJsonStringOrEmpty(const std::string& json,
@@ -756,6 +769,53 @@ std::string RenderInstalledAppLaunchReport(
     output << "ART Runtime Probe Source: " << report.art_runtime_probe_source
            << '\n';
   }
+  if (!report.bootstrap_manifest_path.empty()) {
+    output << "Bootstrap Manifest Path: " << report.bootstrap_manifest_path
+           << '\n';
+  }
+  if (!report.bootstrap_execution_result_path.empty()) {
+    output << "Bootstrap Execution Result Path: "
+           << report.bootstrap_execution_result_path << '\n';
+  }
+  if (!report.bootstrap_execution_trace_jsonl_path.empty()) {
+    output << "Bootstrap Execution Trace Path: "
+           << report.bootstrap_execution_trace_jsonl_path << '\n';
+  }
+  if (!report.bootstrap_execution_runner_state_json_path.empty()) {
+    output << "Bootstrap Runner State Path: "
+           << report.bootstrap_execution_runner_state_json_path << '\n';
+  }
+  if (!report.runtime_health_json_path.empty()) {
+    output << "Runtime Health JSON Path: " << report.runtime_health_json_path
+           << '\n';
+    output << "Runtime Health Ready: "
+           << (report.runtime_health_ready ? "yes" : "no") << '\n';
+    output << "Runtime Dependency Blocked: "
+           << (report.runtime_dependency_blocked ? "yes" : "no") << '\n';
+    output << "Runtime Failing Subsystem Count: "
+           << report.runtime_failing_subsystem_count << '\n';
+    output << "Runtime Failing Subsystems: "
+           << (report.runtime_failing_subsystems.empty()
+                   ? "none"
+                   : JoinStrings(report.runtime_failing_subsystems, ", "))
+           << '\n';
+  }
+  if (!report.runtime_recovery_plan_path.empty()) {
+    output << "Runtime Recovery Plan Path: "
+           << report.runtime_recovery_plan_path << '\n';
+  }
+  if (!report.runtime_diagnostic_replay_json_path.empty()) {
+    output << "Runtime Diagnostic Replay Path: "
+           << report.runtime_diagnostic_replay_json_path << '\n';
+    output << "Runtime Diagnostic Replay Ready: "
+           << (report.runtime_diagnostic_replay_ready ? "yes" : "no") << '\n';
+    output << "Runtime Trace Bundle Complete: "
+           << (report.runtime_trace_bundle_complete ? "yes" : "no") << '\n';
+  }
+  if (!report.runtime_diagnostic_trace_index_path.empty()) {
+    output << "Runtime Diagnostic Trace Index Path: "
+           << report.runtime_diagnostic_trace_index_path << '\n';
+  }
   output << "Launch OK: " << (report.launch_ok ? "yes" : "no") << '\n';
   output << "Launch Output:\n" << report.output;
   return output.str();
@@ -1299,9 +1359,32 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
             staged_report, ResolveNativeSpikeRoot());
         const auto bootstrap = BuildNativeActivityBootstrap(
             plan, ResolveCompatctlPathForNativeRuntime());
+        report.bootstrap_manifest_path = bootstrap.bootstrap_manifest_path;
         const auto execution = RunNativeArtBootstrapExecutionFixture(
             bootstrap.bootstrap_manifest_path);
+        report.bootstrap_execution_result_path = execution.result_json_path;
+        report.bootstrap_execution_trace_jsonl_path = execution.trace_jsonl_path;
+        report.bootstrap_execution_runner_state_json_path =
+            execution.runner_state_json_path;
         report.art_runtime_probe_source = execution.art_runtime_probe_source;
+        const auto health = RunRuntimeHealthFixture(
+            bootstrap.bootstrap_manifest_path, "baseline");
+        report.runtime_health_json_path = health.health_json_path;
+        report.runtime_recovery_plan_path = health.recovery_plan_path;
+        report.runtime_health_ready = health.self_healing_ready;
+        report.runtime_dependency_blocked = health.dependency_blocked;
+        report.runtime_failing_subsystem_count =
+            health.failing_subsystem_count;
+        report.runtime_failing_subsystems = health.failing_subsystems;
+        const auto diagnostic = ReplayRuntimeDiagnosticBundle(
+            bootstrap.bootstrap_manifest_path);
+        report.runtime_diagnostic_replay_json_path =
+            diagnostic.result_json_path;
+        report.runtime_diagnostic_trace_index_path =
+            diagnostic.trace_index_json_path;
+        report.runtime_diagnostic_replay_ready = diagnostic.replay_ready;
+        report.runtime_trace_bundle_complete =
+            diagnostic.trace_bundle_complete;
         const bool override_allowed =
             EnvFlagEnabled("LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE");
         const bool override_only_success =

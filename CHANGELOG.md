@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.71 - 2026-05-18
+
+- Extend the public `launch-package native` report so it now surfaces Linuxoid-owned bootstrap, runtime-health, recovery-plan, and replay-bundle artifact paths directly, plus blocked-subsystem summaries when a staged launch fails.
+- Fix the replay-bundle contract on healthy native launches by treating an existing but empty `runtime-recovery-actions.jsonl` as a valid trace source instead of a missing artifact, so successful paths can still report `replay_ready: true` and `trace_bundle_complete: true` without inventing fake recovery actions.
+- Add regression coverage for successful override-backed native launch, override rejection, and honest host-ART-missing failure so the native launch report stays pinned to that richer artifact and diagnostic contract.
+
 ## v0.1.70 - 2026-05-18
 
 - Refresh the self-healing documentation so the repo explains the current public command contract more plainly: Linuxoid can diagnose, classify, choose bounded recovery, and replay failures, but it still cannot honestly claim full Android app execution on Linux.

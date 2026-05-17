@@ -1258,11 +1258,12 @@ RuntimeDiagnosticReplayReport ReplayRuntimeDiagnosticBundle(
     RuntimeDiagnosticTraceSource source;
     source.source_name = source_name;
     source.trace_path = source_path;
+    const bool trace_file_exists = FileExists(source_path);
     const auto lines = ReadJsonlLinesIfPresent(source_path);
-    source.present = !lines.empty();
+    source.present = trace_file_exists;
     source.events_read = static_cast<int>(lines.size());
     if (!source.present) {
-      source.failure_reason = "trace_missing_or_empty";
+      source.failure_reason = "trace_missing";
       report.missing_trace_sources.push_back(source_name);
       report.trace_sources.push_back(source);
       continue;

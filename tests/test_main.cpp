@@ -4839,6 +4839,32 @@ void TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution() {
          "expected override runtime probe source");
   Expect(report.component == fixture.launcher_component,
          "expected native launch component");
+  Expect(!report.bootstrap_manifest_path.empty(),
+         "expected bootstrap manifest path on successful native launch");
+  Expect(!report.bootstrap_execution_result_path.empty(),
+         "expected bootstrap execution result path on successful native launch");
+  Expect(!report.bootstrap_execution_trace_jsonl_path.empty(),
+         "expected bootstrap execution trace path on successful native launch");
+  Expect(!report.bootstrap_execution_runner_state_json_path.empty(),
+         "expected bootstrap runner state path on successful native launch");
+  Expect(!report.runtime_health_json_path.empty(),
+         "expected runtime health artifact path on successful native launch");
+  Expect(!report.runtime_recovery_plan_path.empty(),
+         "expected runtime recovery plan path on successful native launch");
+  Expect(!report.runtime_diagnostic_replay_json_path.empty(),
+         "expected diagnostic replay artifact path on successful native launch");
+  Expect(!report.runtime_diagnostic_trace_index_path.empty(),
+         "expected diagnostic trace index path on successful native launch");
+  Expect(report.runtime_health_ready,
+         "expected runtime health report on successful native launch");
+  Expect(report.runtime_diagnostic_replay_ready,
+         "expected diagnostic replay readiness on successful native launch");
+  Expect(report.runtime_trace_bundle_complete,
+         "expected complete trace bundle on successful native launch");
+  Expect(!report.runtime_dependency_blocked,
+         "expected no blocked runtime dependency on successful native launch");
+  Expect(report.runtime_failing_subsystem_count == 0,
+         "expected no failing runtime subsystems on successful native launch");
   Expect(report.output.find("\"execution_succeeded\": true") !=
              std::string::npos,
          "expected successful bootstrap execution output");
@@ -4891,6 +4917,28 @@ void TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault() {
          "expected fixture override rejection classification");
   Expect(report.art_runtime_probe_source == "override",
          "expected override runtime probe source on rejected launch");
+  Expect(!report.bootstrap_manifest_path.empty(),
+         "expected bootstrap manifest path on rejected override launch");
+  Expect(!report.bootstrap_execution_result_path.empty(),
+         "expected bootstrap execution result path on rejected override launch");
+  Expect(!report.runtime_health_json_path.empty(),
+         "expected runtime health artifact path on rejected override launch");
+  Expect(!report.runtime_recovery_plan_path.empty(),
+         "expected runtime recovery plan path on rejected override launch");
+  Expect(!report.runtime_diagnostic_replay_json_path.empty(),
+         "expected diagnostic replay artifact path on rejected override launch");
+  Expect(!report.runtime_diagnostic_trace_index_path.empty(),
+         "expected diagnostic trace index path on rejected override launch");
+  Expect(report.runtime_health_ready,
+         "expected runtime health readiness on rejected override launch");
+  Expect(report.runtime_diagnostic_replay_ready,
+         "expected diagnostic replay readiness on rejected override launch");
+  Expect(report.runtime_trace_bundle_complete,
+         "expected complete replay trace bundle on rejected override launch");
+  Expect(!report.runtime_dependency_blocked,
+         "expected no blocked runtime dependency on rejected override launch");
+  Expect(report.runtime_failing_subsystem_count == 0,
+         "expected no failing runtime subsystems on rejected override launch");
   Expect(report.output.find("\"execution_succeeded\": true") !=
              std::string::npos,
          "expected underlying bootstrap execution success in rejection output");
@@ -4923,6 +4971,71 @@ void TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly() {
          "expected non-candidate native launch to fail honestly");
   Expect(report.output.find("native spike candidate") != std::string::npos,
          "expected native candidate failure reason in launch output");
+  Expect(report.bootstrap_manifest_path.empty(),
+         "expected no bootstrap manifest for non-candidate launch failure");
+  Expect(report.runtime_health_json_path.empty(),
+         "expected no runtime health artifact for non-candidate launch failure");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-host-art-missing");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native launch should not shell out through runtime bridge runner");
+      });
+
+  Expect(!report.launch_ok,
+         "expected native launch failure when host ART is unavailable");
+  Expect(report.launch_classification == "native_bootstrap_execution_failed",
+         "expected bootstrap execution failure classification without host ART");
+  Expect(report.art_runtime_probe_source == "missing",
+         "expected missing runtime probe source without host ART");
+  Expect(!report.bootstrap_manifest_path.empty(),
+         "expected bootstrap manifest path without host ART");
+  Expect(!report.bootstrap_execution_result_path.empty(),
+         "expected bootstrap execution result path without host ART");
+  Expect(!report.runtime_health_json_path.empty(),
+         "expected runtime health artifact path without host ART");
+  Expect(!report.runtime_recovery_plan_path.empty(),
+         "expected runtime recovery plan path without host ART");
+  Expect(!report.runtime_diagnostic_replay_json_path.empty(),
+         "expected diagnostic replay artifact path without host ART");
+  Expect(!report.runtime_diagnostic_trace_index_path.empty(),
+         "expected diagnostic trace index path without host ART");
+  Expect(report.runtime_health_ready,
+         "expected runtime health artifact generation without host ART");
+  Expect(report.runtime_dependency_blocked,
+         "expected runtime dependency block without host ART");
+  Expect(report.runtime_diagnostic_replay_ready,
+         "expected diagnostic replay readiness without host ART");
+  Expect(report.runtime_trace_bundle_complete,
+         "expected complete replay trace bundle without host ART");
+  Expect(report.runtime_failing_subsystem_count == 2,
+         "expected dex and bootstrap execution to remain blocked without host ART");
+  Expect(std::find(report.runtime_failing_subsystems.begin(),
+                   report.runtime_failing_subsystems.end(),
+                   "dex_classloader_readiness") !=
+             report.runtime_failing_subsystems.end(),
+         "expected dex classloader failure without host ART");
+  Expect(std::find(report.runtime_failing_subsystems.begin(),
+                   report.runtime_failing_subsystems.end(),
+                   "bootstrap_execution_readiness") !=
+             report.runtime_failing_subsystems.end(),
+         "expected bootstrap execution failure without host ART");
 
   fs::remove_all(fixture.root);
 }
@@ -6857,6 +6970,7 @@ int main() {
     TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
     TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault();
     TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();
+    TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt();
     TestDesktopLaunchArtifactsForImeApp();
     TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();
     TestDesktopLaunchArtifactsRejectCrossPackageComponent();
