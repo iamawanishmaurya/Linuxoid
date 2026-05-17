@@ -1662,3 +1662,8 @@
   Action: Added a red test for rejecting override-backed ART/bootstrap success on the default native launch path, then taught `launch-package native` to record runtime-probe provenance and only classify override-backed execution as a successful launch when `LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE=1` is set explicitly.
   Result: Linuxoid now keeps the override seam useful for fixtures and verification while stopping the production-facing native launch command from overstating what has actually been proven on a host without real ART.
   Timestamp: 2026-05-18T00:16:00+05:30
+
+- Step: Host ART 64-bit probe coverage GREEN
+  Action: Extended the ART classloader detector to recognize `dalvikvm64` and `app_process64` alongside the existing host probe names, then added regression coverage for host-`dalvikvm64` runtime smoke, native preflight, and no-override native launch success.
+  Result: Linuxoid now treats the common 64-bit host ART binary names as part of the same public probe-capability contract, and the test harness can prove a host-classified `dalvikvm64` path end to end without routing through the Linuxoid override seam.
+  Timestamp: 2026-05-17T20:15:00+05:30

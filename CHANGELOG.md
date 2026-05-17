@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.83 - 2026-05-17
+
+- Extend the host ART probe contract to cover the common 64-bit binary names too: Linuxoid now recognizes `dalvikvm64` as the same bootstrap-capable host class as `dalvikvm`, and `app_process64` as the same detection-only host class as `app_process`.
+- Add regression coverage that proves the widened host probe contract across runtime smoke, native preflight, and native launch, including a no-override host-`dalvikvm64` launch-success path in the test harness.
+- Refresh the README, self-healing runtime note, phased plan, changelog, step log, and status text so the repo stays honest about broader host-ART name coverage without claiming real ART on this machine.
+
 ## v0.1.82 - 2026-05-17
 
 - Refresh the README, self-healing runtime note, and phased build plan so they explain the current self-healing contract more plainly at the public native bridge: Linuxoid can now keep blocked preflight and launch answers deterministic, replayable, and honest without implying a successful Android app start.

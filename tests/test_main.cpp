@@ -2625,6 +2625,60 @@ void TestNativeArtRuntimeSmokeClassifiesHostAppProcessAsDetectionOnly() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeArtRuntimeSmokeTreatsHostDalvikvm64AsBootstrapCapable() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-runtime-dalvikvm64", true, true);
+  const fs::path dalvikvm64 = fixture.root / "dalvikvm64";
+  {
+    std::ofstream output(dalvikvm64);
+    output << "#!/bin/sh\n";
+    output << "printf '%s\\n' \"host-dalvikvm64:$*\"\n";
+    output << "exit 0\n";
+  }
+  fs::permissions(dalvikvm64,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable path_override("PATH", fixture.root.string());
+  const auto report = wfa::RunNativeArtRuntimeSmokeFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(report.art_runtime_detected,
+         "expected host dalvikvm64 candidate to count as detected ART path");
+  Expect(report.art_runtime_probe_source == "host",
+         "expected host runtime probe source");
+  Expect(report.art_runtime_probe_detection_reason ==
+             "host_dalvikvm_selected",
+         "expected dalvikvm detection reason");
+  Expect(report.art_runtime_probe_capability ==
+             "host_dalvikvm_bootstrap_capable",
+         "expected dalvikvm64 capability classification");
+  Expect(report.safe_runtime_probe_available,
+         "expected dalvikvm64 host probe to be bootstrap-capable");
+  Expect(report.runtime_probe_attempted,
+         "expected runtime probe attempt through dalvikvm64");
+  Expect(report.pathclassloader_resolution_attempted,
+         "expected class-resolution attempt through dalvikvm64");
+  Expect(report.runtime_probe_succeeded,
+         "expected successful dalvikvm64 runtime probe");
+  Expect(report.runtime_class_resolution_succeeded,
+         "expected successful dalvikvm64 class resolution");
+  Expect(report.art_runtime_probe.find("dalvikvm64") != std::string::npos,
+         "expected selected probe path to mention dalvikvm64");
+  const std::string inventory_json =
+      ReadTextFile(report.art_runtime_probe_inventory_path);
+  Expect(inventory_json.find("dalvikvm64") != std::string::npos,
+         "expected dalvikvm64 candidate in inventory json");
+  Expect(inventory_json.find("\"selected\": true") != std::string::npos,
+         "expected selected dalvikvm64 candidate in inventory json");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeArtRuntimeSmokeRecordsProbeInventoryAndReason() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -5213,6 +5267,66 @@ void TestNativeRuntimePreflightReportsHostAppProcessCapabilityHonestly() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeRuntimePreflightUsesHostDalvikvm64WithoutOverride() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight-dalvikvm64");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path dalvikvm64 = fixture.root / "dalvikvm64";
+  {
+    std::ofstream output(dalvikvm64);
+    output << "#!/bin/sh\n";
+    output << "printf '%s\\n' 'host-dalvikvm64'\n";
+    output << "exit 0\n";
+  }
+  fs::permissions(dalvikvm64,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable path_override("PATH", fixture.root.string());
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native preflight should not shell out");
+      });
+
+  Expect(report.ready_for_launch,
+         "expected host dalvikvm64 preflight readiness without override");
+  Expect(report.runtime_probe_ready,
+         "expected runtime probe readiness with host dalvikvm64");
+  Expect(report.bootstrap_planned,
+         "expected bootstrap planning with host dalvikvm64");
+  Expect(report.art_runtime_probe_source == "host",
+         "expected host probe source in native preflight");
+  Expect(report.runtime_probe_detection_reason == "host_dalvikvm_selected",
+         "expected dalvikvm detection reason in native preflight");
+  Expect(report.art_runtime_probe_capability ==
+             "host_dalvikvm_bootstrap_capable",
+         "expected dalvikvm64 capability in native preflight");
+  Expect(report.failing_subsystem_count == 0,
+         "expected no blocked subsystems in host dalvikvm64 preflight");
+  Expect(report.recovery_actions_selected == 0,
+         "expected no selected recovery actions in host dalvikvm64 preflight");
+  const auto rendered = wfa::RenderRuntimePreflightReport(report);
+  Expect(rendered.find(
+             "ART Runtime Probe Capability: host_dalvikvm_bootstrap_capable") !=
+             std::string::npos,
+         "expected dalvikvm64 capability line in native preflight render");
+  Expect(rendered.find("Ready For Launch: yes") != std::string::npos,
+         "expected ready-for-launch line in native preflight render");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeRuntimePreflightSurfacesProbeInventoryAndReason() {
   namespace fs = std::filesystem;
   auto fixture = CreateNativeRuntimePackageFixture(
@@ -5696,6 +5810,80 @@ void TestNativeRuntimeLaunchReportsHostAppProcessCapabilityHonestly() {
              "ART Runtime Probe Capability: host_app_process_detection_only") !=
              std::string::npos,
          "expected app_process capability line in native launch render");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchCanUseHostDalvikvm64WithoutOverride() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-dalvikvm64");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path dalvikvm64 = fixture.root / "dalvikvm64";
+  {
+    std::ofstream output(dalvikvm64);
+    output << "#!/bin/sh\n";
+    output << "case \"$*\" in\n";
+    output << "  *linuxoid.bootstrap.mode=application*) printf '%s\\n' "
+              "'host-application-runtime-ok'; exit 0 ;;\n";
+    output << "  *linuxoid.bootstrap.mode=activity*) printf '%s\\n' "
+              "'host-activity-runtime-ok'; exit 0 ;;\n";
+    output << "  *) printf '%s\\n' 'host-runtime-ok'; exit 0 ;;\n";
+    output << "esac\n";
+  }
+  fs::permissions(dalvikvm64,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable path_override("PATH", fixture.root.string());
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native launch should not shell out through runtime bridge runner");
+      });
+
+  Expect(report.launch_ok,
+         "expected host dalvikvm64 native launch success without override");
+  Expect(report.launch_classification ==
+             "native_bootstrap_execution_succeeded",
+         "expected successful host dalvikvm64 launch classification");
+  Expect(report.art_runtime_probe_source == "host",
+         "expected host runtime probe source on dalvikvm64 launch");
+  Expect(report.runtime_probe_detection_reason == "host_dalvikvm_selected",
+         "expected dalvikvm detection reason on native launch");
+  Expect(report.art_runtime_probe_capability ==
+             "host_dalvikvm_bootstrap_capable",
+         "expected dalvikvm64 capability on native launch");
+  Expect(report.runtime_health_ready,
+         "expected runtime health readiness on successful host dalvikvm64 launch");
+  Expect(!report.runtime_dependency_blocked,
+         "expected no runtime dependency block on successful host dalvikvm64 launch");
+  Expect(report.runtime_failing_subsystem_count == 0,
+         "expected no failing runtime subsystems on successful host dalvikvm64 launch");
+  Expect(report.runtime_recovery_actions_selected == 0,
+         "expected no selected recovery actions on successful host dalvikvm64 launch");
+  Expect(report.runtime_selected_recovery_actions.empty(),
+         "expected no selected recovery action names on successful host dalvikvm64 launch");
+  const auto rendered = wfa::RenderInstalledAppLaunchReport(report);
+  Expect(rendered.find(
+             "ART Runtime Probe Capability: host_dalvikvm_bootstrap_capable") !=
+             std::string::npos,
+         "expected dalvikvm64 capability line in native launch render");
+  Expect(rendered.find("Launch OK: yes") != std::string::npos,
+         "expected successful launch line in native launch render");
+  Expect(report.output.find("\"execution_succeeded\": true") !=
+             std::string::npos,
+         "expected successful bootstrap execution output on native launch");
 
   fs::remove_all(fixture.root);
 }
@@ -7995,6 +8183,7 @@ int main() {
     TestNativeArtRuntimeSmokeHandlesRuntimeAvailabilityHonestly();
     TestNativeArtRuntimeSmokeCommandWritesStableJson();
     TestNativeArtRuntimeSmokeUsesFixtureRuntimeOverride();
+    TestNativeArtRuntimeSmokeTreatsHostDalvikvm64AsBootstrapCapable();
     TestNativeArtRuntimeSmokeRecordsProbeInventoryAndReason();
     TestNativeArtRuntimeSmokeClassifiesHostAppProcessAsDetectionOnly();
     TestNativeArtActivityBootstrapFixtureWritesStableArtifacts();
@@ -8022,6 +8211,7 @@ int main() {
     TestNativeRuntimePreflightBlocksWithoutHostArt();
     TestNativeRuntimePreflightSurfacesProbeInventoryAndReason();
     TestNativeRuntimePreflightReportsHostAppProcessCapabilityHonestly();
+    TestNativeRuntimePreflightUsesHostDalvikvm64WithoutOverride();
     TestNativeRuntimePreflightRendersDetailedRecoveryContract();
     TestNativeRuntimePreflightRendersTraceSourceDetails();
     TestNativeRuntimePreflightSelfHealingContractStaysDeterministicWithoutHostArt();
@@ -8031,6 +8221,7 @@ int main() {
     TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt();
     TestNativeRuntimeLaunchSurfacesProbeInventoryAndReason();
     TestNativeRuntimeLaunchReportsHostAppProcessCapabilityHonestly();
+    TestNativeRuntimeLaunchCanUseHostDalvikvm64WithoutOverride();
     TestNativeRuntimeLaunchRendersDetailedRecoveryContract();
     TestNativeRuntimeLaunchRendersTraceSourceDetails();
     TestNativeRuntimeLaunchSelfHealingContractStaysDeterministicWithoutHostArt();

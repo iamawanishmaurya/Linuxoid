@@ -229,8 +229,8 @@ Today, **self-healing** in Linuxoid means:
   - deterministic candidate inventory and selected-probe rationale for override, host, and missing-runtime paths
 - Linuxoid now also distinguishes **host ART detection** from **host ART bootstrap capability**:
   - override-backed probes are `override_bootstrap_capable`
-  - host `dalvikvm` probes are `host_dalvikvm_bootstrap_capable`
-  - host `app_process` probes are recorded honestly as `host_app_process_detection_only`
+  - host `dalvikvm` and `dalvikvm64` probes are `host_dalvikvm_bootstrap_capable`
+  - host `app_process` and `app_process64` probes are recorded honestly as `host_app_process_detection_only`
 - Linuxoid now also surfaces that replay contract directly through the public native bridge, so `preflight-runtime native`, `verify-package native`, and `launch-package native` name the health trace JSONL, recovery-actions JSONL, merged diagnostic events JSONL, trace index, and replay completeness counts without forcing callers to open the deeper health JSON first.
 - Those native bridge reports now also include per-source replay details, so operators can see which JSONL traces were merged, where each one lives, how many events it contributed, and which deterministic fingerprint Linuxoid computed for it.
 - Linuxoid now also pins that public native-bridge contract with explicit blocked-host-ART regressions, so the operator-facing reports stay stable on:
@@ -450,7 +450,7 @@ This is the researched browser target slice, not a shipped Linuxoid feature yet.
 - A `native-service-manager-fixture <bootstrap-manifest>` path that emits a local Binder-shaped service-manager contract with deterministic service registration, lookup, and transaction artifacts for Linuxoid-owned `package_manager` and `activity_manager` stubs
 - A `native-art-classloader-fixture <bootstrap-manifest>` path that inventories staged APK dex entries, normalizes manifest target classes into deterministic descriptors, writes classpath-plan artifacts, and reports missing host ART honestly without pretending real class execution exists yet
 - A `native-art-class-resolution-fixture <bootstrap-manifest>` path that resolves manifest-target descriptors from real staged DEX contents, writes deterministic resolution-map artifacts, and records honest unresolved targets without pretending ART has executed anything yet
-- A `native-art-runtime-smoke <bootstrap-manifest>` path that reuses the classloader plan plus offline class-resolution result, selects a deterministic manifest-derived class target, writes deterministic invocation-plan plus runtime-log plus trace artifacts, and attempts a real host-side `dalvikvm -cp <apk> <class>` class-resolution probe only when a safe local `dalvikvm` surface is available
+- A `native-art-runtime-smoke <bootstrap-manifest>` path that reuses the classloader plan plus offline class-resolution result, selects a deterministic manifest-derived class target, writes deterministic invocation-plan plus runtime-log plus trace artifacts, and attempts a real host-side `dalvikvm` or `dalvikvm64` class-resolution probe only when a safe local ART surface is available
 - A `native-runtime-health-fixture <bootstrap-manifest> [scenario]` path that records staged-runtime health, selects deterministic recovery actions, and writes replayable JSON plus JSONL artifacts for the Self-Healing Android Device skeleton
 - A `native-runtime-recovery-plan <bootstrap-manifest> [scenario]` path that materializes the bounded recovery actions into a stable recovery-plan JSON plus per-action JSONL artifact stream for harness replay and diagnosis
 - A `native-runtime-health-replay <trace-jsonl-path>` path that replays the health trace into a stable summary without rerunning the full UI path

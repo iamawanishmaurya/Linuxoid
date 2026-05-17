@@ -202,6 +202,14 @@ std::string ResolveExecutableInPath(const std::string& executable_name) {
   return "";
 }
 
+bool IsDalvikvmRuntimeName(const std::string& filename) {
+  return filename == "dalvikvm" || filename == "dalvikvm64";
+}
+
+bool IsAppProcessRuntimeName(const std::string& filename) {
+  return filename == "app_process" || filename == "app_process64";
+}
+
 ArtRuntimeProbeSelection DetectArtRuntimeProbeSelection() {
   ArtRuntimeProbeSelection selection;
 
@@ -234,9 +242,13 @@ ArtRuntimeProbeSelection DetectArtRuntimeProbeSelection() {
   }
 
   const std::vector<std::pair<std::string, std::string>> fixed_candidates = {
+      {"/apex/com.android.art/bin/dalvikvm64", "known_path"},
       {"/apex/com.android.art/bin/dalvikvm", "known_path"},
+      {"/system/bin/dalvikvm64", "known_path"},
       {"/system/bin/dalvikvm", "known_path"},
+      {"/apex/com.android.art/bin/app_process64", "known_path"},
       {"/apex/com.android.art/bin/app_process", "known_path"},
+      {"/system/bin/app_process64", "known_path"},
       {"/system/bin/app_process", "known_path"},
   };
   for (const auto& [path, source] : fixed_candidates) {
@@ -252,7 +264,9 @@ ArtRuntimeProbeSelection DetectArtRuntimeProbeSelection() {
     selection.candidates.push_back(candidate);
   }
 
-  const std::vector<std::string> path_lookup_names = {"dalvikvm",
+  const std::vector<std::string> path_lookup_names = {"dalvikvm64",
+                                                      "dalvikvm",
+                                                      "app_process64",
                                                       "app_process"};
   for (const auto& executable_name : path_lookup_names) {
     const std::string resolved = ResolveExecutableInPath(executable_name);
@@ -266,15 +280,15 @@ ArtRuntimeProbeSelection DetectArtRuntimeProbeSelection() {
     selection.candidates.push_back(candidate);
   }
 
-  auto select_first_matching = [&](const std::string& suffix,
+  auto select_first_matching = [&](const auto& predicate,
                                    const std::string& detection_reason) {
     for (auto& candidate : selection.candidates) {
       if (!candidate.executable) {
         continue;
       }
-      if (candidate.path.size() < suffix.size() ||
-          candidate.path.substr(candidate.path.size() - suffix.size()) !=
-              suffix) {
+      const std::string filename =
+          fs::path(candidate.path).filename().string();
+      if (!predicate(filename)) {
         continue;
       }
       candidate.selected = true;
@@ -287,8 +301,10 @@ ArtRuntimeProbeSelection DetectArtRuntimeProbeSelection() {
     return false;
   };
 
-  if (select_first_matching("/dalvikvm", "host_dalvikvm_selected") ||
-      select_first_matching("/app_process", "host_app_process_selected")) {
+  if (select_first_matching(IsDalvikvmRuntimeName,
+                            "host_dalvikvm_selected") ||
+      select_first_matching(IsAppProcessRuntimeName,
+                            "host_app_process_selected")) {
     return selection;
   }
 
@@ -509,10 +525,10 @@ std::string ClassifyArtRuntimeProbeCapability(const std::string& runtime_probe,
   }
   const fs::path runtime_path(runtime_probe);
   const std::string filename = runtime_path.filename().string();
-  if (filename == "dalvikvm") {
+  if (IsDalvikvmRuntimeName(filename)) {
     return "host_dalvikvm_bootstrap_capable";
   }
-  if (filename == "app_process") {
+  if (IsAppProcessRuntimeName(filename)) {
     return "host_app_process_detection_only";
   }
   return "host_probe_detection_only";

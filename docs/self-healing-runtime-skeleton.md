@@ -82,7 +82,7 @@ What that means **today**:
   - `art/runtime-smoke-invocation.log`
   - `art/runtime-smoke-trace.jsonl`
   - `art/runtime-smoke-result.json`
-  - a deterministic manifest-derived class target for the first real host-side class-resolution attempt when `dalvikvm` is safely available
+  - a deterministic manifest-derived class target for the first real host-side class-resolution attempt when `dalvikvm` or `dalvikvm64` is safely available
 - Linuxoid now also records the host ART gate itself as a diagnosable contract instead of a black box:
   - candidate inventory for override, fixed host paths, and PATH lookups
   - explicit `art_runtime_probe_detection_reason`
@@ -92,6 +92,9 @@ What that means **today**:
   - `override_bootstrap_capable`
   - `host_dalvikvm_bootstrap_capable`
   - `host_app_process_detection_only`
+- Linuxoid now also treats the common 64-bit host binary names as part of that same contract:
+  - `dalvikvm64` is classified the same way as `dalvikvm`
+  - `app_process64` is classified the same way as `app_process`
 - That means a host can now be reported as “ART probe detected” without Linuxoid overstating that the same probe is ready to bootstrap a staged foreground app.
 - Linuxoid now also has a deterministic activity-bootstrap seam on top of that runtime-smoke evidence:
   - `native-art-activity-bootstrap-fixture`
@@ -166,7 +169,7 @@ What it **does not** mean yet:
 - Linuxoid does **not** yet self-heal by automatically making the app run after a failure.
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet own a full embedded ART runtime or a real in-process `PathClassLoader`.
-- Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, exercise the runner-backed execution seam through a Linuxoid-owned override probe in fixtures, separate activity-bootstrap planning from bootstrap execution, and keep deterministic execution-context, runner-state, runner-script, and per-phase log artifacts around that execution seam.
+- Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` or `dalvikvm64` when that runtime exists, exercise the runner-backed execution seam through a Linuxoid-owned override probe in fixtures, separate activity-bootstrap planning from bootstrap execution, and keep deterministic execution-context, runner-state, runner-script, and per-phase log artifacts around that execution seam.
 - Linuxoid does **not** yet prove real host-side ART startup for a staged foreground app by default; even a detected host `app_process` probe is still reported as detection-only, and the strongest successful path today is still an override-backed Linuxoid fixture seam.
 - Linuxoid does **not** yet guarantee that a healthy self-healing report implies a launch-ready public bridge; the bridge can still end in a truthful blocked state with replay-ready artifacts while host ART startup remains unavailable.
 - Linuxoid does **not** yet have full Android Binder semantics.
