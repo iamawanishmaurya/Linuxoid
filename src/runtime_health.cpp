@@ -274,6 +274,8 @@ RuntimeHealthRecord BuildApkStagingRecord(
 
 RuntimeHealthRecord BuildNativeLoadingRecord(
     const RuntimeObservationContext& context, const std::string& scenario) {
+  const bool native_loading_not_required =
+      !context.lifecycle.bootstrap.plan.native_libraries_declared;
   const bool native_loading_ready =
       context.lifecycle.bootstrap.plan.host_abi_supported &&
       !context.lifecycle.bootstrap.plan.staged_native_libraries.empty();
@@ -286,11 +288,25 @@ RuntimeHealthRecord BuildNativeLoadingRecord(
         "Scenario forced a failed native load classification.");
   }
 
+  if (native_loading_not_required) {
+    return MakeHealthRecord(
+        "native_loading", "not_required", true,
+        context.lifecycle.bootstrap.plan.library_root, "",
+        "native_libraries_declared=false; discovered_native_library_count=0");
+  }
+
   return MakeHealthRecord(
       "native_loading", native_loading_ready ? "ready" : "blocked",
       native_loading_ready, context.lifecycle.bootstrap.plan.library_root,
       native_loading_ready ? "" : "no_staged_host_abi_native_libraries",
       "selected_abi=" + context.lifecycle.bootstrap.plan.selected_abi +
+          "; native_libraries_declared=" +
+          std::string(context.lifecycle.bootstrap.plan.native_libraries_declared
+                          ? "true"
+                          : "false") +
+          "; discovered_native_library_count=" +
+          std::to_string(
+              context.lifecycle.bootstrap.plan.discovered_native_library_count) +
           "; staged_native_libraries=" +
           std::to_string(
               context.lifecycle.bootstrap.plan.staged_native_libraries.size()));

@@ -237,11 +237,13 @@ Today, **self-healing** in Linuxoid means:
 - Linuxoid now executes that seam through the generated runner script when a safe host runtime is available, and it preserves raw runner plus per-phase exit codes for replay and diagnosis.
 - Linuxoid now also supports a Linuxoid-owned ART probe override for deterministic fixture runs, so the runtime-smoke and bootstrap-execution seams can be exercised end to end even on hosts that do not ship ART locally.
 - Linuxoid runtime health now recognizes that deeper success path too: when the ART-style class-resolution seam and supervised bootstrap-execution seam both succeed, `dex_classloader_readiness` and `bootstrap_execution_readiness` now converge to `ready` instead of staying stuck in a generic pending state.
+- Linuxoid now also distinguishes **DEX-only** bundles from broken native loading: when an APK declares no native libraries at all, `native_loading` resolves to `not_required` instead of falsely reporting a blocked native-loader failure.
 - Linuxoid can replay and merge those traces later without rerunning the full UI path.
 - Linuxoid can now fingerprint each trace source and record first/last event types so failures can be compared offline across runs.
 - Linuxoid now reuses one opened APK archive plus the already-staged bundle manifest while building those runtime records, so live health and replay commands stay fast enough to rerun on real staged bundles without falling back to repeated full-archive scans and repeated `apktool` decode work.
 - Linuxoid now merges the activity-bootstrap trace into that replay bundle, so launcher targeting and Binder-readiness failures stay diagnosable offline too.
 - Linuxoid refuses false success when a critical dependency is missing. A missing native library payload or missing ART runtime still leaves the runtime in `recovery_needed`, not `ready`.
+- Linuxoid also stays backward-compatible with older staged bootstrap manifests that predate the native-library summary fields, so replay and health commands keep working across already-materialized bundles.
 - Linuxoid now has regression coverage that checks this both structurally and behaviorally:
   - health classification stays stable
   - recovery decision selection stays deterministic

@@ -39,6 +39,8 @@ struct NativeLaunchPlan {
   std::string assessment_copy_path;
   std::string bootstrap_spec_path;
   bool host_abi_supported = false;
+  bool native_libraries_declared = false;
+  int discovered_native_library_count = 0;
   std::vector<std::string> staged_native_libraries;
   std::vector<std::string> unsupported_native_libraries;
   bool plan_written = false;

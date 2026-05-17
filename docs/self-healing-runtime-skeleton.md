@@ -75,6 +75,7 @@ What that means **today**:
 - Linuxoid now executes that seam through the generated runner script when a safe host runtime is available, and it preserves raw runner plus per-phase exit codes even when later success classification still depends on higher-level output checks.
 - Linuxoid now also accepts a Linuxoid-owned ART probe override for deterministic fixture runs, which lets runtime-smoke and bootstrap-execution exercise the real runner-backed execution contract on hosts that do not provide ART locally.
 - Runtime health now treats that deeper success path honestly too: when override-backed or real runtime class resolution succeeds and the supervised bootstrap runner completes, `dex_classloader_readiness` and `bootstrap_execution_readiness` can now resolve to `ready` instead of remaining generically pending.
+- Runtime health now also treats DEX-only bundles more honestly: if a staged APK declares no native libraries, `native_loading` is classified as `not_required` instead of being treated like a failed native-loader dependency.
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -85,6 +86,7 @@ What that means **today**:
 - The traces can now be replayed and merged without rerunning the full UI path.
 - Linuxoid now also records per-source fingerprints plus first and last event types so replay bundles can be compared offline without reopening the UI path.
 - Linuxoid now also reuses one opened APK archive plus the already-staged bundle manifest during native runtime diagnosis, which keeps live health and replay commands fast enough to rerun on real staged bundles instead of timing out behind repeated full-archive scans and repeated decode fallback.
+- Linuxoid keeps those runtime-health and replay commands backward-compatible with older staged bootstrap manifests that do not yet include the newer native-library summary fields.
 
 In plain terms, Linuxoid can now **detect, classify, explain, and replay** failure states on the native path. It can tell us why bootstrap is blocked, choose the next bounded recovery action, and preserve that decision in a machine-readable way for later diagnosis.
 

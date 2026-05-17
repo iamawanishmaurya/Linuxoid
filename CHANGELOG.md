@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.57 - 2026-05-17
+
+- Teach the self-healing runtime to classify dex-only staged bundles more honestly: `native_loading` now resolves to `not_required` when an APK declares no native libraries at all, while unsupported-ABI or missing-required-lib cases still stay blocked and select deterministic native-loader recovery.
+- Add native-library summary fields to the native spike plan and bootstrap manifest, then keep runtime-health parsing backward-compatible with older already-staged manifests that do not carry those fields yet.
+- Add regression coverage that strips those new fields from a generated bootstrap manifest and proves the real `native-runtime-health-fixture` command still succeeds with stable `native_loading: not_required` output for dex-only bundles.
+- Refresh the README, self-healing runtime note, changelog, status text, and step log so Linuxoid now distinguishes “no native libs required” from “native loading failed” without overstating native execution progress.
+
 ## v0.1.56 - 2026-05-17
 
 - Add a Linuxoid-owned `LINUXOID_ART_RUNTIME_PROBE_OVERRIDE` seam so the ART classloader detector, runtime-smoke path, and supervised bootstrap-execution runner can all exercise a deterministic host-style runtime probe during fixtures even on machines that do not ship ART locally.

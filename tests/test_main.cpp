@@ -233,7 +233,8 @@ struct RuntimeHealthBootstrapFixture {
 
 RuntimeHealthBootstrapFixture CreateRuntimeHealthBootstrapFixture(
     const std::string& fixture_name, bool include_classes_dex,
-    bool include_native_library) {
+    bool include_native_library,
+    bool include_unsupported_native_library = false) {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / fixture_name;
   fs::remove_all(root);
@@ -259,6 +260,10 @@ RuntimeHealthBootstrapFixture CreateRuntimeHealthBootstrapFixture(
   if (include_native_library) {
     fs::create_directories(fs::path(layout.host_package_root) / "lib" /
                            "x86_64");
+  }
+  if (include_unsupported_native_library) {
+    fs::create_directories(fs::path(layout.host_package_root) / "lib" /
+                           "arm64-v8a");
   }
 
   std::vector<std::pair<std::string, std::string>> archive_entries = {
@@ -311,6 +316,11 @@ RuntimeHealthBootstrapFixture CreateRuntimeHealthBootstrapFixture(
     std::ofstream library(fs::path(layout.host_package_root) / "lib" / "x86_64" /
                           "libcalculator.so");
     library << "runtime health native lib\n";
+  }
+  if (include_unsupported_native_library) {
+    std::ofstream library(fs::path(layout.host_package_root) / "lib" /
+                              "arm64-v8a" / "libcalculator.so");
+    library << "runtime health unsupported native lib\n";
   }
 
   const wfa::LoadedApkReport report{
@@ -1211,6 +1221,10 @@ void TestNativeLaunchPlanStagesHostAbiLibrariesAndAssets() {
   Expect(plan.selected_abi == "x86_64", "expected x86_64 ABI selection");
   Expect(plan.host_abi_supported,
          "expected plan to mark host ABI support as available");
+  Expect(plan.native_libraries_declared,
+         "expected native library declaration to be tracked");
+  Expect(plan.discovered_native_library_count == 2,
+         "expected declared native library count across supported and unsupported ABIs");
   Expect(plan.staged_native_libraries.size() == 1,
          "expected one staged native library");
   Expect(fs::exists(fs::path(plan.library_root) / "libcalculator.so"),
@@ -1229,6 +1243,12 @@ void TestNativeLaunchPlanStagesHostAbiLibrariesAndAssets() {
                    std::istreambuf_iterator<char>());
   Expect(spec.find("\"selected_abi\": \"x86_64\"") != std::string::npos,
          "expected selected abi in native plan spec");
+  Expect(spec.find("\"native_libraries_declared\": true") !=
+             std::string::npos,
+         "expected native library declaration flag in spec");
+  Expect(spec.find("\"discovered_native_library_count\": 2") !=
+             std::string::npos,
+         "expected discovered native library count in spec");
   Expect(spec.find("\"staged_native_libraries\": [") != std::string::npos,
          "expected staged native libraries array in spec");
   Expect(spec.find("\"unsupported_native_libraries\": [") !=
@@ -1310,6 +1330,10 @@ void TestNativeLaunchPlanReportsUnsupportedAbiClearly() {
          "expected no selected ABI for unsupported-native-only bundle");
   Expect(!plan.host_abi_supported,
          "expected unsupported ABI to remain unavailable");
+  Expect(plan.native_libraries_declared,
+         "expected unsupported-native-only bundle to declare native libraries");
+  Expect(plan.discovered_native_library_count == 1,
+         "expected one discovered unsupported native library");
   Expect(plan.staged_native_libraries.empty(),
          "expected no staged native libraries for unsupported ABI");
   Expect(plan.unsupported_native_libraries.size() == 1,
@@ -2975,10 +2999,35 @@ void TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery() {
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeHealthFixtureTreatsDexOnlyNativeLoadingAsNotRequired() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-dex-only-native", true, false);
+
+  const auto report = wfa::RunRuntimeHealthFixture(
+      fixture.bootstrap.bootstrap_manifest_path, "baseline");
+
+  const auto native_record = std::find_if(
+      report.records.begin(), report.records.end(),
+      [](const wfa::RuntimeHealthRecord& record) {
+        return record.subsystem_name == "native_loading";
+      });
+  Expect(native_record != report.records.end(),
+         "expected native loading health record");
+  Expect(native_record->state == "not_required",
+         "expected dex-only bundle native loading to be not required");
+  Expect(native_record->ready,
+         "expected dex-only bundle native loading readiness");
+  Expect(native_record->selected_recovery_action.empty(),
+         "expected no native loading recovery action for dex-only bundle");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
-      "linuxoid-runtime-health-missing-native", true, false);
+      "linuxoid-runtime-health-missing-native", true, false, true);
 
   const auto report = wfa::RunRuntimeHealthFixture(
       fixture.bootstrap.bootstrap_manifest_path, "baseline");
@@ -3139,26 +3188,24 @@ void TestRuntimeHealthSummaryFieldsStayDeterministic() {
       fixture.bootstrap.bootstrap_manifest_path, "baseline");
 
   Expect(report.dependency_blocked,
-         "expected missing native dependency to mark the runtime as dependency blocked");
-  Expect(report.failing_subsystem_count == 3,
-         "expected native, dex, and bootstrap execution subsystems to be counted as failing");
-  Expect(report.recovery_actions_selected == 3,
-         "expected three bounded recovery actions in summary fields");
-  Expect(report.failing_subsystems.size() == 3,
+         "expected dex and bootstrap execution gaps to keep the runtime dependency blocked");
+  Expect(report.failing_subsystem_count == 2,
+         "expected dex and bootstrap execution subsystems to be counted as failing");
+  Expect(report.recovery_actions_selected == 2,
+         "expected two bounded recovery actions in summary fields");
+  Expect(report.failing_subsystems.size() == 2,
          "expected stable failing subsystem list size");
   Expect(report.failing_subsystems[0] == "bootstrap_execution_readiness",
          "expected deterministic sorted failing subsystem order");
   Expect(report.failing_subsystems[1] == "dex_classloader_readiness",
          "expected deterministic sorted failing subsystem order");
-  Expect(report.failing_subsystems[2] == "native_loading",
-         "expected deterministic sorted failing subsystem order");
 
   const auto rendered = wfa::RenderRuntimeHealthReportJson(report);
   Expect(rendered.find("\"dependency_blocked\": true") != std::string::npos,
          "expected dependency_blocked in runtime health json");
-  Expect(rendered.find("\"failing_subsystem_count\": 3") != std::string::npos,
+  Expect(rendered.find("\"failing_subsystem_count\": 2") != std::string::npos,
          "expected failing subsystem count in runtime health json");
-  Expect(rendered.find("\"recovery_actions_selected\": 3") != std::string::npos,
+  Expect(rendered.find("\"recovery_actions_selected\": 2") != std::string::npos,
          "expected recovery action count in runtime health json");
 
   fs::remove_all(fixture.root);
@@ -3208,7 +3255,7 @@ void TestRuntimeHealthReplaySummarizesTrace() {
 void TestRuntimeDiagnosticReplayReportsMissingNativeDependencyHonestly() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
-      "linuxoid-runtime-diagnostic-missing-native", true, false);
+      "linuxoid-runtime-diagnostic-missing-native", true, false, true);
 
   static_cast<void>(wfa::RunRuntimeHealthFixture(
       fixture.bootstrap.bootstrap_manifest_path, "baseline"));
@@ -3435,10 +3482,49 @@ void TestRuntimeHealthCommandOutputIsStableAcrossRepeatedRuns() {
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeHealthCommandSupportsLegacyBootstrapManifestWithoutNativeLibrarySummaryFields() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-command-legacy-bootstrap", true, false);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  std::string legacy_manifest =
+      ReadTextFile(fixture.bootstrap.bootstrap_manifest_path);
+  auto strip_line = [&legacy_manifest](const std::string& line) {
+    const std::size_t position = legacy_manifest.find(line);
+    if (position != std::string::npos) {
+      legacy_manifest.erase(position, line.size());
+    }
+  };
+  strip_line("  \"native_libraries_declared\": false,\n");
+  strip_line("  \"discovered_native_library_count\": 0,\n");
+  {
+    std::ofstream output(fixture.bootstrap.bootstrap_manifest_path);
+    output << legacy_manifest;
+  }
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &exit_code);
+  Expect(exit_code == 0,
+         "expected runtime-health command success for legacy bootstrap manifest");
+  Expect(output.find("\"subsystem_name\": \"native_loading\"") !=
+             std::string::npos,
+         "expected native loading record in legacy bootstrap command json");
+  Expect(output.find("\"state\": \"not_required\"") != std::string::npos,
+         "expected dex-only legacy bootstrap native loading to stay not required");
+  Expect(output.find("\"overall_ready\": false") != std::string::npos,
+         "expected legacy bootstrap command to stay honest about remaining gaps");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeHealthCommandReportsMissingNativeDependencyHonestly() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
-      "linuxoid-runtime-health-command-missing-native", true, false);
+      "linuxoid-runtime-health-command-missing-native", true, false, true);
   const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
 
   int exit_code = 0;
@@ -5721,6 +5807,7 @@ int main() {
     TestRuntimeHealthFixtureSelectsMissingArtifactRecovery();
     TestRuntimeHealthFixtureSelectsUnavailableDisplayRecovery();
     TestRuntimeHealthFixtureSelectsFailedServiceLookupRecovery();
+    TestRuntimeHealthFixtureTreatsDexOnlyNativeLoadingAsNotRequired();
     TestRuntimeHealthFixtureRejectsMissingNativeDependencyWithoutFalseSuccess();
     TestRuntimeHealthFixtureTracksActivityBootstrapReadiness();
     TestRuntimeHealthFixtureCarriesBootstrapExecutionEvidence();
@@ -5735,6 +5822,7 @@ int main() {
     TestRuntimeDiagnosticFixtureCommandWritesStableJson();
     TestRuntimeHealthCommandWritesStableJson();
     TestRuntimeHealthCommandOutputIsStableAcrossRepeatedRuns();
+    TestRuntimeHealthCommandSupportsLegacyBootstrapManifestWithoutNativeLibrarySummaryFields();
     TestRuntimeHealthCommandReportsMissingNativeDependencyHonestly();
     TestRuntimeRecoveryPlanWritesStableArtifacts();
     TestRuntimeRecoveryPlanScenariosSelectDeterministicActions();

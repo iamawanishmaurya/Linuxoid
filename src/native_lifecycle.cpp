@@ -126,12 +126,32 @@ bool ExtractJsonBool(const std::string& json, const std::string& key) {
   return match[1].str() == "true";
 }
 
+bool ExtractJsonBoolOrDefault(const std::string& json, const std::string& key,
+                              bool fallback) {
+  const std::regex pattern("\"" + key + R"(\"\s*:\s*(true|false))");
+  std::smatch match;
+  if (!std::regex_search(json, match, pattern) || match.size() != 2) {
+    return fallback;
+  }
+  return match[1].str() == "true";
+}
+
 int ExtractJsonInt(const std::string& json, const std::string& key) {
   const std::regex pattern("\"" + key + R"(\"\s*:\s*(-?\d+))");
   std::smatch match;
   if (!std::regex_search(json, match, pattern) || match.size() != 2) {
     throw std::runtime_error("unable to extract integer field from json: " +
                              key);
+  }
+  return std::stoi(match[1].str());
+}
+
+int ExtractJsonIntOrDefault(const std::string& json, const std::string& key,
+                            int fallback) {
+  const std::regex pattern("\"" + key + R"(\"\s*:\s*(-?\d+))");
+  std::smatch match;
+  if (!std::regex_search(json, match, pattern) || match.size() != 2) {
+    return fallback;
   }
   return std::stoi(match[1].str());
 }
@@ -176,6 +196,10 @@ NativeActivityBootstrap ReadNativeActivityBootstrapManifest(
   bootstrap.plan.selected_abi = ExtractJsonString(json, "selected_abi");
   bootstrap.plan.host_abi_supported =
       ExtractJsonBool(json, "host_abi_supported");
+  bootstrap.plan.native_libraries_declared =
+      ExtractJsonBoolOrDefault(json, "native_libraries_declared", false);
+  bootstrap.plan.discovered_native_library_count =
+      ExtractJsonIntOrDefault(json, "discovered_native_library_count", 0);
   bootstrap.plan.staged_native_libraries =
       ExtractJsonStringArray(json, "staged_native_libraries");
   bootstrap.plan.unsupported_native_libraries =
@@ -253,6 +277,14 @@ void WriteLifecycleArtifacts(const NativeLifecycleShim& lifecycle) {
                    << "  \"host_abi_supported\": "
                    << (lifecycle.bootstrap.plan.host_abi_supported ? "true"
                                                                    : "false")
+                   << ",\n"
+                   << "  \"native_libraries_declared\": "
+                   << (lifecycle.bootstrap.plan.native_libraries_declared
+                           ? "true"
+                           : "false")
+                   << ",\n"
+                   << "  \"discovered_native_library_count\": "
+                   << lifecycle.bootstrap.plan.discovered_native_library_count
                    << ",\n"
                    << "  \"staged_native_libraries\": "
                    << RenderJsonArray(

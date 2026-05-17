@@ -1532,3 +1532,8 @@
   Action: Added a red test for a fully satisfied override-backed runtime path, then taught `dex_classloader_readiness` to resolve to `ready` when runtime class resolution actually succeeds instead of staying generically pending.
   Result: Runtime health can now converge to `overall_ready: true` in deterministic override-backed fixtures when the deeper ART-style class-resolution and supervised bootstrap seams both succeed.
   Timestamp: 2026-05-17T23:25:00+05:30
+
+- Step: Dex-only native loading truthfulness GREEN
+  Action: Added native-library summary fields to the bootstrap plan, taught runtime health to classify dex-only bundles as `native_loading: not_required`, and added a regression that strips those fields from a generated manifest to prove older staged bundles still replay cleanly.
+  Result: Linuxoid now distinguishes “no native libs declared” from “native loading failed,” while keeping runtime-health and replay commands backward-compatible with already-materialized bootstrap manifests.
+  Timestamp: 2026-05-17T23:55:00+05:30

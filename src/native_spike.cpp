@@ -180,6 +180,8 @@ void StageNativeLibraries(const fs::path& install_root, NativeLaunchPlan& plan) 
   const std::string host_abi = ResolveHostAbi();
   plan.selected_abi.clear();
   plan.host_abi_supported = false;
+  plan.native_libraries_declared = false;
+  plan.discovered_native_library_count = 0;
   plan.staged_native_libraries.clear();
   plan.unsupported_native_libraries.clear();
   std::error_code ignored;
@@ -221,6 +223,11 @@ void StageNativeLibraries(const fs::path& install_root, NativeLaunchPlan& plan) 
     }
     plan.unsupported_native_libraries.push_back(entry.path().string());
   }
+
+  plan.discovered_native_library_count = static_cast<int>(
+      plan.staged_native_libraries.size() +
+      plan.unsupported_native_libraries.size());
+  plan.native_libraries_declared = plan.discovered_native_library_count != 0;
 }
 
 void StageResourcePayload(const fs::path& install_root, NativeLaunchPlan& plan) {
@@ -415,6 +422,10 @@ NativeLaunchPlan BuildNativeLaunchPlan(const LoadedApkReport& report,
        << "\",\n"
        << "  \"host_abi_supported\": "
        << (plan.host_abi_supported ? "true" : "false") << ",\n"
+       << "  \"native_libraries_declared\": "
+       << (plan.native_libraries_declared ? "true" : "false") << ",\n"
+       << "  \"discovered_native_library_count\": "
+       << plan.discovered_native_library_count << ",\n"
        << "  \"staged_native_libraries\": "
        << RenderJsonArray(plan.staged_native_libraries) << ",\n"
        << "  \"unsupported_native_libraries\": "
@@ -497,6 +508,10 @@ NativeActivityBootstrap BuildNativeActivityBootstrap(
            << "\",\n"
            << "  \"host_abi_supported\": "
            << (plan.host_abi_supported ? "true" : "false") << ",\n"
+           << "  \"native_libraries_declared\": "
+           << (plan.native_libraries_declared ? "true" : "false") << ",\n"
+           << "  \"discovered_native_library_count\": "
+           << plan.discovered_native_library_count << ",\n"
            << "  \"staged_native_libraries\": "
            << RenderJsonArray(plan.staged_native_libraries) << ",\n"
            << "  \"unsupported_native_libraries\": "
@@ -585,6 +600,10 @@ std::string RenderNativeLaunchPlanReport(const NativeLaunchPlan& plan) {
          << '\n';
   output << "Host ABI Supported: "
          << (plan.host_abi_supported ? "yes" : "no") << '\n';
+  output << "Native Libraries Declared: "
+         << (plan.native_libraries_declared ? "yes" : "no") << '\n';
+  output << "Discovered Native Libraries: "
+         << plan.discovered_native_library_count << '\n';
   output << "Staged Native Libraries: " << plan.staged_native_libraries.size()
          << '\n';
   output << "Unsupported Native Libraries: "
@@ -629,6 +648,10 @@ std::string RenderNativeActivityBootstrapReport(
          << (bootstrap.plan.selected_abi.empty() ? "unsupported"
                                                  : bootstrap.plan.selected_abi)
          << '\n';
+  output << "Native Libraries Declared: "
+         << (bootstrap.plan.native_libraries_declared ? "yes" : "no") << '\n';
+  output << "Discovered Native Libraries: "
+         << bootstrap.plan.discovered_native_library_count << '\n';
   output << "Asset Root: " << bootstrap.plan.asset_root << '\n';
   output << "Staged Native Libraries: "
          << bootstrap.plan.staged_native_libraries.size() << '\n';
