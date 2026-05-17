@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.65 - 2026-05-17
+
+- Teach the native launch bridge to distinguish Linuxoid fixture override success from genuine host ART launch success: override-backed bootstrap execution still produces stable artifacts and can still be used in tests, but `launch-package native` now rejects that path by default unless `LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE=1` is set explicitly.
+- Add runtime-probe provenance fields to the ART runtime-smoke, activity-bootstrap, and bootstrap-execution reports so harnesses can tell whether a successful probe came from a host runtime or the Linuxoid-owned override seam.
+- Add regression coverage for both sides of that boundary: default rejection of override-backed native launch success, explicit opt-in success when the override is allowed, and continued preflight-backed native verification through the shared installed-package contract.
+
 ## v0.1.64 - 2026-05-17
 
 - Upgrade the backend-neutral installed-package verification seam so `verify-package` and `verify-package-matrix` now run runtime preflight first, report runtime-target selection plus package visibility plus component readiness explicitly, and avoid treating the local `native` backend as a launch-only special case.

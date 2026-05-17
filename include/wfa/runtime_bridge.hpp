@@ -80,6 +80,8 @@ struct InstalledAppLaunchReport {
   std::string package_name;
   std::string component;
   bool launch_ok = false;
+  std::string launch_classification;
+  std::string art_runtime_probe_source;
   std::string output;
 };
 

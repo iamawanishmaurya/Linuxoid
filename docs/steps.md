@@ -1572,3 +1572,8 @@
   Action: Added red-first regression coverage for attached-ADB, Waydroid, and local `native` installed-package verification, then taught `verify-package` and `verify-package-matrix` to run runtime preflight first, expose runtime-target selection plus package visibility plus component readiness in the public report, and keep native verification on the same contract through the staged-package bridge.
   Result: Linuxoid now verifies staged native packages through the same preflight-backed installed-package surface as the other backends, including override-backed native success and honest non-candidate native failure without collapsing back to a launch-only shortcut.
   Timestamp: 2026-05-18T00:08:00+05:30
+
+- Step: Native launch override honesty boundary GREEN
+  Action: Added a red test for rejecting override-backed ART/bootstrap success on the default native launch path, then taught `launch-package native` to record runtime-probe provenance and only classify override-backed execution as a successful launch when `LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE=1` is set explicitly.
+  Result: Linuxoid now keeps the override seam useful for fixtures and verification while stopping the production-facing native launch command from overstating what has actually been proven on a host without real ART.
+  Timestamp: 2026-05-18T00:16:00+05:30

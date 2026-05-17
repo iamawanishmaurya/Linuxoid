@@ -164,6 +164,8 @@ std::string BuildExecutionContextJson(
          << EscapeJson(report.application_bootstrap_command) << "\",\n"
          << "  \"activity_bootstrap_command\": \""
          << EscapeJson(report.activity_bootstrap_command) << "\",\n"
+         << "  \"art_runtime_probe_source\": \""
+         << EscapeJson(report.art_runtime_probe_source) << "\",\n"
          << "  \"runner_state_json_path\": \""
          << EscapeJson(report.runner_state_json_path) << "\",\n"
          << "  \"application_execution_log_path\": \""
@@ -330,6 +332,8 @@ std::string BuildExecutionTraceJsonl(
          << EscapeJson(report.selected_application_class_name) << "\", "
          << "\"selected_activity_class_name\": \""
          << EscapeJson(report.selected_activity_class_name) << "\", "
+         << "\"art_runtime_probe_source\": \""
+         << EscapeJson(report.art_runtime_probe_source) << "\", "
          << "\"execution_attempt_planned\": "
          << (report.execution_attempt_planned ? "true" : "false") << "}\n";
 
@@ -413,6 +417,8 @@ std::string BuildExecutionResultJson(
          << EscapeJson(report.application_bootstrap_command) << "\",\n"
          << "  \"activity_bootstrap_command\": \""
          << EscapeJson(report.activity_bootstrap_command) << "\",\n"
+         << "  \"art_runtime_probe_source\": \""
+         << EscapeJson(report.art_runtime_probe_source) << "\",\n"
          << "  \"art_runtime_detected\": "
          << (report.art_runtime_detected ? "true" : "false") << ",\n"
          << "  \"safe_runtime_probe_available\": "
@@ -504,6 +510,7 @@ BuildNativeArtBootstrapExecutionFixture(
   report.application_bootstrap_command =
       activity.application_bootstrap_command;
   report.activity_bootstrap_command = activity.activity_bootstrap_command;
+  report.art_runtime_probe_source = activity.art_runtime_probe_source;
   report.art_runtime_detected = activity.art_runtime_detected;
   report.safe_runtime_probe_available = activity.safe_runtime_probe_available;
   report.runtime_class_resolution_succeeded =

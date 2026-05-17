@@ -31,6 +31,7 @@ struct NativeArtActivityBootstrapFixtureReport {
   bool offline_resolution_ready = false;
   bool art_runtime_detected = false;
   bool safe_runtime_probe_available = false;
+  std::string art_runtime_probe_source;
   bool runtime_class_resolution_succeeded = false;
   bool application_probe_attempted = false;
   bool application_probe_succeeded = false;

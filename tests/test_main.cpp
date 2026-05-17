@@ -4591,6 +4591,8 @@ void TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution() {
                                                  native_root.string());
   ScopedEnvironmentVariable runtime_override(
       "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+  ScopedEnvironmentVariable allow_override_launch(
+      "LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE", "1");
 
   const auto report = wfa::LaunchInstalledAppWithRunner(
       {.backend = wfa::RuntimeBackendKind::kNative,
@@ -4601,11 +4603,70 @@ void TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution() {
 
   Expect(report.launch_ok,
          "expected override-backed native launch success classification");
+  Expect(report.launch_classification ==
+             "native_bootstrap_execution_succeeded",
+         "expected successful native bootstrap launch classification");
+  Expect(report.art_runtime_probe_source == "override",
+         "expected override runtime probe source");
   Expect(report.component == fixture.launcher_component,
          "expected native launch component");
   Expect(report.output.find("\"execution_succeeded\": true") !=
              std::string::npos,
          "expected successful bootstrap execution output");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-reject-override");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path runtime_probe = fixture.root / "linuxoid-art-runtime-probe";
+  {
+    std::ofstream output(runtime_probe);
+    output << "#!/bin/sh\n";
+    output << "case \"$*\" in\n";
+    output << "  *linuxoid.bootstrap.mode=application*) printf '%s\\n' "
+              "'application-runtime-ok'; exit 0 ;;\n";
+    output << "  *linuxoid.bootstrap.mode=activity*) printf '%s\\n' "
+              "'activity-runtime-ok'; exit 0 ;;\n";
+    output << "  *) printf '%s\\n' 'runtime-fixture-ok'; exit 0 ;;\n";
+    output << "esac\n";
+  }
+  fs::permissions(runtime_probe,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable runtime_override(
+      "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native launch should not shell out through runtime bridge runner");
+      });
+
+  Expect(!report.launch_ok,
+         "expected native launch to reject fixture override by default");
+  Expect(report.launch_classification == "fixture_override_rejected",
+         "expected fixture override rejection classification");
+  Expect(report.art_runtime_probe_source == "override",
+         "expected override runtime probe source on rejected launch");
+  Expect(report.output.find("\"execution_succeeded\": true") !=
+             std::string::npos,
+         "expected underlying bootstrap execution success in rejection output");
+  Expect(report.output.find("fixture-only") != std::string::npos,
+         "expected fixture-only explanation in rejection output");
 
   fs::remove_all(fixture.root);
 }
@@ -5878,6 +5939,8 @@ void TestNativeInstalledPackageVerificationUsesPreflightAndOverrideBackedLaunch(
                                                  native_root.string());
   ScopedEnvironmentVariable runtime_override(
       "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+  ScopedEnvironmentVariable allow_override_launch(
+      "LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE", "1");
 
   const auto report = wfa::VerifyInstalledPackageWithRunners(
       {.backend = wfa::RuntimeBackendKind::kNative,
@@ -6562,6 +6625,7 @@ int main() {
     TestNativeRuntimeMetadataReadsStagedPackage();
     TestNativeRuntimePreflightUsesStagedMetadata();
     TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
+    TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault();
     TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();
     TestDesktopLaunchArtifactsForImeApp();
     TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();

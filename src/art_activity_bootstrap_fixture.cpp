@@ -293,6 +293,9 @@ std::string BuildActivityBootstrapResultJson(
          << "  \"safe_runtime_probe_available\": "
          << (report.safe_runtime_probe_available ? "true" : "false")
          << ",\n"
+         << "  \"art_runtime_probe_source\": \""
+         << EscapeJson(report.art_runtime_probe_source)
+         << "\",\n"
          << "  \"runtime_class_resolution_succeeded\": "
          << (report.runtime_class_resolution_succeeded ? "true" : "false")
          << ",\n"
@@ -370,6 +373,7 @@ NativeArtActivityBootstrapFixtureReport BuildNativeArtActivityBootstrapFixture(
   report.art_runtime_detected = runtime_smoke.art_runtime_detected;
   report.safe_runtime_probe_available =
       runtime_smoke.safe_runtime_probe_available;
+  report.art_runtime_probe_source = runtime_smoke.art_runtime_probe_source;
   report.runtime_class_resolution_succeeded =
       runtime_smoke.runtime_class_resolution_succeeded;
   report.bootstrap_dependencies = {

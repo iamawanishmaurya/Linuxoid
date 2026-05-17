@@ -78,6 +78,23 @@ std::string WrapWithTimeout(const std::string& command, int seconds) {
   return "timeout " + std::to_string(seconds) + "s " + command;
 }
 
+bool EnvFlagEnabled(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0') {
+    return false;
+  }
+  std::string normalized(value);
+  const std::size_t first = normalized.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return false;
+  }
+  const std::size_t last = normalized.find_last_not_of(" \t\r\n");
+  normalized = normalized.substr(first, last - first + 1);
+  return normalized == "1" || normalized == "true" ||
+         normalized == "TRUE" || normalized == "yes" ||
+         normalized == "YES";
+}
+
 std::string ReadTextFile(const std::filesystem::path& path) {
   std::ifstream input(path);
   if (!input) {
@@ -731,6 +748,14 @@ std::string RenderInstalledAppLaunchReport(
   output << "Package: " << report.package_name << '\n';
   output << "Runtime Target: " << report.serial << '\n';
   output << "Component: " << report.component << '\n';
+  if (!report.launch_classification.empty()) {
+    output << "Launch Classification: " << report.launch_classification
+           << '\n';
+  }
+  if (!report.art_runtime_probe_source.empty()) {
+    output << "ART Runtime Probe Source: " << report.art_runtime_probe_source
+           << '\n';
+  }
   output << "Launch OK: " << (report.launch_ok ? "yes" : "no") << '\n';
   output << "Launch Output:\n" << report.output;
   return output.str();
@@ -1205,6 +1230,9 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
     case RuntimeBackendKind::kWaydroid: {
       const auto result = runner("waydroid app launch " + spec.package_name);
       report.launch_ok = result.exit_code == 0;
+      report.launch_classification = report.launch_ok
+                                         ? "direct_backend_launch"
+                                         : "direct_backend_launch_failed";
       report.output = result.output;
       return report;
     }
@@ -1235,6 +1263,9 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
               runner);
       report.component = activity_report.component;
       report.launch_ok = activity_report.launch_ok;
+      report.launch_classification = report.launch_ok
+                                         ? "direct_backend_launch"
+                                         : "direct_backend_launch_failed";
       report.output = activity_report.output;
       return report;
     }
@@ -1270,10 +1301,31 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
             plan, ResolveCompatctlPathForNativeRuntime());
         const auto execution = RunNativeArtBootstrapExecutionFixture(
             bootstrap.bootstrap_manifest_path);
-        report.launch_ok = execution.execution_succeeded;
-        report.output = RenderNativeArtBootstrapExecutionFixtureJson(execution);
+        report.art_runtime_probe_source = execution.art_runtime_probe_source;
+        const bool override_allowed =
+            EnvFlagEnabled("LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE");
+        const bool override_only_success =
+            execution.execution_succeeded &&
+            execution.art_runtime_probe_source == "override" &&
+            !override_allowed;
+        report.launch_ok = execution.execution_succeeded && !override_only_success;
+        if (override_only_success) {
+          report.launch_classification = "fixture_override_rejected";
+          report.output =
+              RenderNativeArtBootstrapExecutionFixtureJson(execution) +
+              "\nlaunch classification: override-backed bootstrap success is "
+              "fixture-only; set LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE=1 "
+              "to treat it as a successful native launch\n";
+        } else {
+          report.launch_classification = report.launch_ok
+                                             ? "native_bootstrap_execution_succeeded"
+                                             : "native_bootstrap_execution_failed";
+          report.output =
+              RenderNativeArtBootstrapExecutionFixtureJson(execution);
+        }
       } catch (const std::exception& error) {
         report.launch_ok = false;
+        report.launch_classification = "native_bootstrap_execution_error";
         report.output = std::string(error.what()) + "\n";
       }
       return report;

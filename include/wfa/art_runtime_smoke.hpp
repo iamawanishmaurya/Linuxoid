@@ -39,6 +39,7 @@ struct NativeArtRuntimeSmokeReport {
   std::size_t missing_target_count = 0;
   int runtime_exit_code = -1;
   std::string art_runtime_probe;
+  std::string art_runtime_probe_source;
   std::string runtime_probe_command;
   std::string resolved_target_class_name;
   std::string resolved_target_class_descriptor;
