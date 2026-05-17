@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.62 - 2026-05-17
+
+- Add a single public-command contract regression for the missing-native-dependency path, proving `native-runtime-health-fixture` keeps health classification, recovery decision selection, JSON stability, and no-false-success behavior aligned in one deterministic CLI output surface.
+
 ## v0.1.61 - 2026-05-17
 
 - Tighten the replayable-diagnostics contract by adding a CLI-level regression that proves `native-runtime-diagnostic-fixture` materializes the full seven-source JSONL trace bundle and that `native-runtime-health-replay` can diagnose the resulting runtime state later from those artifacts alone, without rerunning the full UI path.

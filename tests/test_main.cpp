@@ -3755,6 +3755,50 @@ void TestRuntimeHealthCommandReportsMissingNativeDependencyHonestly() {
   fs::remove_all(fixture.root);
 }
 
+void TestRuntimeHealthCommandMissingNativeContractStaysDeterministic() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-runtime-health-command-missing-native-contract", true, false,
+      true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int first_exit_code = 0;
+  const std::string first_output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &first_exit_code);
+  int second_exit_code = 0;
+  const std::string second_output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &second_exit_code);
+
+  Expect(first_exit_code == 0 && second_exit_code == 0,
+         "expected repeated missing-native runtime-health command success");
+  Expect(first_output == second_output,
+         "expected stable repeated missing-native runtime-health JSON output");
+  Expect(first_output.find("\"overall_ready\": false") != std::string::npos,
+         "expected no false success in missing-native runtime-health json");
+  Expect(first_output.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected recovery-needed classification in missing-native json");
+  Expect(first_output.find("\"dependency_blocked\": true") !=
+             std::string::npos,
+         "expected dependency-blocked classification in missing-native json");
+  Expect(first_output.find("\"subsystem_name\": \"native_loading\"") !=
+             std::string::npos,
+         "expected native-loading record in missing-native json");
+  Expect(first_output.find("\"state\": \"blocked\"") != std::string::npos,
+         "expected blocked native-loading state in missing-native json");
+  Expect(first_output.find(
+             "\"selected_recovery_action\": "
+             "\"retry_native_load_after_bundle_refresh\"") !=
+             std::string::npos,
+         "expected deterministic native-load recovery action in missing-native json");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestRuntimeRecoveryPlanWritesStableArtifacts() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -6273,6 +6317,7 @@ int main() {
     TestRuntimeHealthCommandOutputIsStableAcrossRepeatedRuns();
     TestRuntimeHealthCommandSupportsLegacyBootstrapManifestWithoutNativeLibrarySummaryFields();
     TestRuntimeHealthCommandReportsMissingNativeDependencyHonestly();
+    TestRuntimeHealthCommandMissingNativeContractStaysDeterministic();
     TestRuntimeRecoveryPlanWritesStableArtifacts();
     TestRuntimeRecoveryPlanScenariosSelectDeterministicActions();
     TestRuntimeRecoveryPlanCommandWritesStableJson();

@@ -1557,3 +1557,8 @@
   Action: Added a CLI-level regression proving `native-runtime-diagnostic-fixture` materializes the full seven-source JSONL trace bundle and that `native-runtime-health-replay` can consume the generated health trace later without rerunning the fixture or UI path.
   Result: Linuxoid now locks the replayable-diagnostics promise at the artifact level, not just the in-process API level.
   Timestamp: 2026-05-18T00:00:40+05:30
+
+- Step: Missing-native health command contract GREEN
+  Action: Added a public-command regression that reruns `native-runtime-health-fixture` twice for the missing-native-dependency path and locks health classification, recovery selection, JSON stability, and no-false-success behavior into one deterministic CLI contract.
+  Result: Linuxoid now proves the self-healing health surface stays honest and stable where harnesses actually consume it, not only through in-process fixture helpers.
+  Timestamp: 2026-05-18T00:01:10+05:30
