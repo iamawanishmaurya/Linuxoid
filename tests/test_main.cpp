@@ -5808,6 +5808,220 @@ void TestNativeRuntimeLaunchRendersTraceSourceDetails() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeRuntimePreflightSelfHealingContractStaysDeterministicWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight-self-healing-contract");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+
+  const auto run_preflight = [&]() {
+    return wfa::PreflightRuntimeWithRunner(
+        {.backend = wfa::RuntimeBackendKind::kNative,
+         .package_name = fixture.package_name},
+        [](const std::string&) -> wfa::CommandResult {
+          throw std::runtime_error(
+              "native preflight should not shell out through runtime bridge runner");
+        });
+  };
+
+  const auto first_report = run_preflight();
+  const auto first_rendered = wfa::RenderRuntimePreflightReport(first_report);
+  const auto first_health_json =
+      ReadTextFile(first_report.runtime_health_json_path);
+
+  const auto second_report = run_preflight();
+  const auto second_rendered = wfa::RenderRuntimePreflightReport(second_report);
+  const auto second_health_json =
+      ReadTextFile(second_report.runtime_health_json_path);
+
+  Expect(!first_report.ready_for_launch,
+         "expected preflight to stay blocked when host ART is missing");
+  Expect(first_report.dependency_blocked,
+         "expected dependency-blocked preflight state without host ART");
+  Expect(first_report.failing_subsystem_count == 2,
+         "expected dex and bootstrap execution failures in blocked preflight");
+  Expect(first_report.recovery_actions_selected == 2,
+         "expected two selected recovery actions in blocked preflight");
+  Expect(first_report.runtime_diagnostic_replay_ready,
+         "expected diagnostic replay readiness in blocked preflight");
+  Expect(first_report.runtime_trace_bundle_complete,
+         "expected complete replay bundle in blocked preflight");
+  Expect(first_report.art_runtime_probe_source == "missing",
+         "expected missing runtime probe source in blocked preflight");
+  Expect(first_report.runtime_probe_detection_reason == "host_probe_disabled",
+         "expected disabled-host probe detection reason in blocked preflight");
+  Expect(std::find(first_report.failing_subsystems.begin(),
+                   first_report.failing_subsystems.end(),
+                   "dex_classloader_readiness") !=
+             first_report.failing_subsystems.end(),
+         "expected dex classloader failure in blocked preflight");
+  Expect(std::find(first_report.failing_subsystems.begin(),
+                   first_report.failing_subsystems.end(),
+                   "bootstrap_execution_readiness") !=
+             first_report.failing_subsystems.end(),
+         "expected bootstrap execution failure in blocked preflight");
+  Expect(std::find(
+             first_report.selected_recovery_action_details.begin(),
+             first_report.selected_recovery_action_details.end(),
+             "dex_classloader_readiness=>attempt_host_art_class_resolution "
+             "[rank=50 retry=0 scope=art_bridge]") !=
+             first_report.selected_recovery_action_details.end(),
+         "expected detailed dex recovery selection in blocked preflight");
+  Expect(std::find(
+             first_report.selected_recovery_action_details.begin(),
+             first_report.selected_recovery_action_details.end(),
+             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
+             "[rank=70 retry=0 scope=bootstrap_execution]") !=
+             first_report.selected_recovery_action_details.end(),
+         "expected detailed bootstrap recovery selection in blocked preflight");
+  Expect(first_rendered.find("Dependency Blocked: yes") != std::string::npos,
+         "expected dependency-blocked line in blocked preflight render");
+  Expect(first_rendered.find("Ready For Launch: no") != std::string::npos,
+         "expected no-false-success line in blocked preflight render");
+  Expect(first_rendered.find("Selected Recovery Action Details: ") !=
+             std::string::npos,
+         "expected recovery detail line in blocked preflight render");
+  Expect(first_rendered.find("Runtime Diagnostic Replay Ready: yes") !=
+             std::string::npos,
+         "expected replay readiness line in blocked preflight render");
+  Expect(first_rendered.find("Runtime Trace Bundle Complete: yes") !=
+             std::string::npos,
+         "expected complete trace bundle line in blocked preflight render");
+  Expect(first_rendered == second_rendered,
+         "expected stable repeated blocked native preflight report rendering");
+  Expect(first_health_json == second_health_json,
+         "expected stable repeated blocked native preflight runtime-health json");
+  Expect(first_health_json.find("\"overall_ready\": false") !=
+             std::string::npos,
+         "expected no false success in blocked preflight runtime-health json");
+  Expect(first_health_json.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected recovery-needed classification in blocked preflight runtime-health json");
+  Expect(first_health_json.find("\"dependency_blocked\": true") !=
+             std::string::npos,
+         "expected dependency-blocked state in blocked preflight runtime-health json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchSelfHealingContractStaysDeterministicWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-self-healing-contract");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+
+  const auto run_launch = [&]() {
+    return wfa::LaunchInstalledAppWithRunner(
+        {.backend = wfa::RuntimeBackendKind::kNative,
+         .package_name = fixture.package_name},
+        [](const std::string&) -> wfa::CommandResult {
+          throw std::runtime_error(
+              "native launch should not shell out through runtime bridge runner");
+        });
+  };
+
+  const auto first_report = run_launch();
+  const auto first_rendered = wfa::RenderInstalledAppLaunchReport(first_report);
+  const auto first_health_json =
+      ReadTextFile(first_report.runtime_health_json_path);
+
+  const auto second_report = run_launch();
+  const auto second_rendered =
+      wfa::RenderInstalledAppLaunchReport(second_report);
+  const auto second_health_json =
+      ReadTextFile(second_report.runtime_health_json_path);
+
+  Expect(!first_report.launch_ok,
+         "expected blocked native launch when host ART is missing");
+  Expect(first_report.launch_classification ==
+             "native_bootstrap_execution_failed",
+         "expected blocked native launch classification without host ART");
+  Expect(first_report.runtime_health_ready,
+         "expected runtime health readiness on blocked native launch");
+  Expect(first_report.runtime_dependency_blocked,
+         "expected dependency-blocked runtime state on blocked native launch");
+  Expect(first_report.runtime_failing_subsystem_count == 2,
+         "expected dex and bootstrap execution failures on blocked native launch");
+  Expect(first_report.runtime_recovery_actions_selected == 2,
+         "expected two selected recovery actions on blocked native launch");
+  Expect(first_report.runtime_diagnostic_replay_ready,
+         "expected replay readiness on blocked native launch");
+  Expect(first_report.runtime_trace_bundle_complete,
+         "expected complete trace bundle on blocked native launch");
+  Expect(first_report.art_runtime_probe_source == "missing",
+         "expected missing runtime probe source on blocked native launch");
+  Expect(first_report.runtime_probe_detection_reason == "host_probe_disabled",
+         "expected disabled-host probe detection reason on blocked native launch");
+  Expect(std::find(first_report.runtime_failing_subsystems.begin(),
+                   first_report.runtime_failing_subsystems.end(),
+                   "dex_classloader_readiness") !=
+             first_report.runtime_failing_subsystems.end(),
+         "expected dex classloader failure on blocked native launch");
+  Expect(std::find(first_report.runtime_failing_subsystems.begin(),
+                   first_report.runtime_failing_subsystems.end(),
+                   "bootstrap_execution_readiness") !=
+             first_report.runtime_failing_subsystems.end(),
+         "expected bootstrap execution failure on blocked native launch");
+  Expect(std::find(
+             first_report.runtime_selected_recovery_action_details.begin(),
+             first_report.runtime_selected_recovery_action_details.end(),
+             "dex_classloader_readiness=>attempt_host_art_class_resolution "
+             "[rank=50 retry=0 scope=art_bridge]") !=
+             first_report.runtime_selected_recovery_action_details.end(),
+         "expected detailed dex recovery selection on blocked native launch");
+  Expect(std::find(
+             first_report.runtime_selected_recovery_action_details.begin(),
+             first_report.runtime_selected_recovery_action_details.end(),
+             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
+             "[rank=70 retry=0 scope=bootstrap_execution]") !=
+             first_report.runtime_selected_recovery_action_details.end(),
+         "expected detailed bootstrap recovery selection on blocked native launch");
+  Expect(first_rendered.find("Launch Classification: "
+                             "native_bootstrap_execution_failed") !=
+             std::string::npos,
+         "expected blocked native launch classification in render output");
+  Expect(first_rendered.find("Runtime Dependency Blocked: yes") !=
+             std::string::npos,
+         "expected dependency-blocked runtime line in native launch render");
+  Expect(first_rendered.find("Runtime Selected Recovery Action Details: ") !=
+             std::string::npos,
+         "expected recovery detail line in native launch render");
+  Expect(first_rendered.find("Runtime Diagnostic Replay Ready: yes") !=
+             std::string::npos,
+         "expected replay readiness line in native launch render");
+  Expect(first_rendered.find("Launch OK: no") != std::string::npos,
+         "expected no-false-success line in blocked native launch render");
+  Expect(first_rendered == second_rendered,
+         "expected stable repeated blocked native launch report rendering");
+  Expect(first_health_json == second_health_json,
+         "expected stable repeated blocked native launch runtime-health json");
+  Expect(first_health_json.find("\"overall_ready\": false") !=
+             std::string::npos,
+         "expected no false success in blocked native launch runtime-health json");
+  Expect(first_health_json.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected recovery-needed classification in blocked native launch runtime-health json");
+  Expect(first_health_json.find("\"dependency_blocked\": true") !=
+             std::string::npos,
+         "expected dependency-blocked state in blocked native launch runtime-health json");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestDesktopLaunchArtifactsForImeApp() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "wfa desktop test";
@@ -7810,6 +8024,7 @@ int main() {
     TestNativeRuntimePreflightReportsHostAppProcessCapabilityHonestly();
     TestNativeRuntimePreflightRendersDetailedRecoveryContract();
     TestNativeRuntimePreflightRendersTraceSourceDetails();
+    TestNativeRuntimePreflightSelfHealingContractStaysDeterministicWithoutHostArt();
     TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
     TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault();
     TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();
@@ -7818,6 +8033,7 @@ int main() {
     TestNativeRuntimeLaunchReportsHostAppProcessCapabilityHonestly();
     TestNativeRuntimeLaunchRendersDetailedRecoveryContract();
     TestNativeRuntimeLaunchRendersTraceSourceDetails();
+    TestNativeRuntimeLaunchSelfHealingContractStaysDeterministicWithoutHostArt();
     TestDesktopLaunchArtifactsForImeApp();
     TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();
     TestDesktopLaunchArtifactsRejectCrossPackageComponent();

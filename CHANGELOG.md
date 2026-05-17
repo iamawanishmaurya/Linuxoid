@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.81 - 2026-05-17
+
+- Add consolidated native-bridge self-healing regressions that pin four operator-facing guarantees together on the blocked host-ART path: deterministic health classification, deterministic recovery-action selection, stable repeated runtime-health JSON, and no false success when a required runtime dependency is missing.
+- Prove the same contract at both public bridge surfaces Linuxoid operators actually read today: `preflight-runtime native` and `launch-package native`.
+
 ## v0.1.80 - 2026-05-17
 
 - Surface replayable trace-source details directly through the native bridge: `preflight-runtime native` and `launch-package native` now render per-source trace summaries with source name, trace path, event count, first and last event types, and deterministic fingerprints instead of stopping at bundle-level counts.

@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Native bridge self-healing contract GREEN
+  Action: Added consolidated blocked-host-ART regressions for `preflight-runtime native` and `launch-package native`, then pinned health classification, recovery selection, repeated runtime-health JSON stability, and no-false-success behavior together at the public bridge layer.
+  Result: Linuxoid now proves the self-healing contract where operators actually consume it, not only inside the deeper runtime-health commands and artifacts.
+  Timestamp: 2026-05-17T23:55:00+05:30
+
 - Step: Native bridge replay source detail GREEN
   Action: Added red-first regressions for blocked native preflight and blocked native launch, then threaded per-source replay summaries with source name, trace path, event count, event boundaries, and deterministic fingerprints through the bridge renderers.
   Result: Linuxoid’s public native reports now expose which JSONL traces make up the replay bundle, so operators can diagnose blocked launches without opening the deeper replay JSON or trace-index files first.
