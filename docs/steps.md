@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: CLI self-healing contract matrix
+  Action: Added one end-to-end CLI regression that exercises baseline health classification, the four deterministic recovery scenarios, repeated JSON stability, and missing-dependency no-false-success behavior through `native-runtime-health-fixture` and `native-runtime-recovery-plan`.
+  Result: Linuxoid now pins the self-healing contract at the command surface harnesses actually consume, not only across scattered in-process assertions.
+  Timestamp: 2026-05-18T00:09:00+05:30
+
 - Step: Replayable trace-bundle contract
   Action: Extended the diagnostic replay report and JSON rendering so the seven-source replay bundle is exposed through explicit completeness, count, name, and health-replay-path fields, then pinned that surface with in-process and CLI-level tests including the missing-trace case.
   Result: Linuxoid now exposes `health_trace_jsonl_path`, `health_replay_json_path`, `canonical_trace_source_count`, `canonical_trace_source_names`, `missing_trace_source_count`, and `trace_bundle_complete`, making offline diagnosis easier for harnesses to trust deterministically.

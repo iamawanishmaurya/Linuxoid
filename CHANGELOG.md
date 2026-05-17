@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.69 - 2026-05-17
+
+- Add a consolidated CLI-level self-healing contract regression that proves, in one end-to-end matrix, deterministic health classification, deterministic recovery decision selection, stable repeated JSON output, and no false success when a dependency is missing.
+- Keep the verification focused on the public command surface Linuxoid harnesses consume: `native-runtime-health-fixture` and `native-runtime-recovery-plan`.
+
 ## v0.1.68 - 2026-05-17
 
 - Strengthen the replayable-diagnostics contract by exposing the seven-source JSONL trace bundle through explicit summary fields: `health_trace_jsonl_path`, `health_replay_json_path`, `canonical_trace_source_count`, `canonical_trace_source_names`, `missing_trace_source_count`, and `trace_bundle_complete`.

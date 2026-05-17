@@ -4170,6 +4170,91 @@ void TestRuntimeRecoveryPlanCommandCoreScenariosStayDeterministic() {
   fs::remove_all(binder_fixture.root);
 }
 
+void TestSelfHealingRuntimeCliContractMatrix() {
+  namespace fs = std::filesystem;
+  auto baseline_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-self-healing-cli-contract-baseline", true, true);
+  auto missing_native_fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-self-healing-cli-contract-missing-native", true, false, true);
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int baseline_exit_code = 0;
+  const std::string baseline_output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          baseline_fixture.bootstrap.bootstrap_manifest_path + " baseline",
+      &baseline_exit_code);
+  Expect(baseline_exit_code == 0,
+         "expected baseline runtime-health command success");
+  Expect(baseline_output.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected deterministic health classification in baseline command json");
+  Expect(baseline_output.find("\"self_healing_ready\": true") !=
+             std::string::npos,
+         "expected self-healing ready flag in baseline command json");
+
+  const struct RecoveryScenarioExpectation {
+    const char* scenario_name;
+    const char* action_name;
+  } recovery_expectations[] = {
+      {"missing_artifact", "restage_apk_bundle"},
+      {"failed_native_load", "retry_native_load_after_bundle_refresh"},
+      {"unavailable_display", "fallback_to_headless_surface_probe"},
+      {"failed_service_lookup", "rebuild_service_registry_and_retry_lookup"},
+  };
+
+  for (const auto& expectation : recovery_expectations) {
+    int recovery_exit_code = 0;
+    const std::string recovery_output = ReadCommandOutput(
+        compatctl.string() + " native-runtime-recovery-plan " +
+            baseline_fixture.bootstrap.bootstrap_manifest_path + " " +
+            expectation.scenario_name,
+        &recovery_exit_code);
+    Expect(recovery_exit_code == 0,
+           "expected scenario recovery-plan command success");
+    Expect(recovery_output.find("\"scenario_name\": \"" +
+                                    std::string(expectation.scenario_name) +
+                                    "\"") != std::string::npos,
+           "expected recovery scenario name in command json");
+    Expect(recovery_output.find("\"action_name\": \"" +
+                                    std::string(expectation.action_name) +
+                                    "\"") != std::string::npos,
+           "expected deterministic recovery action selection in command json");
+  }
+
+  int first_missing_native_exit_code = 0;
+  const std::string first_missing_native_output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          missing_native_fixture.bootstrap.bootstrap_manifest_path +
+          " baseline",
+      &first_missing_native_exit_code);
+  int second_missing_native_exit_code = 0;
+  const std::string second_missing_native_output = ReadCommandOutput(
+      compatctl.string() + " native-runtime-health-fixture " +
+          missing_native_fixture.bootstrap.bootstrap_manifest_path +
+          " baseline",
+      &second_missing_native_exit_code);
+
+  Expect(first_missing_native_exit_code == 0 &&
+             second_missing_native_exit_code == 0,
+         "expected repeated missing-native runtime-health command success");
+  Expect(first_missing_native_output == second_missing_native_output,
+         "expected stable repeated missing-native runtime-health json");
+  Expect(first_missing_native_output.find("\"overall_ready\": false") !=
+             std::string::npos,
+         "expected no false success when a dependency is missing");
+  Expect(first_missing_native_output.find("\"overall_state\": \"recovery_needed\"") !=
+             std::string::npos,
+         "expected recovery-needed classification when a dependency is missing");
+  Expect(first_missing_native_output.find(
+             "\"selected_recovery_action\": "
+             "\"retry_native_load_after_bundle_refresh\"") !=
+             std::string::npos,
+         "expected deterministic recovery selection when native dependency is missing");
+
+  fs::remove_all(baseline_fixture.root);
+  fs::remove_all(missing_native_fixture.root);
+}
+
 void TestNativeLifecycleShimWritesSessionArtifacts() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "linuxoid-native-lifecycle-test";
@@ -6739,6 +6824,7 @@ int main() {
     TestRuntimeRecoveryPlanScenariosSelectDeterministicActions();
     TestRuntimeRecoveryPlanCommandWritesStableJson();
     TestRuntimeRecoveryPlanCommandCoreScenariosStayDeterministic();
+    TestSelfHealingRuntimeCliContractMatrix();
     TestNativeArtClassloaderFixtureWritesStableArtifacts();
     TestNativeArtClassloaderFixtureHandlesMissingDexHonestly();
     TestNativeArtClassloaderCommandWritesStableJson();
