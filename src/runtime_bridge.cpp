@@ -91,7 +91,9 @@ struct NativePreflightDiagnostics {
   int runtime_missing_trace_source_count = 0;
   std::vector<std::string> failing_subsystems;
   std::vector<std::string> selected_recovery_actions;
+  std::vector<std::string> selected_recovery_action_details;
   std::vector<std::string> canonical_recovery_scenarios;
+  std::vector<std::string> canonical_recovery_scenario_details;
   std::string notes;
 };
 
@@ -269,6 +271,24 @@ std::string RenderRecoveryScenarioSummary(
   return scenario.scenario_name + "=>" + scenario.action_name;
 }
 
+std::string RenderRecoveryScenarioDetail(
+    const RuntimeRecoveryScenarioContract& scenario) {
+  std::ostringstream output;
+  output << scenario.scenario_name << "=>" << scenario.action_name
+         << " [rank=" << scenario.action_rank << " retry="
+         << scenario.retry_budget << " scope=" << scenario.recovery_scope
+         << "]";
+  return output.str();
+}
+
+std::string RenderRecoveryActionDetail(const RuntimeRecoveryAction& action) {
+  std::ostringstream output;
+  output << action.subsystem_name << "=>" << action.action_name
+         << " [rank=" << action.action_rank << " retry="
+         << action.retry_budget << " scope=" << action.recovery_scope << "]";
+  return output.str();
+}
+
 std::vector<std::string> CollectRecoveryActionNames(
     const RuntimeHealthReport& report) {
   std::vector<std::string> actions;
@@ -279,12 +299,32 @@ std::vector<std::string> CollectRecoveryActionNames(
   return actions;
 }
 
+std::vector<std::string> CollectRecoveryActionDetails(
+    const RuntimeHealthReport& report) {
+  std::vector<std::string> actions;
+  actions.reserve(report.recovery_actions.size());
+  for (const auto& action : report.recovery_actions) {
+    actions.push_back(RenderRecoveryActionDetail(action));
+  }
+  return actions;
+}
+
 std::vector<std::string> CollectCanonicalRecoveryScenarioSummaries(
     const RuntimeHealthReport& report) {
   std::vector<std::string> scenarios;
   scenarios.reserve(report.canonical_recovery_scenarios.size());
   for (const auto& scenario : report.canonical_recovery_scenarios) {
     scenarios.push_back(RenderRecoveryScenarioSummary(scenario));
+  }
+  return scenarios;
+}
+
+std::vector<std::string> CollectCanonicalRecoveryScenarioDetails(
+    const RuntimeHealthReport& report) {
+  std::vector<std::string> scenarios;
+  scenarios.reserve(report.canonical_recovery_scenarios.size());
+  for (const auto& scenario : report.canonical_recovery_scenarios) {
+    scenarios.push_back(RenderRecoveryScenarioDetail(scenario));
   }
   return scenarios;
 }
@@ -536,8 +576,12 @@ NativePreflightDiagnostics BuildNativePreflightDiagnostics(
       diagnostic.missing_trace_source_count;
   diagnostics.failing_subsystems = health.failing_subsystems;
   diagnostics.selected_recovery_actions = CollectRecoveryActionNames(health);
+  diagnostics.selected_recovery_action_details =
+      CollectRecoveryActionDetails(health);
   diagnostics.canonical_recovery_scenarios =
       CollectCanonicalRecoveryScenarioSummaries(health);
+  diagnostics.canonical_recovery_scenario_details =
+      CollectCanonicalRecoveryScenarioDetails(health);
   diagnostics.bootstrap_planned = activity_bootstrap.runtime_bootstrap_planned;
 
   const bool override_allowed =
@@ -979,6 +1023,12 @@ std::string RenderInstalledAppLaunchReport(
                    ? "none"
                    : JoinStrings(report.runtime_selected_recovery_actions, ", "))
            << '\n';
+    output << "Runtime Selected Recovery Action Details: "
+           << (report.runtime_selected_recovery_action_details.empty()
+                   ? "none"
+                   : JoinStrings(report.runtime_selected_recovery_action_details,
+                                 ", "))
+           << '\n';
     output << "Runtime Canonical Recovery Scenario Count: "
            << report.runtime_canonical_recovery_scenario_count << '\n';
     output << "Runtime Canonical Recovery Scenarios: "
@@ -986,6 +1036,13 @@ std::string RenderInstalledAppLaunchReport(
                    ? "none"
                    : JoinStrings(report.runtime_canonical_recovery_scenarios,
                                  ", "))
+           << '\n';
+    output << "Runtime Canonical Recovery Scenario Details: "
+           << (report.runtime_canonical_recovery_scenario_details.empty()
+                   ? "none"
+                   : JoinStrings(
+                         report.runtime_canonical_recovery_scenario_details,
+                         ", "))
            << '\n';
   }
   if (!report.runtime_recovery_plan_path.empty()) {
@@ -1124,12 +1181,23 @@ std::string RenderRuntimePreflightReport(
                    ? "none"
                    : JoinStrings(report.selected_recovery_actions, ", "))
            << '\n';
+    output << "Selected Recovery Action Details: "
+           << (report.selected_recovery_action_details.empty()
+                   ? "none"
+                   : JoinStrings(report.selected_recovery_action_details, ", "))
+           << '\n';
     output << "Canonical Recovery Scenario Count: "
            << report.canonical_recovery_scenario_count << '\n';
     output << "Canonical Recovery Scenarios: "
            << (report.canonical_recovery_scenarios.empty()
                    ? "none"
                    : JoinStrings(report.canonical_recovery_scenarios, ", "))
+           << '\n';
+    output << "Canonical Recovery Scenario Details: "
+           << (report.canonical_recovery_scenario_details.empty()
+                   ? "none"
+                   : JoinStrings(report.canonical_recovery_scenario_details,
+                                 ", "))
            << '\n';
   }
   output << "Ready For Launch: " << (report.ready_for_launch ? "yes" : "no")
@@ -1457,8 +1525,12 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
         report.failing_subsystems = diagnostics.failing_subsystems;
         report.selected_recovery_actions =
             diagnostics.selected_recovery_actions;
+        report.selected_recovery_action_details =
+            diagnostics.selected_recovery_action_details;
         report.canonical_recovery_scenarios =
             diagnostics.canonical_recovery_scenarios;
+        report.canonical_recovery_scenario_details =
+            diagnostics.canonical_recovery_scenario_details;
         report.notes = diagnostics.notes;
       } catch (const std::exception& error) {
         report.notes = error.what();
@@ -1755,8 +1827,12 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
         report.runtime_failing_subsystems = health.failing_subsystems;
         report.runtime_selected_recovery_actions =
             CollectRecoveryActionNames(health);
+        report.runtime_selected_recovery_action_details =
+            CollectRecoveryActionDetails(health);
         report.runtime_canonical_recovery_scenarios =
             CollectCanonicalRecoveryScenarioSummaries(health);
+        report.runtime_canonical_recovery_scenario_details =
+            CollectCanonicalRecoveryScenarioDetails(health);
         const auto diagnostic = ReplayRuntimeDiagnosticBundle(
             bootstrap.bootstrap_manifest_path);
         report.runtime_diagnostic_replay_json_path =

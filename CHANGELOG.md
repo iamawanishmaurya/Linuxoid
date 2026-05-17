@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.79 - 2026-05-17
+
+- Surface deterministic recovery metadata more directly through the native bridge: `preflight-runtime native` and `launch-package native` now render detailed selected-recovery and canonical-scenario lines with stable action rank, retry budget, and recovery scope instead of only compressed `scenario=>action` summaries.
+- Add regression coverage that pins those richer bridge-level recovery details on blocked native preflight and blocked native launch paths, keeping the public contract aligned with the structured `runtime-health` and `runtime-recovery-plan` JSON artifacts.
+
 ## v0.1.78 - 2026-05-17
 
 - Distinguish host ART **detection** from host ART **bootstrap capability** across the native runtime seams: Linuxoid now classifies selected probes as `override_bootstrap_capable`, `host_dalvikvm_bootstrap_capable`, `host_app_process_detection_only`, or `missing` instead of treating every detected host probe as equally launch-ready.

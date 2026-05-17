@@ -5249,6 +5249,53 @@ void TestNativeRuntimePreflightSurfacesProbeInventoryAndReason() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeRuntimePreflightRendersDetailedRecoveryContract() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight-recovery-details");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native preflight should not shell out");
+      });
+
+  const auto rendered = wfa::RenderRuntimePreflightReport(report);
+  Expect(rendered.find("Selected Recovery Action Details: ") !=
+             std::string::npos,
+         "expected detailed selected recovery actions in native preflight render");
+  Expect(rendered.find(
+             "dex_classloader_readiness=>attempt_host_art_class_resolution "
+             "[rank=50 retry=0 scope=art_bridge]") != std::string::npos,
+         "expected detailed dex recovery action in native preflight render");
+  Expect(rendered.find(
+             "bootstrap_execution_readiness=>attempt_host_bootstrap_execution "
+             "[rank=70 retry=0 scope=bootstrap_execution]") !=
+             std::string::npos,
+         "expected detailed bootstrap execution recovery action in native preflight render");
+  Expect(rendered.find("Canonical Recovery Scenario Details: ") !=
+             std::string::npos,
+         "expected detailed canonical recovery scenarios in native preflight render");
+  Expect(rendered.find(
+             "missing_artifact=>restage_apk_bundle [rank=10 retry=1 scope=bundle]") !=
+             std::string::npos,
+         "expected detailed missing-artifact scenario in native preflight render");
+  Expect(rendered.find(
+             "failed_service_lookup=>rebuild_service_registry_and_retry_lookup "
+             "[rank=40 retry=1 scope=service_registry]") !=
+             std::string::npos,
+         "expected detailed failed-service-lookup scenario in native preflight render");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution() {
   namespace fs = std::filesystem;
   auto fixture = CreateNativeRuntimePackageFixture(
@@ -5655,6 +5702,44 @@ void TestNativeRuntimeLaunchSurfacesProbeInventoryAndReason() {
   Expect(rendered.find("ART Runtime Probe Detection Reason: "
                        "host_probe_disabled") != std::string::npos,
          "expected probe detection reason line in native launch render");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchRendersDetailedRecoveryContract() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-recovery-details");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native launch should not shell out through runtime bridge runner");
+      });
+
+  const auto rendered = wfa::RenderInstalledAppLaunchReport(report);
+  Expect(rendered.find("Runtime Selected Recovery Action Details: ") !=
+             std::string::npos,
+         "expected detailed selected recovery actions in native launch render");
+  Expect(rendered.find(
+             "dex_classloader_readiness=>attempt_host_art_class_resolution "
+             "[rank=50 retry=0 scope=art_bridge]") != std::string::npos,
+         "expected detailed dex recovery action in native launch render");
+  Expect(rendered.find("Runtime Canonical Recovery Scenario Details: ") !=
+             std::string::npos,
+         "expected detailed canonical recovery scenarios in native launch render");
+  Expect(rendered.find(
+             "unavailable_display=>fallback_to_headless_surface_probe "
+             "[rank=30 retry=0 scope=graphics_probe]") != std::string::npos,
+         "expected detailed unavailable-display scenario in native launch render");
 
   fs::remove_all(fixture.root);
 }
@@ -7659,12 +7744,14 @@ int main() {
     TestNativeRuntimePreflightBlocksWithoutHostArt();
     TestNativeRuntimePreflightSurfacesProbeInventoryAndReason();
     TestNativeRuntimePreflightReportsHostAppProcessCapabilityHonestly();
+    TestNativeRuntimePreflightRendersDetailedRecoveryContract();
     TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
     TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault();
     TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();
     TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt();
     TestNativeRuntimeLaunchSurfacesProbeInventoryAndReason();
     TestNativeRuntimeLaunchReportsHostAppProcessCapabilityHonestly();
+    TestNativeRuntimeLaunchRendersDetailedRecoveryContract();
     TestDesktopLaunchArtifactsForImeApp();
     TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();
     TestDesktopLaunchArtifactsRejectCrossPackageComponent();

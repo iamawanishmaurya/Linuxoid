@@ -109,7 +109,9 @@ struct InstalledAppLaunchReport {
   int runtime_missing_trace_source_count = 0;
   std::vector<std::string> runtime_failing_subsystems;
   std::vector<std::string> runtime_selected_recovery_actions;
+  std::vector<std::string> runtime_selected_recovery_action_details;
   std::vector<std::string> runtime_canonical_recovery_scenarios;
+  std::vector<std::string> runtime_canonical_recovery_scenario_details;
   std::string output;
 };
 
@@ -204,7 +206,9 @@ struct RuntimePreflightReport {
   int runtime_missing_trace_source_count = 0;
   std::vector<std::string> failing_subsystems;
   std::vector<std::string> selected_recovery_actions;
+  std::vector<std::string> selected_recovery_action_details;
   std::vector<std::string> canonical_recovery_scenarios;
+  std::vector<std::string> canonical_recovery_scenario_details;
 };
 
 RuntimeBackendKind ParseRuntimeBackendKind(const std::string& backend_name);

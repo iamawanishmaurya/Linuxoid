@@ -277,6 +277,10 @@ Today, **self-healing** in Linuxoid means:
 - Linuxoid now also threads that same staged-package preflight into the backend-neutral verification surface: `verify-package` and `verify-package-matrix` now report runtime-target selection plus package visibility plus component readiness before launch, and the local `native` backend uses that same contract instead of a launch-only shortcut.
 - Linuxoid now also makes that `native` preflight contract honest about real launch-attempt readiness: staged package visibility and launcher resolution can still succeed, but `preflight-runtime native` and `verify-package native` now stay blocked when host ART is missing, when the runtime probe is fixture-only without explicit opt-in, or when the staged bundle is not actually a native spike candidate.
 - Linuxoid now also surfaces deterministic recovery policy directly in the public native bridge: the current selected recovery actions and the canonical four scenario mappings for missing artifact, failed native load, unavailable display, and failed service lookup are rendered in native preflight and launch reports without forcing callers to open the deeper health JSON first.
+- Those native bridge reports now also carry the bounded recovery metadata itself, not just the action names:
+  - `action_rank`
+  - `retry_budget`
+  - `recovery_scope`
 - Linuxoid now also separates **fixture override success** from **real host launch success** on the native launch path: `launch-package native` records override-backed ART/bootstrap success in artifacts, but it only classifies that as a successful app launch when `LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE=1` is set explicitly.
 - Linuxoid now also surfaces the deeper native-launch diagnosis directly in the `launch-package native` report: bootstrap manifest and execution artifact paths, runtime-health and recovery-plan paths, replay-bundle paths, and the blocked subsystem summary are all emitted up front so a failed staged launch can be diagnosed without rerunning the whole flow blindly.
 - Linuxoid can replay and merge those traces later without rerunning the full UI path.
