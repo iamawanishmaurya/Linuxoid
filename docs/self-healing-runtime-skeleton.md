@@ -4,6 +4,12 @@ Linuxoid now has a **self-healing runtime observability skeleton** for the nativ
 
 What that means **today**:
 
+- Linuxoid now exposes the self-healing runtime through stable public commands, not only internal helpers:
+  - `native-runtime-health-fixture`
+  - `native-runtime-recovery-plan`
+  - `native-runtime-health-replay`
+  - `native-runtime-diagnostic-replay`
+  - `native-runtime-diagnostic-fixture`
 - Linuxoid can record structured health for:
   - APK staging
   - native library loading readiness
@@ -76,6 +82,7 @@ What that means **today**:
 - Linuxoid now also accepts a Linuxoid-owned ART probe override for deterministic fixture runs, which lets runtime-smoke and bootstrap-execution exercise the real runner-backed execution contract on hosts that do not provide ART locally.
 - Runtime health now treats that deeper success path honestly too: when override-backed or real runtime class resolution succeeds and the supervised bootstrap runner completes, `dex_classloader_readiness` and `bootstrap_execution_readiness` can now resolve to `ready` instead of remaining generically pending.
 - Runtime health now also treats DEX-only bundles more honestly: if a staged APK declares no native libraries, `native_loading` is classified as `not_required` instead of being treated like a failed native-loader dependency.
+- Linuxoid now also exposes a real local `native` runtime bridge for staged target discovery, staged package inspection, staged-package preflight, and bootstrap-execution handoff. That means self-healing no longer depends only on attached Android targets to exercise the public runtime surface.
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`
@@ -103,6 +110,7 @@ What it **does not** mean yet:
 - Linuxoid does **not** yet auto-fix or rerun real Android app execution.
 - Linuxoid does **not** yet own a full embedded ART runtime or a real in-process `PathClassLoader`.
 - Linuxoid does **not** yet execute full Android app startup through host-side ART, even though it can now resolve manifest-target descriptors offline from real DEX contents, prepare a real host-side class-resolution command for `dalvikvm` when that runtime exists, exercise the runner-backed execution seam through a Linuxoid-owned override probe in fixtures, separate activity-bootstrap planning from bootstrap execution, and keep deterministic execution-context, runner-state, runner-script, and per-phase log artifacts around that execution seam.
+- Linuxoid does **not** yet prove real host-side ART startup for a staged foreground app by default; the strongest successful path today is still an override-backed Linuxoid fixture seam.
 - Linuxoid does **not** yet have full Android Binder semantics.
 - Linuxoid does **not** yet have compositor-backed Android rendering.
 - Linuxoid does **not** yet have full IME/text composition.
@@ -131,6 +139,7 @@ The self-healing layer is no longer the main blocker. The remaining blockers are
 3. A bound Wayland + EGL + `ANativeWindow` path that can carry actual Android drawing.
 4. Input that goes beyond deterministic pointer/key fixtures into real IME/text composition.
 5. Resource handling beyond manifest/assets into full Android resource-table semantics.
+6. A real staged foreground candidate app that can move through the public native runtime bridge and succeed without relying on the Linuxoid-owned ART override seam.
 
 Until those gates land, Linuxoid can diagnose and replay failures very well, but it still cannot claim full native Android app execution on Linux.
 

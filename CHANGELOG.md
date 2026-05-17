@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.63 - 2026-05-17
+
+- Refresh the README, self-healing runtime note, and phased plan so the repo explains more directly what self-healing means now at the public command surface, what the Linuxoid-owned local `native` runtime bridge contributes, and what still remains before real host-side Android app execution on Linux.
+
 ## v0.1.62 - 2026-05-17
 
 - Add a single public-command contract regression for the missing-native-dependency path, proving `native-runtime-health-fixture` keeps health classification, recovery decision selection, JSON stability, and no-false-success behavior aligned in one deterministic CLI output surface.

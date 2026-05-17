@@ -1562,3 +1562,8 @@
   Action: Added a public-command regression that reruns `native-runtime-health-fixture` twice for the missing-native-dependency path and locks health classification, recovery selection, JSON stability, and no-false-success behavior into one deterministic CLI contract.
   Result: Linuxoid now proves the self-healing health surface stays honest and stable where harnesses actually consume it, not only through in-process fixture helpers.
   Timestamp: 2026-05-18T00:01:10+05:30
+
+- Step: Self-healing docs clarification GREEN
+  Action: Refreshed the README, self-healing runtime note, and phased plan to explain the public self-healing command surface, the Linuxoid-owned local `native` runtime bridge, and the exact line between override-backed fixture success and real host-side Android app execution.
+  Result: The repo now says more plainly what self-healing means today and what still blocks full Android app startup on Linux.
+  Timestamp: 2026-05-18T00:01:40+05:30

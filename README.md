@@ -187,6 +187,12 @@ Detailed gap research: [docs/15-track-research-wave-2026-05-16.md](/home/astra/c
 
 Today, **self-healing** in Linuxoid means:
 
+- Linuxoid can expose the native direct-run path through stable public command contracts before full Android execution exists:
+  - `native-runtime-health-fixture`
+  - `native-runtime-recovery-plan`
+  - `native-runtime-health-replay`
+  - `native-runtime-diagnostic-replay`
+  - `native-runtime-diagnostic-fixture`
 - Linuxoid can classify native-runtime state into deterministic subsystem records instead of treating failures as opaque crashes.
 - Linuxoid can select bounded recovery actions for known failure classes such as missing bundle artifacts, failed native loading, unavailable display surfaces, failed local service lookup, and pending ART/classloader work.
 - Linuxoid now also tracks pending post-class-resolution activity bootstrap as its own bounded runtime state instead of folding it into generic classloader readiness.
@@ -238,6 +244,7 @@ Today, **self-healing** in Linuxoid means:
 - Linuxoid now also supports a Linuxoid-owned ART probe override for deterministic fixture runs, so the runtime-smoke and bootstrap-execution seams can be exercised end to end even on hosts that do not ship ART locally.
 - Linuxoid runtime health now recognizes that deeper success path too: when the ART-style class-resolution seam and supervised bootstrap-execution seam both succeed, `dex_classloader_readiness` and `bootstrap_execution_readiness` now converge to `ready` instead of staying stuck in a generic pending state.
 - Linuxoid now also distinguishes **DEX-only** bundles from broken native loading: when an APK declares no native libraries at all, `native_loading` resolves to `not_required` instead of falsely reporting a blocked native-loader failure.
+- Linuxoid now also exposes a real local `native` runtime bridge for staged package discovery, staged metadata lookup, staged-package preflight, and bootstrap-execution handoff, so self-healing can reason about a Linuxoid-owned local target instead of only attached Android runtimes.
 - Linuxoid can replay and merge those traces later without rerunning the full UI path.
 - Linuxoid can now fingerprint each trace source and record first/last event types so failures can be compared offline across runs.
 - Linuxoid now reuses one opened APK archive plus the already-staged bundle manifest while building those runtime records, so live health and replay commands stay fast enough to rerun on real staged bundles without falling back to repeated full-archive scans and repeated `apktool` decode work.
@@ -259,6 +266,7 @@ Linuxoid is still **not** at “run Android apps directly on Linux end to end”
 1. **Real ART / DEX execution**
    - host-side `PathClassLoader` or equivalent class resolution still needs to move from planning/smoke to actual execution
    - application code is not yet running through a real ART-owned path by default; the current override-backed fixture path is a Linuxoid test seam, not proof of embedded ART execution on this host
+   - the current supervised bootstrap-execution seam is a truthful launch-attempt contract, not yet a successful real host ART startup for a staged foreground app
 
 2. **Android framework and services**
    - the Binder-shaped local manager is still a Linuxoid-owned seam, not full Android Binder semantics
@@ -277,8 +285,8 @@ Linuxoid is still **not** at “run Android apps directly on Linux end to end”
    - full `resources.arsc`, binary XML, themed resource lookup, and framework-style resource semantics are still pending
 
 6. **Real app bootstrap**
-   - Linuxoid can now stage, classify, plan, replay, and materialize a deterministic application-plus-activity bootstrap planning seam plus a separate execution seam
-   - it still needs the first successful host-side Android class execution and application or activity bootstrap on the native path
+   - Linuxoid can now stage, classify, preflight, diagnose, replay, and materialize a deterministic application-plus-activity bootstrap planning seam plus a separate execution seam
+   - it still needs the first successful host-side Android class execution and application or activity bootstrap on the native path for a real staged candidate app, not only override-backed fixture success
 
 ## Target Architecture
 
