@@ -170,6 +170,10 @@ std::string BuildInvocationPlanJson(const NativeArtRuntimeSmokeReport& report) {
          << (report.safe_runtime_probe_available ? "true" : "false") << ",\n"
          << "  \"art_runtime_probe_source\": \""
          << EscapeJson(report.art_runtime_probe_source) << "\",\n"
+         << "  \"art_runtime_probe_inventory_path\": \""
+         << EscapeJson(report.art_runtime_probe_inventory_path) << "\",\n"
+         << "  \"art_runtime_probe_detection_reason\": \""
+         << EscapeJson(report.art_runtime_probe_detection_reason) << "\",\n"
          << "  \"runtime_probe_command\": \""
          << EscapeJson(report.runtime_probe_command) << "\",\n"
          << "  \"resolved_target_class_name\": \""
@@ -246,6 +250,10 @@ std::string BuildRuntimeTraceJsonl(const NativeArtRuntimeSmokeReport& report,
          << (report.safe_runtime_probe_available ? "true" : "false") << ", "
          << "\"art_runtime_probe_source\": \""
          << EscapeJson(report.art_runtime_probe_source) << "\", "
+         << "\"art_runtime_probe_inventory_path\": \""
+         << EscapeJson(report.art_runtime_probe_inventory_path) << "\", "
+         << "\"art_runtime_probe_detection_reason\": \""
+         << EscapeJson(report.art_runtime_probe_detection_reason) << "\", "
          << "\"resolved_target_class_name\": \""
          << EscapeJson(report.resolved_target_class_name) << "\", "
          << "\"resolved_target_class_descriptor\": \""
@@ -312,6 +320,7 @@ NativeArtRuntimeSmokeReport BuildNativeArtRuntimeSmokeFixture(
   report.classloader_plan_path = resolution_report.classloader_plan_path;
   report.classloader_trace_jsonl_path =
       resolution_report.classloader_trace_jsonl_path;
+  report.art_runtime_probe_inventory_path.clear();
   report.class_resolution_map_path = resolution_report.resolution_map_path;
   report.class_resolution_trace_jsonl_path =
       resolution_report.trace_jsonl_path;
@@ -359,6 +368,10 @@ NativeArtRuntimeSmokeReport BuildNativeArtRuntimeSmokeFixture(
   report.art_runtime_probe = classloader_report.art_runtime_probe;
   report.art_runtime_probe_source =
       ClassifyArtRuntimeProbeSource(classloader_report.art_runtime_probe);
+  report.art_runtime_probe_inventory_path =
+      classloader_report.art_runtime_probe_inventory_path;
+  report.art_runtime_probe_detection_reason =
+      classloader_report.art_runtime_probe_detection_reason;
   report.safe_runtime_probe_available =
       classloader_report.art_runtime_detected &&
       IsSafeRuntimeProbe(classloader_report.art_runtime_probe);
@@ -448,6 +461,8 @@ std::string RenderNativeArtRuntimeSmokeFixtureJson(
          << EscapeJson(report.class_resolution_trace_jsonl_path) << "\",\n"
          << "  \"class_resolution_result_json_path\": \""
          << EscapeJson(report.class_resolution_result_json_path) << "\",\n"
+         << "  \"art_runtime_probe_inventory_path\": \""
+         << EscapeJson(report.art_runtime_probe_inventory_path) << "\",\n"
          << "  \"invocation_plan_path\": \""
          << EscapeJson(report.invocation_plan_path) << "\",\n"
          << "  \"invocation_log_path\": \""
@@ -491,6 +506,9 @@ std::string RenderNativeArtRuntimeSmokeFixtureJson(
          << "\",\n"
          << "  \"art_runtime_probe_source\": \""
          << EscapeJson(report.art_runtime_probe_source)
+         << "\",\n"
+         << "  \"art_runtime_probe_detection_reason\": \""
+         << EscapeJson(report.art_runtime_probe_detection_reason)
          << "\",\n"
          << "  \"runtime_probe_command\": \""
          << EscapeJson(report.runtime_probe_command) << "\",\n"

@@ -20,6 +20,7 @@ struct NativeArtRuntimeSmokeReport {
   std::string class_resolution_map_path;
   std::string class_resolution_trace_jsonl_path;
   std::string class_resolution_result_json_path;
+  std::string art_runtime_probe_inventory_path;
   std::string invocation_plan_path;
   std::string invocation_log_path;
   std::string trace_jsonl_path;
@@ -40,6 +41,7 @@ struct NativeArtRuntimeSmokeReport {
   int runtime_exit_code = -1;
   std::string art_runtime_probe;
   std::string art_runtime_probe_source;
+  std::string art_runtime_probe_detection_reason;
   std::string runtime_probe_command;
   std::string resolved_target_class_name;
   std::string resolved_target_class_descriptor;

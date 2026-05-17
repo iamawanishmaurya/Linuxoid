@@ -70,6 +70,8 @@ struct NativePreflightDiagnostics {
   bool bootstrap_planned = false;
   bool dependency_blocked = false;
   std::string art_runtime_probe_source;
+  std::string runtime_probe_inventory_json_path;
+  std::string runtime_probe_detection_reason;
   std::string bootstrap_manifest_path;
   std::string runtime_health_json_path;
   std::string runtime_health_trace_jsonl_path;
@@ -501,6 +503,10 @@ NativePreflightDiagnostics BuildNativePreflightDiagnostics(
 
   NativePreflightDiagnostics diagnostics;
   diagnostics.art_runtime_probe_source = runtime_smoke.art_runtime_probe_source;
+  diagnostics.runtime_probe_inventory_json_path =
+      runtime_smoke.art_runtime_probe_inventory_path;
+  diagnostics.runtime_probe_detection_reason =
+      runtime_smoke.art_runtime_probe_detection_reason;
   diagnostics.bootstrap_manifest_path = bootstrap.bootstrap_manifest_path;
   diagnostics.runtime_health_json_path = health.health_json_path;
   diagnostics.runtime_health_trace_jsonl_path = health.trace_jsonl_path;
@@ -908,6 +914,14 @@ std::string RenderInstalledAppLaunchReport(
     output << "ART Runtime Probe Source: " << report.art_runtime_probe_source
            << '\n';
   }
+  if (!report.runtime_probe_inventory_json_path.empty()) {
+    output << "ART Runtime Probe Inventory Path: "
+           << report.runtime_probe_inventory_json_path << '\n';
+  }
+  if (!report.runtime_probe_detection_reason.empty()) {
+    output << "ART Runtime Probe Detection Reason: "
+           << report.runtime_probe_detection_reason << '\n';
+  }
   if (!report.bootstrap_manifest_path.empty()) {
     output << "Bootstrap Manifest Path: " << report.bootstrap_manifest_path
            << '\n';
@@ -1065,6 +1079,14 @@ std::string RenderRuntimePreflightReport(
     if (!report.art_runtime_probe_source.empty()) {
       output << "ART Runtime Probe Source: " << report.art_runtime_probe_source
              << '\n';
+    }
+    if (!report.runtime_probe_inventory_json_path.empty()) {
+      output << "ART Runtime Probe Inventory Path: "
+             << report.runtime_probe_inventory_json_path << '\n';
+    }
+    if (!report.runtime_probe_detection_reason.empty()) {
+      output << "ART Runtime Probe Detection Reason: "
+             << report.runtime_probe_detection_reason << '\n';
     }
     output << "Runtime Probe Ready: "
            << (report.runtime_probe_ready ? "yes" : "no") << '\n';
@@ -1377,6 +1399,10 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
         const auto diagnostics = BuildNativePreflightDiagnostics(
             spec.package_name);
         report.art_runtime_probe_source = diagnostics.art_runtime_probe_source;
+        report.runtime_probe_inventory_json_path =
+            diagnostics.runtime_probe_inventory_json_path;
+        report.runtime_probe_detection_reason =
+            diagnostics.runtime_probe_detection_reason;
         report.bootstrap_manifest_path = diagnostics.bootstrap_manifest_path;
         report.runtime_health_json_path = diagnostics.runtime_health_json_path;
         report.runtime_health_trace_jsonl_path =
@@ -1686,6 +1712,10 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
         report.bootstrap_execution_runner_state_json_path =
             execution.runner_state_json_path;
         report.art_runtime_probe_source = execution.art_runtime_probe_source;
+        report.runtime_probe_inventory_json_path =
+            execution.art_runtime_probe_inventory_path;
+        report.runtime_probe_detection_reason =
+            execution.art_runtime_probe_detection_reason;
         const auto health = RunRuntimeHealthFixture(
             bootstrap.bootstrap_manifest_path, "baseline");
         report.runtime_health_json_path = health.health_json_path;

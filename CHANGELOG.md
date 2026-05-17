@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.77 - 2026-05-17
+
+- Record the host ART gate as a first-class diagnostic contract: `native-art-classloader-fixture` and `native-art-runtime-smoke` now materialize `art/art-runtime-probe-inventory.json` and a deterministic probe-detection reason that explain which override, fixed-path, and PATH-based probe candidates were examined and why one was selected or none was usable.
+- Thread that evidence through the public native bridge so `preflight-runtime native`, `verify-package native`, and `launch-package native` now expose `ART Runtime Probe Inventory Path` plus `ART Runtime Probe Detection Reason` alongside the existing health, recovery, and replay artifacts.
+- Add regression coverage that pins the new probe-inventory contract across override-backed runtime-smoke output, host-ART-missing native preflight output, and host-ART-missing native launch output, then refresh the README, phased plan, self-healing runtime note, status text, and step log to keep the repo honest about this deeper default-path host ART diagnosis seam.
+
 ## v0.1.76 - 2026-05-18
 
 - Refresh the self-healing docs so they say more plainly what a successful self-healing pass means today: truthful diagnosis, bounded next-step selection, replayable artifacts, and no fake launch claims while execution is still blocked.

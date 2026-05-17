@@ -31,6 +31,7 @@ struct NativeArtClassloaderFixtureReport {
   std::string artifact_root;
   std::string dex_inventory_path;
   std::string classloader_plan_path;
+  std::string art_runtime_probe_inventory_path;
   std::string trace_jsonl_path;
   bool dex_entries_present = false;
   bool manifest_targets_ready = false;
@@ -38,6 +39,7 @@ struct NativeArtClassloaderFixtureReport {
   bool art_runtime_detected = false;
   bool pathclassloader_probe_ready = false;
   std::string art_runtime_probe;
+  std::string art_runtime_probe_detection_reason;
   std::string exit_reason;
   std::vector<DexEntryMetadata> dex_entries;
   std::vector<std::string> target_class_names;

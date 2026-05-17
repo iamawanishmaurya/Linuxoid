@@ -143,6 +143,10 @@ std::string BuildActivityBootstrapPlanJson(
          << EscapeJson(report.runtime_smoke_result_json_path) << "\",\n"
          << "  \"class_resolution_result_json_path\": \""
          << EscapeJson(report.class_resolution_result_json_path) << "\",\n"
+         << "  \"art_runtime_probe_inventory_path\": \""
+         << EscapeJson(report.art_runtime_probe_inventory_path) << "\",\n"
+         << "  \"art_runtime_probe_detection_reason\": \""
+         << EscapeJson(report.art_runtime_probe_detection_reason) << "\",\n"
          << "  \"manifest_targets_ready\": "
          << (report.manifest_targets_ready ? "true" : "false") << ",\n"
          << "  \"classpath_plan_ready\": "
@@ -296,6 +300,12 @@ std::string BuildActivityBootstrapResultJson(
          << "  \"art_runtime_probe_source\": \""
          << EscapeJson(report.art_runtime_probe_source)
          << "\",\n"
+         << "  \"art_runtime_probe_inventory_path\": \""
+         << EscapeJson(report.art_runtime_probe_inventory_path)
+         << "\",\n"
+         << "  \"art_runtime_probe_detection_reason\": \""
+         << EscapeJson(report.art_runtime_probe_detection_reason)
+         << "\",\n"
          << "  \"runtime_class_resolution_succeeded\": "
          << (report.runtime_class_resolution_succeeded ? "true" : "false")
          << ",\n"
@@ -374,6 +384,10 @@ NativeArtActivityBootstrapFixtureReport BuildNativeArtActivityBootstrapFixture(
   report.safe_runtime_probe_available =
       runtime_smoke.safe_runtime_probe_available;
   report.art_runtime_probe_source = runtime_smoke.art_runtime_probe_source;
+  report.art_runtime_probe_inventory_path =
+      runtime_smoke.art_runtime_probe_inventory_path;
+  report.art_runtime_probe_detection_reason =
+      runtime_smoke.art_runtime_probe_detection_reason;
   report.runtime_class_resolution_succeeded =
       runtime_smoke.runtime_class_resolution_succeeded;
   report.bootstrap_dependencies = {

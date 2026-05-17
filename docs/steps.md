@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Host ART probe inventory contract
+  Action: Added failing regressions for probe-inventory artifact paths and detection-reason fields, then extended the ART classloader/runtime-smoke seam to write `art-runtime-probe-inventory.json` and threaded that evidence through native preflight and native launch rendering.
+  Result: Linuxoid can now explain which ART probe candidates were examined and why a host startup stayed blocked, and that explanation is visible directly in `native-art-runtime-smoke`, `preflight-runtime native`, and `launch-package native` without reopening deeper artifacts by hand.
+  Timestamp: 2026-05-17T23:40:00+05:30
+
 - Step: Self-healing docs clarification
   Action: Updated the README, self-healing runtime note, and phased plan to state the current self-healing command contract more plainly and to sharpen the line between bounded diagnosis/recovery planning and actual Android app execution.
   Result: The repo now says more directly that Linuxoid can diagnose, classify, choose bounded recovery, and replay failures well, but it still needs a real staged foreground app to cross the ART and bootstrap seams on the default host-side path before it can claim full Android execution.

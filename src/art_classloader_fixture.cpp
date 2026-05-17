@@ -97,6 +97,22 @@ bool IsExecutableFile(const std::string& path) {
   return (status.permissions() & executable_bits) != fs::perms::none;
 }
 
+struct ArtRuntimeProbeCandidate {
+  std::string path;
+  std::string source;
+  bool exists = false;
+  bool executable = false;
+  bool selected = false;
+  std::string status;
+};
+
+struct ArtRuntimeProbeSelection {
+  bool detected = false;
+  std::string selected_probe = "art_runtime_not_detected";
+  std::string detection_reason = "no_safe_host_art_probe_found";
+  std::vector<ArtRuntimeProbeCandidate> candidates;
+};
+
 bool IsDexArchiveEntry(const std::string& path) {
   if (path.size() < 10) {
     return false;
@@ -160,11 +176,10 @@ void AppendUnique(std::vector<std::string>& values, const std::string& value) {
   }
 }
 
-bool ExecutableExistsInPath(const std::string& executable_name,
-                            std::string* resolved_path) {
+std::string ResolveExecutableInPath(const std::string& executable_name) {
   const char* path_env = std::getenv("PATH");
   if (path_env == nullptr) {
-    return false;
+    return "";
   }
 
   std::stringstream path_stream(path_env);
@@ -181,54 +196,142 @@ bool ExecutableExistsInPath(const std::string& executable_name,
     const auto status = fs::status(candidate, error);
     if (!error && (status.permissions() & fs::perms::owner_exec) !=
                       fs::perms::none) {
-      if (resolved_path != nullptr) {
-        *resolved_path = candidate.string();
-      }
-      return true;
+      return candidate.string();
     }
   }
-  return false;
+  return "";
 }
 
-std::string DetectArtRuntimeProbe(bool* detected) {
+ArtRuntimeProbeSelection DetectArtRuntimeProbeSelection() {
+  ArtRuntimeProbeSelection selection;
+
   const char* override_path = std::getenv("LINUXOID_ART_RUNTIME_PROBE_OVERRIDE");
-  if (override_path != nullptr && override_path[0] != '\0' &&
-      IsExecutableFile(override_path)) {
-    *detected = true;
-    return override_path;
+  if (override_path != nullptr && override_path[0] != '\0') {
+    ArtRuntimeProbeCandidate candidate;
+    candidate.path = override_path;
+    candidate.source = "override";
+    candidate.exists = FileExists(candidate.path);
+    candidate.executable = IsExecutableFile(candidate.path);
+    candidate.status = candidate.executable ? "selected"
+                                            : (candidate.exists
+                                                   ? "override_not_executable"
+                                                   : "override_missing");
+    candidate.selected = candidate.executable;
+    selection.candidates.push_back(candidate);
+    if (candidate.selected) {
+      selection.detected = true;
+      selection.selected_probe = candidate.path;
+      selection.detection_reason = "override_probe_selected";
+      return selection;
+    }
   }
 
   if (EnvFlagEnabled("LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE")) {
-    *detected = false;
-    return "art_runtime_not_detected";
+    selection.detected = false;
+    selection.selected_probe = "art_runtime_not_detected";
+    selection.detection_reason = "host_probe_disabled";
+    return selection;
   }
 
-  const std::vector<std::string> file_candidates = {
-      "/apex/com.android.art/bin/dalvikvm",
-      "/apex/com.android.art/lib64/libart.so",
-      "/system/bin/dalvikvm",
-      "/system/lib64/libart.so",
-      "/system/lib/libart.so",
+  const std::vector<std::pair<std::string, std::string>> fixed_candidates = {
+      {"/apex/com.android.art/bin/dalvikvm", "known_path"},
+      {"/system/bin/dalvikvm", "known_path"},
+      {"/apex/com.android.art/bin/app_process", "known_path"},
+      {"/system/bin/app_process", "known_path"},
   };
-  for (const auto& candidate : file_candidates) {
-    if (FileExists(candidate)) {
-      *detected = true;
-      return candidate;
+  for (const auto& [path, source] : fixed_candidates) {
+    ArtRuntimeProbeCandidate candidate;
+    candidate.path = path;
+    candidate.source = source;
+    candidate.exists = FileExists(candidate.path);
+    candidate.executable = IsExecutableFile(candidate.path);
+    candidate.status = candidate.executable ? "host_candidate_ready"
+                                            : (candidate.exists
+                                                   ? "host_candidate_not_executable"
+                                                   : "host_candidate_missing");
+    selection.candidates.push_back(candidate);
+  }
+
+  const std::vector<std::string> path_lookup_names = {"dalvikvm",
+                                                      "app_process"};
+  for (const auto& executable_name : path_lookup_names) {
+    const std::string resolved = ResolveExecutableInPath(executable_name);
+    ArtRuntimeProbeCandidate candidate;
+    candidate.path = resolved.empty() ? "PATH:" + executable_name : resolved;
+    candidate.source = "path_lookup";
+    candidate.exists = !resolved.empty();
+    candidate.executable = !resolved.empty();
+    candidate.status = resolved.empty() ? "path_lookup_missing"
+                                        : "host_candidate_ready";
+    selection.candidates.push_back(candidate);
+  }
+
+  auto select_first_matching = [&](const std::string& suffix,
+                                   const std::string& detection_reason) {
+    for (auto& candidate : selection.candidates) {
+      if (!candidate.executable) {
+        continue;
+      }
+      if (candidate.path.size() < suffix.size() ||
+          candidate.path.substr(candidate.path.size() - suffix.size()) !=
+              suffix) {
+        continue;
+      }
+      candidate.selected = true;
+      candidate.status = "selected";
+      selection.detected = true;
+      selection.selected_probe = candidate.path;
+      selection.detection_reason = detection_reason;
+      return true;
     }
+    return false;
+  };
+
+  if (select_first_matching("/dalvikvm", "host_dalvikvm_selected") ||
+      select_first_matching("/app_process", "host_app_process_selected")) {
+    return selection;
   }
 
-  std::string resolved_path;
-  if (ExecutableExistsInPath("dalvikvm", &resolved_path)) {
-    *detected = true;
-    return resolved_path;
-  }
-  if (ExecutableExistsInPath("app_process", &resolved_path)) {
-    *detected = true;
-    return resolved_path;
-  }
+  selection.detected = false;
+  selection.selected_probe = "art_runtime_not_detected";
+  selection.detection_reason = "no_safe_host_art_probe_found";
+  return selection;
+}
 
-  *detected = false;
-  return "art_runtime_not_detected";
+std::string BuildArtRuntimeProbeInventoryJson(
+    const NativeArtClassloaderFixtureReport& report,
+    const std::vector<ArtRuntimeProbeCandidate>& candidates) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"package_name\": \"" << EscapeJson(report.package_name)
+         << "\",\n"
+         << "  \"install_id\": \"" << EscapeJson(report.install_id)
+         << "\",\n"
+         << "  \"art_runtime_detected\": "
+         << (report.art_runtime_detected ? "true" : "false") << ",\n"
+         << "  \"art_runtime_probe\": \"" << EscapeJson(report.art_runtime_probe)
+         << "\",\n"
+         << "  \"art_runtime_probe_detection_reason\": \""
+         << EscapeJson(report.art_runtime_probe_detection_reason)
+         << "\",\n"
+         << "  \"candidates\": [\n";
+  for (std::size_t index = 0; index < candidates.size(); ++index) {
+    const auto& candidate = candidates[index];
+    output << "    {\"path\": \"" << EscapeJson(candidate.path)
+           << "\", \"source\": \"" << EscapeJson(candidate.source)
+           << "\", \"exists\": " << (candidate.exists ? "true" : "false")
+           << ", \"executable\": "
+           << (candidate.executable ? "true" : "false")
+           << ", \"selected\": " << (candidate.selected ? "true" : "false")
+           << ", \"status\": \"" << EscapeJson(candidate.status) << "\"}";
+    if (index + 1 != candidates.size()) {
+      output << ",";
+    }
+    output << "\n";
+  }
+  output << "  ]\n"
+         << "}\n";
+  return output.str();
 }
 
 std::string BuildDexInventoryJson(
@@ -297,6 +400,12 @@ std::string BuildClassloaderPlanJson(
          << (report.pathclassloader_probe_ready ? "true" : "false") << ",\n"
          << "  \"art_runtime_probe\": \"" << EscapeJson(report.art_runtime_probe)
          << "\",\n"
+         << "  \"art_runtime_probe_inventory_path\": \""
+         << EscapeJson(report.art_runtime_probe_inventory_path)
+         << "\",\n"
+         << "  \"art_runtime_probe_detection_reason\": \""
+         << EscapeJson(report.art_runtime_probe_detection_reason)
+         << "\",\n"
          << "  \"dex_paths\": " << RenderJsonArray(dex_paths) << ",\n"
          << "  \"target_class_names\": "
          << RenderJsonArray(report.target_class_names) << ",\n"
@@ -324,6 +433,11 @@ void WriteTrace(const NativeArtClassloaderFixtureReport& report) {
         << "\"art_runtime_detected\": "
         << (report.art_runtime_detected ? "true" : "false") << ", "
         << "\"art_runtime_probe\": \"" << EscapeJson(report.art_runtime_probe)
+        << "\", "
+        << "\"art_runtime_probe_inventory_path\": \""
+        << EscapeJson(report.art_runtime_probe_inventory_path) << "\", "
+        << "\"art_runtime_probe_detection_reason\": \""
+        << EscapeJson(report.art_runtime_probe_detection_reason)
         << "\"}\n";
   trace << "{\"event_type\": \"classloader_plan_written\", "
         << "\"classpath_plan_ready\": "
@@ -396,6 +510,9 @@ NativeArtClassloaderFixtureReport RunNativeArtClassloaderFixture(
       (fs::path(report.artifact_root) / "dex-inventory.json").string();
   report.classloader_plan_path =
       (fs::path(report.artifact_root) / "classloader-plan.json").string();
+  report.art_runtime_probe_inventory_path =
+      (fs::path(report.artifact_root) / "art-runtime-probe-inventory.json")
+          .string();
   report.trace_jsonl_path =
       (fs::path(report.artifact_root) / "art-classloader-trace.jsonl").string();
 
@@ -437,7 +554,11 @@ NativeArtClassloaderFixtureReport RunNativeArtClassloaderFixture(
 
   report.classpath_plan_ready =
       report.dex_entries_present && report.manifest_targets_ready;
-  report.art_runtime_probe = DetectArtRuntimeProbe(&report.art_runtime_detected);
+  const auto art_runtime_probe_selection = DetectArtRuntimeProbeSelection();
+  report.art_runtime_detected = art_runtime_probe_selection.detected;
+  report.art_runtime_probe = art_runtime_probe_selection.selected_probe;
+  report.art_runtime_probe_detection_reason =
+      art_runtime_probe_selection.detection_reason;
   report.pathclassloader_probe_ready =
       report.classpath_plan_ready && report.art_runtime_detected;
 
@@ -452,6 +573,10 @@ NativeArtClassloaderFixtureReport RunNativeArtClassloaderFixture(
   }
 
   WriteTextFile(report.dex_inventory_path, BuildDexInventoryJson(report));
+  WriteTextFile(
+      report.art_runtime_probe_inventory_path,
+      BuildArtRuntimeProbeInventoryJson(report,
+                                        art_runtime_probe_selection.candidates));
   WriteTextFile(report.classloader_plan_path, BuildClassloaderPlanJson(report));
   WriteTrace(report);
   return report;
@@ -473,6 +598,8 @@ std::string RenderNativeArtClassloaderFixtureJson(
          << EscapeJson(report.dex_inventory_path) << "\",\n"
          << "  \"classloader_plan_path\": \""
          << EscapeJson(report.classloader_plan_path) << "\",\n"
+         << "  \"art_runtime_probe_inventory_path\": \""
+         << EscapeJson(report.art_runtime_probe_inventory_path) << "\",\n"
          << "  \"trace_jsonl_path\": \""
          << EscapeJson(report.trace_jsonl_path) << "\",\n"
          << "  \"dex_entries_present\": "
@@ -486,6 +613,9 @@ std::string RenderNativeArtClassloaderFixtureJson(
          << "  \"pathclassloader_probe_ready\": "
          << (report.pathclassloader_probe_ready ? "true" : "false") << ",\n"
          << "  \"art_runtime_probe\": \"" << EscapeJson(report.art_runtime_probe)
+         << "\",\n"
+         << "  \"art_runtime_probe_detection_reason\": \""
+         << EscapeJson(report.art_runtime_probe_detection_reason)
          << "\",\n"
          << "  \"target_class_names\": "
          << RenderJsonArray(report.target_class_names) << ",\n"

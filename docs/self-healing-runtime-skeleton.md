@@ -70,11 +70,16 @@ What that means **today**:
   - `art/art-class-resolution-result.json`
 - Linuxoid now also has a host-ART runtime smoke seam that builds on that plan:
   - `native-art-runtime-smoke`
+  - `art/art-runtime-probe-inventory.json`
   - `art/runtime-smoke-invocation-plan.json`
   - `art/runtime-smoke-invocation.log`
   - `art/runtime-smoke-trace.jsonl`
   - `art/runtime-smoke-result.json`
   - a deterministic manifest-derived class target for the first real host-side class-resolution attempt when `dalvikvm` is safely available
+- Linuxoid now also records the host ART gate itself as a diagnosable contract instead of a black box:
+  - candidate inventory for override, fixed host paths, and PATH lookups
+  - explicit `art_runtime_probe_detection_reason`
+  - public `ART Runtime Probe Inventory Path` and `ART Runtime Probe Detection Reason` lines in native preflight and launch reports
 - Linuxoid now also has a deterministic activity-bootstrap seam on top of that runtime-smoke evidence:
   - `native-art-activity-bootstrap-fixture`
   - `art/activity-bootstrap-plan.json`
@@ -104,6 +109,7 @@ What that means **today**:
 - Runtime health now treats that deeper success path honestly too: when override-backed or real runtime class resolution succeeds and the supervised bootstrap runner completes, `dex_classloader_readiness` and `bootstrap_execution_readiness` can now resolve to `ready` instead of remaining generically pending.
 - Runtime health now also treats DEX-only bundles more honestly: if a staged APK declares no native libraries, `native_loading` is classified as `not_required` instead of being treated like a failed native-loader dependency.
 - Linuxoid now also exposes a real local `native` runtime bridge for staged target discovery, staged package inspection, staged-package preflight, and bootstrap-execution handoff. That means self-healing no longer depends only on attached Android targets to exercise the public runtime surface.
+- Linuxoid now also carries the ART probe inventory and detection rationale through that native bridge, so a blocked default-path host startup can show exactly which probe candidates were examined and why no usable host runtime was selected.
 - Linuxoid writes stable artifacts for diagnosis:
   - `runtime-health.json`
   - `runtime-health-trace.jsonl`

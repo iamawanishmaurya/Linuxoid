@@ -2574,6 +2574,55 @@ void TestNativeArtRuntimeSmokeUsesFixtureRuntimeOverride() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeArtRuntimeSmokeRecordsProbeInventoryAndReason() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateRuntimeHealthBootstrapFixture(
+      "linuxoid-art-runtime-probe-inventory", true, true);
+  const fs::path runtime_probe = fixture.root / "linuxoid-art-runtime-probe";
+  {
+    std::ofstream output(runtime_probe);
+    output << "#!/bin/sh\n";
+    output << "printf '%s\\n' \"runtime-fixture:$*\"\n";
+    output << "exit 0\n";
+  }
+  fs::permissions(runtime_probe,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable runtime_override(
+      "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+  const auto report = wfa::RunNativeArtRuntimeSmokeFixture(
+      fixture.bootstrap.bootstrap_manifest_path);
+
+  Expect(!report.art_runtime_probe_inventory_path.empty(),
+         "expected runtime smoke probe inventory artifact path");
+  Expect(fs::exists(report.art_runtime_probe_inventory_path),
+         "expected runtime smoke probe inventory artifact");
+  Expect(report.art_runtime_probe_detection_reason ==
+             "override_probe_selected",
+         "expected override-backed probe selection reason");
+  const std::string inventory_json =
+      ReadTextFile(report.art_runtime_probe_inventory_path);
+  Expect(inventory_json.find(runtime_probe.string()) != std::string::npos,
+         "expected override probe path in inventory json");
+  Expect(inventory_json.find("\"selected\": true") != std::string::npos,
+         "expected selected probe marker in inventory json");
+  const auto rendered = wfa::RenderNativeArtRuntimeSmokeFixtureJson(report);
+  Expect(rendered.find("\"art_runtime_probe_inventory_path\": \"" +
+                           report.art_runtime_probe_inventory_path + "\"") !=
+             std::string::npos,
+         "expected probe inventory path in runtime smoke json");
+  Expect(rendered.find("\"art_runtime_probe_detection_reason\": "
+                       "\"override_probe_selected\"") !=
+             std::string::npos,
+         "expected probe detection reason in runtime smoke json");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeArtActivityBootstrapFixtureWritesStableArtifacts() {
   namespace fs = std::filesystem;
   auto fixture = CreateRuntimeHealthBootstrapFixture(
@@ -5061,6 +5110,42 @@ void TestNativeRuntimePreflightBlocksWithoutHostArt() {
   fs::remove_all(fixture.root);
 }
 
+void TestNativeRuntimePreflightSurfacesProbeInventoryAndReason() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight-probe-inventory");
+  const fs::path native_root = fixture.root / "native";
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native preflight should not shell out");
+      });
+
+  Expect(!report.runtime_probe_inventory_json_path.empty(),
+         "expected probe inventory path in native preflight");
+  Expect(fs::exists(report.runtime_probe_inventory_json_path),
+         "expected probe inventory artifact in native preflight");
+  Expect(report.runtime_probe_detection_reason == "host_probe_disabled",
+         "expected disabled-host probe detection reason in native preflight");
+  const auto rendered = wfa::RenderRuntimePreflightReport(report);
+  Expect(rendered.find("ART Runtime Probe Inventory Path: ") !=
+             std::string::npos,
+         "expected probe inventory path line in native preflight render");
+  Expect(rendered.find("ART Runtime Probe Detection Reason: "
+                       "host_probe_disabled") != std::string::npos,
+         "expected probe detection reason line in native preflight render");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution() {
   namespace fs = std::filesystem;
   auto fixture = CreateNativeRuntimePackageFixture(
@@ -5378,6 +5463,44 @@ void TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt() {
                    "bootstrap_execution_readiness") !=
              report.runtime_failing_subsystems.end(),
          "expected bootstrap execution failure without host ART");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchSurfacesProbeInventoryAndReason() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-probe-inventory");
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native launch should not shell out through runtime bridge runner");
+      });
+
+  Expect(!report.runtime_probe_inventory_json_path.empty(),
+         "expected probe inventory path in native launch report");
+  Expect(fs::exists(report.runtime_probe_inventory_json_path),
+         "expected probe inventory artifact in native launch report");
+  Expect(report.runtime_probe_detection_reason == "host_probe_disabled",
+         "expected disabled-host probe detection reason in native launch");
+  const auto rendered = wfa::RenderInstalledAppLaunchReport(report);
+  Expect(rendered.find("ART Runtime Probe Inventory Path: ") !=
+             std::string::npos,
+         "expected probe inventory path line in native launch render");
+  Expect(rendered.find("ART Runtime Probe Detection Reason: "
+                       "host_probe_disabled") != std::string::npos,
+         "expected probe detection reason line in native launch render");
 
   fs::remove_all(fixture.root);
 }
@@ -7355,6 +7478,7 @@ int main() {
     TestNativeArtRuntimeSmokeHandlesRuntimeAvailabilityHonestly();
     TestNativeArtRuntimeSmokeCommandWritesStableJson();
     TestNativeArtRuntimeSmokeUsesFixtureRuntimeOverride();
+    TestNativeArtRuntimeSmokeRecordsProbeInventoryAndReason();
     TestNativeArtActivityBootstrapFixtureWritesStableArtifacts();
     TestNativeArtActivityBootstrapTraceCapturesApplicationBootstrapSequence();
     TestNativeArtActivityBootstrapFixtureHandlesRuntimeAvailabilityHonestly();
@@ -7378,10 +7502,12 @@ int main() {
     TestNativeRuntimeMetadataReadsStagedPackage();
     TestNativeRuntimePreflightUsesStagedMetadata();
     TestNativeRuntimePreflightBlocksWithoutHostArt();
+    TestNativeRuntimePreflightSurfacesProbeInventoryAndReason();
     TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
     TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault();
     TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();
     TestNativeRuntimeLaunchSurfacesBlockedSubsystemsWithoutHostArt();
+    TestNativeRuntimeLaunchSurfacesProbeInventoryAndReason();
     TestDesktopLaunchArtifactsForImeApp();
     TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();
     TestDesktopLaunchArtifactsRejectCrossPackageComponent();

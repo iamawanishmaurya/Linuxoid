@@ -87,7 +87,7 @@ flowchart TB
     NativeBridge --> NativeBridgeArtifact["native-window-bridge-metadata.json / events.jsonl"]
     NativeInput --> NativeInputArtifact["native-input-queue-metadata.json / events.jsonl"]
     NativeBinder --> NativeBinderArtifact["binder/service-manager.json / lookups / transactions"]
-    NativeArt --> NativeArtArtifact["art/classloader-plan.json / dex-inventory.json / trace.jsonl"]
+    NativeArt --> NativeArtArtifact["art/classloader-plan.json / dex-inventory.json / art-runtime-probe-inventory.json / trace.jsonl"]
     NativeArtResolve --> NativeArtResolveArtifact["art/class-resolution-map.json / result.json / trace.jsonl"]
     NativeArtRuntime --> NativeArtRuntimeArtifact["art/runtime-smoke-result.json / invocation-plan.json / invocation.log / trace.jsonl"]
     NativeArtBootstrap --> NativeArtBootstrapArtifact["art/activity-bootstrap-plan.json / result.json / trace.jsonl"]
@@ -221,6 +221,11 @@ Today, **self-healing** in Linuxoid means:
   - `canonical_trace_source_names`
   - `missing_trace_source_count`
   - `trace_bundle_complete`
+- Linuxoid now also records the host ART probe gate as a first-class diagnosable seam:
+  - `art/art-runtime-probe-inventory.json`
+  - `ART Runtime Probe Inventory Path`
+  - `ART Runtime Probe Detection Reason`
+  - deterministic candidate inventory and selected-probe rationale for override, host, and missing-runtime paths
 - Linuxoid now also surfaces that replay contract directly through the public native bridge, so `preflight-runtime native`, `verify-package native`, and `launch-package native` name the health trace JSONL, recovery-actions JSONL, merged diagnostic events JSONL, trace index, and replay completeness counts without forcing callers to open the deeper health JSON first.
 - Linuxoid can persist those decisions into stable artifacts for agents, harnesses, and replay tooling:
   - `runtime-health.json`
@@ -259,6 +264,7 @@ Today, **self-healing** in Linuxoid means:
   - `attempt_host_bootstrap_execution`
 - Linuxoid now executes that seam through the generated runner script when a safe host runtime is available, and it preserves raw runner plus per-phase exit codes for replay and diagnosis.
 - Linuxoid now also supports a Linuxoid-owned ART probe override for deterministic fixture runs, so the runtime-smoke and bootstrap-execution seams can be exercised end to end even on hosts that do not ship ART locally.
+- Linuxoid now also carries that ART probe inventory and detection rationale through runtime smoke, native preflight, native verification, and native launch reports, so the default-path host ART gate is diagnosable without reverse-engineering the deeper artifacts by hand.
 - Linuxoid runtime health now recognizes that deeper success path too: when the ART-style class-resolution seam and supervised bootstrap-execution seam both succeed, `dex_classloader_readiness` and `bootstrap_execution_readiness` now converge to `ready` instead of staying stuck in a generic pending state.
 - Linuxoid now also distinguishes **DEX-only** bundles from broken native loading: when an APK declares no native libraries at all, `native_loading` resolves to `not_required` instead of falsely reporting a blocked native-loader failure.
 - Linuxoid now also exposes a real local `native` runtime bridge for staged package discovery, staged metadata lookup, staged-package preflight, and bootstrap-execution handoff, so self-healing can reason about a Linuxoid-owned local target instead of only attached Android runtimes.
