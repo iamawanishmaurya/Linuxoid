@@ -231,6 +231,120 @@ struct RuntimeHealthBootstrapFixture {
   wfa::NativeActivityBootstrap bootstrap;
 };
 
+struct NativeRuntimePackageFixture {
+  std::filesystem::path root;
+  std::filesystem::path compat_root;
+  std::string package_name;
+  std::string install_id;
+  std::string launcher_component;
+  std::string install_root;
+  std::string apk_path;
+};
+
+NativeRuntimePackageFixture CreateNativeRuntimePackageFixture(
+    const std::string& fixture_name, bool include_classes_dex = true,
+    bool include_input_method_service = false) {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / fixture_name;
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path compat_root = root / "compat";
+
+  const auto layout = wfa::BuildPackageLayout(
+      {.package_name = "com.example.nativebridge",
+       .install_id = "vc9-2.0.0",
+       .version_code = 9},
+      compat_root.string());
+  fs::create_directories(layout.host_package_root);
+  fs::create_directories(fs::path(layout.host_package_root) / "assets" /
+                         "config");
+  fs::create_directories(fs::path(layout.host_package_root) / "res" / "raw");
+
+  std::vector<std::pair<std::string, std::string>> archive_entries = {
+      {"AndroidManifest.xml",
+       include_input_method_service
+           ? R"(<manifest package="com.example.nativebridge">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.nativebridge.App">
+    <activity android:name="com.example.nativebridge.MainActivity"/>
+    <service android:name="com.example.nativebridge.ImeService" android:permission="android.permission.BIND_INPUT_METHOD"/>
+  </application>
+</manifest>
+)"
+           : R"(<manifest package="com.example.nativebridge">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.nativebridge.App">
+    <activity android:name="com.example.nativebridge.MainActivity"/>
+  </application>
+</manifest>
+)"},
+      {"assets/config/hello.txt", "hello native runtime bridge\n"},
+      {"resources.arsc", "arsc"},
+  };
+  if (include_classes_dex) {
+    archive_entries.push_back(
+        {"classes.dex",
+         BuildResolvableDexPayload({"Lcom/example/nativebridge/App;",
+                                    "Lcom/example/nativebridge/MainActivity;"})});
+  }
+  WriteStoredZipFixture(fs::path(layout.host_package_root) / "base.apk",
+                        archive_entries);
+
+  {
+    std::ofstream manifest(fs::path(layout.host_package_root) /
+                           "AndroidManifest.xml");
+    manifest << (include_input_method_service
+                     ? R"(<manifest package="com.example.nativebridge">
+  <application android:name="com.example.nativebridge.App">
+    <activity android:name="com.example.nativebridge.MainActivity"/>
+    <service android:name="com.example.nativebridge.ImeService" android:permission="android.permission.BIND_INPUT_METHOD"/>
+  </application>
+</manifest>
+)"
+                     : R"(<manifest package="com.example.nativebridge">
+  <application android:name="com.example.nativebridge.App">
+    <activity android:name="com.example.nativebridge.MainActivity"/>
+  </application>
+</manifest>
+)");
+  }
+  {
+    std::ofstream assessment(fs::path(layout.host_package_root) /
+                             "assessment.txt");
+    assessment << "native runtime package fixture\n";
+  }
+  {
+    std::ofstream asset(fs::path(layout.host_package_root) / "assets" /
+                        "config" / "hello.txt");
+    asset << "hello native runtime bridge\n";
+  }
+  {
+    std::ofstream metadata(fs::path(layout.host_package_root) / "manifest.json");
+    metadata << "{\n"
+             << "  \"package_name\": \"com.example.nativebridge\",\n"
+             << "  \"version_name\": \"2.0.0\",\n"
+             << "  \"version_code\": 9,\n"
+             << "  \"min_sdk\": 24,\n"
+             << "  \"target_sdk\": 35,\n"
+             << "  \"install_id\": \"vc9-2.0.0\",\n"
+             << "  \"launcher_component\": "
+                "\"com.example.nativebridge/.MainActivity\",\n"
+             << "  \"earliest_load_phase\": \"P4\",\n"
+             << "  \"earliest_ui_phase\": \"P6\",\n"
+             << "  \"earliest_full_use_phase\": \"P6\"\n"
+             << "}\n";
+  }
+
+  return {.root = root,
+          .compat_root = compat_root,
+          .package_name = "com.example.nativebridge",
+          .install_id = "vc9-2.0.0",
+          .launcher_component = "com.example.nativebridge/.MainActivity",
+          .install_root = layout.host_package_root,
+          .apk_path =
+              (fs::path(layout.host_package_root) / "base.apk").string()};
+}
+
 RuntimeHealthBootstrapFixture CreateRuntimeHealthBootstrapFixture(
     const std::string& fixture_name, bool include_classes_dex,
     bool include_native_library,
@@ -4150,6 +4264,163 @@ void TestActivityLaunchReportRendering() {
          "expected launch success line");
 }
 
+void TestNativeRuntimeDiscoveryUsesCompatRootOverride() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-discovery");
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+
+  const auto report = wfa::DiscoverRuntimeTargetsWithRunner(
+      wfa::RuntimeBackendKind::kNative,
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native discovery should not shell out");
+      });
+
+  Expect(report.backend_available, "expected native backend availability");
+  Expect(report.targets.size() == 1, "expected one native runtime target");
+  Expect(report.targets.front().serial == "linuxoid-native",
+         "expected deterministic native runtime serial");
+  Expect(report.targets.front().online, "expected native runtime online");
+  Expect(report.backend_check_output.find(fixture.compat_root.string()) !=
+             std::string::npos,
+         "expected compat root in native discovery output");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeMetadataReadsStagedPackage() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-metadata");
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+
+  const auto report = wfa::QueryInstalledPackageMetadataWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native metadata lookup should not shell out");
+      });
+
+  Expect(report.package_visible, "expected staged native package visibility");
+  Expect(report.launcher_resolved, "expected native launcher resolution");
+  Expect(report.resolved_component == fixture.launcher_component,
+         "expected launcher component from staged metadata");
+  Expect(report.install_path == fixture.apk_path,
+         "expected staged install path");
+  Expect(report.version_code == "9", "expected staged version code");
+  Expect(report.version_name == "2.0.0", "expected staged version name");
+  Expect(report.notes.find("native package metadata resolved") !=
+             std::string::npos,
+         "expected native metadata success note");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimePreflightUsesStagedMetadata() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight");
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native preflight should not shell out");
+      });
+
+  Expect(report.backend_available, "expected native backend availability");
+  Expect(report.target_discovered, "expected native target discovery");
+  Expect(report.target_selected, "expected native target selection");
+  Expect(report.target_online, "expected native target online");
+  Expect(report.package_visible, "expected staged package visibility");
+  Expect(report.component_ready, "expected native component readiness");
+  Expect(report.ready_for_launch, "expected native preflight readiness");
+  Expect(report.component == fixture.launcher_component,
+         "expected launcher component in preflight result");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path runtime_probe = fixture.root / "linuxoid-art-runtime-probe";
+  {
+    std::ofstream output(runtime_probe);
+    output << "#!/bin/sh\n";
+    output << "case \"$*\" in\n";
+    output << "  *linuxoid.bootstrap.mode=application*) printf '%s\\n' "
+              "'application-runtime-ok'; exit 0 ;;\n";
+    output << "  *linuxoid.bootstrap.mode=activity*) printf '%s\\n' "
+              "'activity-runtime-ok'; exit 0 ;;\n";
+    output << "  *) printf '%s\\n' 'runtime-fixture-ok'; exit 0 ;;\n";
+    output << "esac\n";
+  }
+  fs::permissions(runtime_probe,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable runtime_override(
+      "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native launch should not shell out through runtime bridge runner");
+      });
+
+  Expect(report.launch_ok,
+         "expected override-backed native launch success classification");
+  Expect(report.component == fixture.launcher_component,
+         "expected native launch component");
+  Expect(report.output.find("\"execution_succeeded\": true") !=
+             std::string::npos,
+         "expected successful bootstrap execution output");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-launch-noncandidate", true, true);
+  const fs::path native_root = fixture.root / "native";
+
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+
+  const auto report = wfa::LaunchInstalledAppWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error(
+            "native launch should not shell out through runtime bridge runner");
+      });
+
+  Expect(!report.launch_ok,
+         "expected non-candidate native launch to fail honestly");
+  Expect(report.output.find("native spike candidate") != std::string::npos,
+         "expected native candidate failure reason in launch output");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestDesktopLaunchArtifactsForImeApp() {
   namespace fs = std::filesystem;
   const fs::path root = fs::temp_directory_path() / "wfa desktop test";
@@ -4938,7 +5209,7 @@ void TestAttachedAdbDiscoveryTimeoutReturnsUnavailable() {
          "expected timeout note in discovery output");
 }
 
-void TestNativeRuntimePreflightReportsNotImplemented() {
+void TestNativeRuntimePreflightReportsMissingStagedPackageHonestly() {
   const auto runner = [](const std::string&) -> wfa::CommandResult {
     throw std::runtime_error("native preflight should not execute commands");
   };
@@ -4948,12 +5219,16 @@ void TestNativeRuntimePreflightReportsNotImplemented() {
        .package_name = "com.example.demo"},
       runner);
 
-  Expect(!report.backend_available,
-         "expected native backend to report unavailable");
+  Expect(report.backend_available,
+         "expected native backend availability");
+  Expect(report.target_discovered,
+         "expected native target discovery");
+  Expect(report.target_selected,
+         "expected native target selection");
   Expect(!report.ready_for_launch,
-         "expected native preflight to fail honestly");
-  Expect(report.notes.find("not implemented") != std::string::npos,
-         "expected native preflight note");
+         "expected native preflight to stay unready without staged package");
+  Expect(report.notes.find("not staged") != std::string::npos,
+         "expected missing staged-package note");
 }
 
 void TestWaydroidDesktopLaunchArtifacts() {
@@ -5853,6 +6128,11 @@ int main() {
     TestNativeExecuteStubRunsFixtureNativeActivity();
     TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();
+    TestNativeRuntimeDiscoveryUsesCompatRootOverride();
+    TestNativeRuntimeMetadataReadsStagedPackage();
+    TestNativeRuntimePreflightUsesStagedMetadata();
+    TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
+    TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();
     TestDesktopLaunchArtifactsForImeApp();
     TestDesktopLaunchArtifactsForLoadedApkUseStagedPath();
     TestDesktopLaunchArtifactsRejectCrossPackageComponent();
@@ -5870,7 +6150,7 @@ int main() {
     TestAttachedAdbPreflightResolvesComponentWhenOmitted();
     TestAttachedAdbPreflightRequiresSerialWhenMultipleTargetsExist();
     TestAttachedAdbDiscoveryTimeoutReturnsUnavailable();
-    TestNativeRuntimePreflightReportsNotImplemented();
+    TestNativeRuntimePreflightReportsMissingStagedPackageHonestly();
     TestWaydroidDesktopLaunchArtifacts();
     TestInstalledPackageDesktopLaunchArtifactsRequireAttachedAdbFields();
     TestWaydroidDesktopLaunchArtifactsRejectInvalidPackage();

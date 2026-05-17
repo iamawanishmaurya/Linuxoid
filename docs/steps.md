@@ -1537,3 +1537,8 @@
   Action: Added native-library summary fields to the bootstrap plan, taught runtime health to classify dex-only bundles as `native_loading: not_required`, and added a regression that strips those fields from a generated manifest to prove older staged bundles still replay cleanly.
   Result: Linuxoid now distinguishes “no native libs declared” from “native loading failed,” while keeping runtime-health and replay commands backward-compatible with already-materialized bootstrap manifests.
   Timestamp: 2026-05-17T23:55:00+05:30
+
+- Step: Native runtime bridge local staged-package path GREEN
+  Action: Replaced the `native` runtime bridge hard stub with a Linuxoid-owned local compat-root implementation for staged target discovery, staged package inspection, staged-package preflight, and bootstrap-execution handoff, then added regression coverage for override-backed success and honest non-candidate failure.
+  Result: Linuxoid now exposes a real `linuxoid-native` target, can inspect and preflight staged packages without attached ADB or Waydroid, and can route candidate bundles into the supervised bootstrap-execution seam while still failing honestly when a staged package is not a native spike candidate.
+  Timestamp: 2026-05-17T23:59:00+05:30

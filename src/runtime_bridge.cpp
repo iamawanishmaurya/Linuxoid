@@ -1,11 +1,15 @@
 #include "wfa/runtime_bridge.hpp"
 
+#include "wfa/art_bootstrap_execution_fixture.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/checkpoint.hpp"
+#include "wfa/native_spike.hpp"
 
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -42,6 +46,7 @@ std::string RenderRuntimeBackendName(RuntimeBackendKind backend) {
 namespace {
 
 constexpr int kAdbDiscoveryTimeoutSeconds = 5;
+constexpr const char* kNativeRuntimeSerial = "linuxoid-native";
 
 struct StatusQueryAttempt {
   bool ok = false;
@@ -71,6 +76,52 @@ std::string QuoteForShell(const std::string& value) {
 
 std::string WrapWithTimeout(const std::string& command, int seconds) {
   return "timeout " + std::to_string(seconds) + "s " + command;
+}
+
+std::string ReadTextFile(const std::filesystem::path& path) {
+  std::ifstream input(path);
+  if (!input) {
+    throw std::runtime_error("unable to read file: " + path.string());
+  }
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  return buffer.str();
+}
+
+std::string ResolveNativeCompatRoot() {
+  if (const char* override_root = std::getenv("LINUXOID_NATIVE_COMPAT_ROOT");
+      override_root != nullptr && override_root[0] != '\0') {
+    return override_root;
+  }
+  return "/var/lib/wfa";
+}
+
+std::string ResolveNativeSpikeRoot() {
+  if (const char* override_root = std::getenv("LINUXOID_NATIVE_SPIKE_ROOT");
+      override_root != nullptr && override_root[0] != '\0') {
+    return override_root;
+  }
+  return "/tmp/linuxoid-native-spike";
+}
+
+std::string ResolveCompatctlPathForNativeRuntime() {
+  if (const char* override_path = std::getenv("LINUXOID_COMPATCTL_PATH");
+      override_path != nullptr && override_path[0] != '\0') {
+    return override_path;
+  }
+  return "compatctl";
+}
+
+std::string DetectHostAbi() {
+#if defined(__x86_64__)
+  return "x86_64";
+#elif defined(__aarch64__)
+  return "arm64-v8a";
+#elif defined(__arm__)
+  return "armeabi-v7a";
+#else
+  return "unknown";
+#endif
 }
 
 CommandResult RunCommandCaptureAllowFailure(const std::string& command) {
@@ -141,6 +192,202 @@ std::string TrimWhitespace(std::string value) {
     value.pop_back();
   }
   return value;
+}
+
+std::string ExtractJsonStringOrEmpty(const std::string& json,
+                                     const std::string& key) {
+  const std::regex pattern("\"" + key + R"(\"\s*:\s*\"([^\"]*)\")");
+  std::smatch match;
+  if (std::regex_search(json, match, pattern) && match.size() == 2) {
+    return match[1].str();
+  }
+  return "";
+}
+
+int ExtractJsonIntOrDefault(const std::string& json, const std::string& key,
+                            int fallback) {
+  const std::regex pattern("\"" + key + R"(\"\s*:\s*(-?\d+))");
+  std::smatch match;
+  if (std::regex_search(json, match, pattern) && match.size() == 2) {
+    return std::stoi(match[1].str());
+  }
+  return fallback;
+}
+
+struct NativePackageLookup {
+  std::string compat_root;
+  std::string package_name;
+  std::string install_id;
+  std::string install_root;
+  std::string manifest_path;
+  std::string apk_path;
+  std::string launcher_component;
+  std::string version_code;
+  std::string version_name;
+  int min_sdk = 0;
+  int target_sdk = 0;
+  bool package_visible = false;
+  bool launcher_resolved = false;
+  std::string notes;
+  std::string package_check_output;
+  std::string launcher_query_output;
+  std::string path_query_output;
+  std::string dump_output;
+};
+
+NativePackageLookup ResolveNativePackageLookup(const std::string& package_name) {
+  namespace fs = std::filesystem;
+
+  NativePackageLookup lookup;
+  lookup.compat_root = ResolveNativeCompatRoot();
+  lookup.package_name = package_name;
+
+  const fs::path package_root =
+      fs::path(lookup.compat_root) / "users/0/packages" / package_name;
+  std::ostringstream package_check_output;
+  package_check_output << "native compat root: " << lookup.compat_root << "\n";
+  package_check_output << "package root: " << package_root.string() << "\n";
+
+  if (!fs::exists(package_root) || !fs::is_directory(package_root)) {
+    package_check_output << "package staged: no\n";
+    lookup.package_check_output = package_check_output.str();
+    lookup.notes = "package is not staged in the native compat root";
+    return lookup;
+  }
+
+  std::vector<std::string> install_ids;
+  for (const auto& entry : fs::directory_iterator(package_root)) {
+    if (!entry.is_directory()) {
+      continue;
+    }
+    install_ids.push_back(entry.path().filename().string());
+  }
+  std::sort(install_ids.begin(), install_ids.end());
+  package_check_output << "package staged: yes\n";
+  package_check_output << "install count: " << install_ids.size() << "\n";
+
+  if (install_ids.empty()) {
+    lookup.package_check_output = package_check_output.str();
+    lookup.notes = "package directory exists but no install roots were found";
+    return lookup;
+  }
+
+  lookup.package_visible = true;
+  lookup.install_id = install_ids.back();
+  lookup.install_root = (package_root / lookup.install_id).string();
+  lookup.manifest_path =
+      (fs::path(lookup.install_root) / "manifest.json").string();
+  lookup.apk_path = (fs::path(lookup.install_root) / "base.apk").string();
+  package_check_output << "selected install id: " << lookup.install_id << "\n";
+  package_check_output << "selected install root: " << lookup.install_root
+                       << "\n";
+
+  if (fs::exists(lookup.manifest_path)) {
+    const std::string manifest_json = ReadTextFile(lookup.manifest_path);
+    lookup.version_code = ExtractJsonStringOrEmpty(manifest_json, "version_code");
+    if (lookup.version_code.empty()) {
+      const std::regex int_pattern(R"("version_code"\s*:\s*([0-9]+))");
+      std::smatch match;
+      if (std::regex_search(manifest_json, match, int_pattern) &&
+          match.size() == 2) {
+        lookup.version_code = match[1].str();
+      }
+    }
+    lookup.version_name =
+        ExtractJsonStringOrEmpty(manifest_json, "version_name");
+    lookup.min_sdk = ExtractJsonIntOrDefault(manifest_json, "min_sdk", 0);
+    lookup.target_sdk = ExtractJsonIntOrDefault(manifest_json, "target_sdk", 0);
+    lookup.launcher_component =
+        ExtractJsonStringOrEmpty(manifest_json, "launcher_component");
+    lookup.launcher_resolved = !lookup.launcher_component.empty();
+    lookup.dump_output = manifest_json;
+  }
+
+  lookup.path_query_output = lookup.apk_path + "\n";
+  lookup.launcher_query_output =
+      lookup.launcher_component.empty()
+          ? "launcher component not present in staged manifest metadata\n"
+          : lookup.launcher_component + "\n";
+  lookup.package_check_output = package_check_output.str();
+  lookup.notes = lookup.launcher_resolved
+                     ? "native package metadata resolved from staged compat root"
+                     : "package is staged locally but no launcher component was resolved";
+  return lookup;
+}
+
+LoadedApkReport BuildLoadedApkReportFromNativeLookup(
+    const NativePackageLookup& lookup) {
+  namespace fs = std::filesystem;
+
+  if (!lookup.package_visible) {
+    throw std::invalid_argument(
+        "native package lookup must be visible before building launch report");
+  }
+
+  const int version_code = lookup.version_code.empty()
+                               ? 1
+                               : std::max(1, std::stoi(lookup.version_code));
+  const auto layout = BuildPackageLayout(
+      {.package_name = lookup.package_name,
+       .install_id = lookup.install_id,
+       .version_code = version_code},
+      lookup.compat_root);
+
+  ManifestProfile profile{
+      .package_name = lookup.package_name,
+      .launcher_activity_name = lookup.launcher_component,
+      .declared_components = lookup.launcher_component.empty()
+                                 ? std::vector<std::string>{}
+                                 : std::vector<std::string>{lookup.launcher_component},
+      .declared_activity_components =
+          lookup.launcher_component.empty()
+              ? std::vector<std::string>{}
+              : std::vector<std::string>{lookup.launcher_component},
+      .has_launcher_activity = lookup.launcher_resolved,
+  };
+
+  const fs::path manifest_xml_path =
+      fs::path(lookup.install_root) / "AndroidManifest.xml";
+  if (fs::exists(manifest_xml_path)) {
+    profile = ParseDecodedManifest(ReadTextFile(manifest_xml_path));
+  }
+  if (profile.package_name.empty()) {
+    profile.package_name = lookup.package_name;
+  }
+  if (!lookup.launcher_component.empty() &&
+      (!profile.has_launcher_activity ||
+       profile.launcher_activity_name.empty())) {
+    profile.launcher_activity_name = lookup.launcher_component;
+    profile.has_launcher_activity = true;
+    if (std::find(profile.declared_components.begin(),
+                  profile.declared_components.end(),
+                  lookup.launcher_component) ==
+        profile.declared_components.end()) {
+      profile.declared_components.push_back(lookup.launcher_component);
+    }
+    if (std::find(profile.declared_activity_components.begin(),
+                  profile.declared_activity_components.end(),
+                  lookup.launcher_component) ==
+        profile.declared_activity_components.end()) {
+      profile.declared_activity_components.push_back(lookup.launcher_component);
+    }
+  }
+  const auto assessment = AssessRuntimeRequirements(profile);
+
+  return LoadedApkReport{
+      .apk_path = lookup.apk_path,
+      .install_id = lookup.install_id,
+      .metadata =
+          {.apk_file_name = fs::path(lookup.apk_path).filename().string(),
+           .min_sdk = lookup.min_sdk,
+           .target_sdk = lookup.target_sdk,
+           .version_code = version_code,
+           .version_name = lookup.version_name},
+      .manifest_profile = profile,
+      .assessment = assessment,
+      .layout = layout,
+      .install_root = lookup.install_root,
+  };
 }
 
 RuntimeTarget ParseAdbDeviceLine(const std::string& line) {
@@ -482,7 +729,7 @@ std::string RenderInstalledAppLaunchReport(
   std::ostringstream output;
   output << "Runtime Backend: " << report.backend_name << '\n';
   output << "Package: " << report.package_name << '\n';
-  output << "ADB Serial: " << report.serial << '\n';
+  output << "Runtime Target: " << report.serial << '\n';
   output << "Component: " << report.component << '\n';
   output << "Launch OK: " << (report.launch_ok ? "yes" : "no") << '\n';
   output << "Launch Output:\n" << report.output;
@@ -493,7 +740,7 @@ std::string RenderInstalledPackageMetadataReport(
     const InstalledPackageMetadataReport& report) {
   std::ostringstream output;
   output << "Runtime Backend: " << report.backend_name << '\n';
-  output << "ADB Serial: " << report.serial << '\n';
+  output << "Runtime Target: " << report.serial << '\n';
   output << "Package: " << report.package_name << '\n';
   output << "Package Visible: " << (report.package_visible ? "yes" : "no")
          << '\n';
@@ -536,7 +783,7 @@ std::string RenderRuntimePreflightReport(
     const RuntimePreflightReport& report) {
   std::ostringstream output;
   output << "Runtime Backend: " << report.backend_name << '\n';
-  output << "ADB Serial: " << report.serial << '\n';
+  output << "Runtime Target: " << report.serial << '\n';
   output << "Package: " << report.package_name << '\n';
   output << "Component: " << report.component << '\n';
   output << "Backend Available: "
@@ -623,10 +870,26 @@ RuntimeDiscoveryReport DiscoverRuntimeTargetsWithRunner(
       return report;
     }
 
-    case RuntimeBackendKind::kNative:
-      report.backend_check_output = "native backend is not implemented yet\n";
-      report.backend_available = false;
+    case RuntimeBackendKind::kNative: {
+      report.backend_available = true;
+      RuntimeTarget target;
+      target.backend_name = report.backend_name;
+      target.serial = kNativeRuntimeSerial;
+      target.state = "local";
+      target.online = true;
+      target.model = "Linuxoid Host";
+      target.android_release = "self-healing-runtime";
+      target.abi = DetectHostAbi();
+      report.targets.push_back(target);
+
+      std::ostringstream output;
+      output << "native compat root: " << ResolveNativeCompatRoot() << "\n";
+      output << "native spike root: " << ResolveNativeSpikeRoot() << "\n";
+      output << "native runtime target: " << kNativeRuntimeSerial << "\n";
+      output << "host abi: " << target.abi << "\n";
+      report.backend_check_output = output.str();
       return report;
+    }
   }
 
   throw std::invalid_argument("unsupported runtime backend enum");
@@ -648,11 +911,6 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
   report.backend_available = discovery.backend_available;
   report.backend_check_output = discovery.backend_check_output;
   report.discovery_output = RenderRuntimeDiscoveryReport(discovery);
-
-  if (spec.backend == RuntimeBackendKind::kNative) {
-    report.notes = "native backend is not implemented yet";
-    return report;
-  }
 
   if (!report.backend_available) {
     report.notes = "backend command is not available";
@@ -740,6 +998,34 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
       }
     } else {
       report.component_ready = false;
+    }
+  } else if (spec.backend == RuntimeBackendKind::kNative &&
+             !spec.package_name.empty()) {
+    const auto metadata = QueryInstalledPackageMetadataWithRunner(
+        {.backend = RuntimeBackendKind::kNative,
+         .serial = report.serial,
+         .package_name = spec.package_name},
+        runner);
+    report.package_check_output = metadata.package_check_output;
+    report.package_visible = metadata.package_visible;
+    if (!report.package_visible) {
+      report.notes = metadata.notes;
+      report.component_ready = false;
+    } else if (!spec.component.empty()) {
+      report.component = spec.component;
+      report.component_ready =
+          CanonicalizeAndroidComponent(spec.component).rfind(
+              spec.package_name + "/", 0) == 0;
+      if (!report.component_ready) {
+        report.notes =
+            "explicit native component does not belong to the requested package";
+      }
+    } else {
+      report.component = metadata.resolved_component;
+      report.component_ready = metadata.launcher_resolved;
+      if (!report.component_ready) {
+        report.notes = metadata.notes;
+      }
     }
   } else {
     report.component_ready =
@@ -873,10 +1159,26 @@ InstalledPackageMetadataReport QueryInstalledPackageMetadataWithRunner(
           "installed package metadata lookup is not implemented for waydroid";
       return report;
 
-    case RuntimeBackendKind::kNative:
-      report.notes =
-          "installed package metadata lookup is not implemented for native";
+    case RuntimeBackendKind::kNative: {
+      if (!spec.serial.empty() && spec.serial != kNativeRuntimeSerial) {
+        report.notes = "requested serial was not discovered";
+        return report;
+      }
+      report.serial = kNativeRuntimeSerial;
+      const auto lookup = ResolveNativePackageLookup(spec.package_name);
+      report.package_visible = lookup.package_visible;
+      report.launcher_resolved = lookup.launcher_resolved;
+      report.resolved_component = lookup.launcher_component;
+      report.install_path = lookup.apk_path;
+      report.version_code = lookup.version_code;
+      report.version_name = lookup.version_name;
+      report.package_check_output = lookup.package_check_output;
+      report.launcher_query_output = lookup.launcher_query_output;
+      report.path_query_output = lookup.path_query_output;
+      report.dump_output = lookup.dump_output;
+      report.notes = lookup.notes;
       return report;
+    }
   }
 
   throw std::invalid_argument("unsupported runtime backend enum");
@@ -937,10 +1239,45 @@ InstalledAppLaunchReport LaunchInstalledAppWithRunner(
       return report;
     }
 
-    case RuntimeBackendKind::kNative:
-      report.output = "native backend is not implemented yet\n";
-      report.launch_ok = false;
+    case RuntimeBackendKind::kNative: {
+      const auto metadata = QueryInstalledPackageMetadataWithRunner(
+          {.backend = RuntimeBackendKind::kNative,
+           .serial = spec.serial,
+           .package_name = spec.package_name},
+          runner);
+      report.serial = kNativeRuntimeSerial;
+      if (!metadata.package_visible) {
+        report.output = metadata.notes + "\n";
+        report.launch_ok = false;
+        return report;
+      }
+
+      report.component = spec.component.empty() ? metadata.resolved_component
+                                                : spec.component;
+      if (report.component.empty()) {
+        report.output =
+            "package is staged locally but no launcher component was resolved\n";
+        report.launch_ok = false;
+        return report;
+      }
+
+      try {
+        const auto staged_report = BuildLoadedApkReportFromNativeLookup(
+            ResolveNativePackageLookup(spec.package_name));
+        const auto plan = BuildNativeLaunchPlan(
+            staged_report, ResolveNativeSpikeRoot());
+        const auto bootstrap = BuildNativeActivityBootstrap(
+            plan, ResolveCompatctlPathForNativeRuntime());
+        const auto execution = RunNativeArtBootstrapExecutionFixture(
+            bootstrap.bootstrap_manifest_path);
+        report.launch_ok = execution.execution_succeeded;
+        report.output = RenderNativeArtBootstrapExecutionFixtureJson(execution);
+      } catch (const std::exception& error) {
+        report.launch_ok = false;
+        report.output = std::string(error.what()) + "\n";
+      }
       return report;
+    }
   }
 
   throw std::invalid_argument("unsupported runtime backend enum");

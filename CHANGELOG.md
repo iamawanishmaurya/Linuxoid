@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.58 - 2026-05-17
+
+- Replace the `native` runtime bridge hard stub with a Linuxoid-owned local staged-package path: `discover-runtime native` now reports a deterministic `linuxoid-native` target, `inspect-package native` reads staged manifest metadata from the compat root, `preflight-runtime native` resolves staged launcher readiness, and `launch-package native` reuses the bootstrap-execution seam for candidate packages.
+- Add regression coverage for native runtime discovery, staged metadata lookup, staged-package preflight, override-backed bootstrap-execution success, and honest failure reporting for non-candidate packages.
+- Refresh the README, phased plan, stub audit, changelog, and status text so Linuxoid now reports the native runtime bridge as a partial local implementation instead of a pure `not implemented` stub while still distinguishing that bridge from full Android app execution.
+
 ## v0.1.57 - 2026-05-17
 
 - Teach the self-healing runtime to classify dex-only staged bundles more honestly: `native_loading` now resolves to `not_required` when an APK declares no native libraries at all, while unsupported-ABI or missing-required-lib cases still stay blocked and select deterministic native-loader recovery.

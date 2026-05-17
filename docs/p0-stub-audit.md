@@ -16,10 +16,10 @@ This document maps the current native-execution blockers that Linuxoid must clea
 | `compatctl native-execute-stub ...` | prints `Execution Engine Ready: no` and exits `2` | `src/main.cpp` |
 | `compatctl bootstrap-native-spike ...` | writes bootstrap assets but reports execution not ready | `src/native_spike.cpp` |
 | `compatctl native-lifecycle-shim ...` | writes lifecycle/session artifacts but still reports execution engine not ready | `src/native_lifecycle.cpp` |
-| `compatctl discover-runtime native` | reports `native backend is not implemented yet` | `src/runtime_bridge.cpp` |
-| `compatctl preflight-runtime native ...` | reports `native backend is not implemented yet` | `src/runtime_bridge.cpp` |
-| `compatctl launch-package native ...` | reports `native backend is not implemented yet` | `src/runtime_bridge.cpp` |
-| `compatctl inspect-package native ...` | reports native metadata lookup not implemented | `src/runtime_bridge.cpp` |
+| `compatctl discover-runtime native` | now reports one Linuxoid-owned local runtime target with host ABI plus compat-root metadata | `src/runtime_bridge.cpp` |
+| `compatctl preflight-runtime native ...` | now uses staged package metadata for visibility plus launcher readiness, but still cannot promise successful ART execution | `src/runtime_bridge.cpp` |
+| `compatctl launch-package native ...` | now routes staged packages into the bootstrap-execution seam and fails honestly for non-candidate or runtime-missing packages | `src/runtime_bridge.cpp` |
+| `compatctl inspect-package native ...` | now reads staged package metadata from the native compat root | `src/runtime_bridge.cpp` |
 
 ## Current Stub Surface
 
@@ -67,7 +67,7 @@ Why it matters:
 - Linuxoid has a place to hang real native execution state
 - those services are still placeholders instead of runtime behavior
 
-### 4. The `native` backend contract is a declared seam, not an implementation
+### 4. The `native` backend contract is now a partial local implementation
 
 - File: `src/runtime_bridge.cpp`
 - Command paths:
@@ -76,12 +76,16 @@ Why it matters:
   - `launch-package native`
   - `inspect-package native`
 - Behavior:
-  - all native runtime control surfaces return “not implemented” style output
+  - `discover-runtime native` now reports a Linuxoid-owned local target
+  - `inspect-package native` now reads staged package metadata from the compat root
+  - `preflight-runtime native` now resolves staged package visibility plus launcher readiness
+  - `launch-package native` now routes candidate packages into the bootstrap-execution seam and fails honestly for non-candidates or runtime-missing bundles
 
 Why it matters:
 
-- the current backend-neutral CLI contract is ahead of the actual native runtime
-- `P1` must start filling this seam instead of adding more abstract surface area
+- the backend-neutral CLI contract is no longer a hard stub for the local native path
+- Linuxoid now has a real place to hang staged-package launch behavior before full ART execution exists
+- the remaining gap is deeper native execution, not basic bridge surface ownership
 
 ## Ordered Queue For P1
 
