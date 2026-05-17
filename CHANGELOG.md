@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.72 - 2026-05-18
+
+- Extend the `native` runtime preflight contract so it now carries Linuxoid-owned runtime-probe readiness, bootstrap-planning readiness, blocked-subsystem summaries, bootstrap manifest paths, and health or replay artifact paths instead of stopping at staged metadata visibility.
+- Make `preflight-runtime native` and `verify-package native` honest about actual launch-attempt readiness: they now stay blocked when host ART is missing, when the runtime probe only resolves through the override seam without explicit opt-in, or when the staged package cannot materialize a native spike candidate path.
+- Add a deterministic host-ART-disable test seam for ART probe discovery and regression coverage for override-backed native preflight success, host-ART-missing native preflight failure, and non-candidate verification failure at the preflight boundary.
+
 ## v0.1.71 - 2026-05-18
 
 - Extend the public `launch-package native` report so it now surfaces Linuxoid-owned bootstrap, runtime-health, recovery-plan, and replay-bundle artifact paths directly, plus blocked-subsystem summaries when a staged launch fails.

@@ -62,6 +62,23 @@ std::string RenderJsonArray(const std::vector<std::string>& values) {
   return output.str();
 }
 
+bool EnvFlagEnabled(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0') {
+    return false;
+  }
+  std::string normalized(value);
+  const std::size_t first = normalized.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return false;
+  }
+  const std::size_t last = normalized.find_last_not_of(" \t\r\n");
+  normalized = normalized.substr(first, last - first + 1);
+  return normalized == "1" || normalized == "true" ||
+         normalized == "TRUE" || normalized == "yes" ||
+         normalized == "YES";
+}
+
 bool FileExists(const std::string& path) {
   return !path.empty() && fs::exists(path);
 }
@@ -179,6 +196,11 @@ std::string DetectArtRuntimeProbe(bool* detected) {
       IsExecutableFile(override_path)) {
     *detected = true;
     return override_path;
+  }
+
+  if (EnvFlagEnabled("LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE")) {
+    *detected = false;
+    return "art_runtime_not_detected";
   }
 
   const std::vector<std::string> file_candidates = {

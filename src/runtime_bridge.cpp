@@ -1,6 +1,9 @@
 #include "wfa/runtime_bridge.hpp"
 
+#include "wfa/art_activity_bootstrap_fixture.hpp"
+#include "wfa/art_class_resolution_fixture.hpp"
 #include "wfa/art_bootstrap_execution_fixture.hpp"
+#include "wfa/art_runtime_smoke.hpp"
 #include "wfa/apk_loader.hpp"
 #include "wfa/checkpoint.hpp"
 #include "wfa/native_spike.hpp"
@@ -61,6 +64,26 @@ struct LauncherResolutionAttempt {
   std::string resolved_component;
   std::string output;
 };
+
+struct NativePreflightDiagnostics {
+  bool runtime_probe_ready = false;
+  bool bootstrap_planned = false;
+  bool dependency_blocked = false;
+  std::string art_runtime_probe_source;
+  std::string bootstrap_manifest_path;
+  std::string runtime_health_json_path;
+  std::string runtime_diagnostic_replay_json_path;
+  int failing_subsystem_count = 0;
+  std::vector<std::string> failing_subsystems;
+  std::string notes;
+};
+
+struct NativePackageLookup;
+NativePackageLookup ResolveNativePackageLookup(const std::string& package_name);
+LoadedApkReport BuildLoadedApkReportFromNativeLookup(
+    const NativePackageLookup& lookup);
+NativePreflightDiagnostics BuildNativePreflightDiagnostics(
+    const std::string& package_name);
 
 std::string QuoteForShell(const std::string& value) {
   std::string quoted = "'";
@@ -418,6 +441,61 @@ LoadedApkReport BuildLoadedApkReportFromNativeLookup(
       .layout = layout,
       .install_root = lookup.install_root,
   };
+}
+
+NativePreflightDiagnostics BuildNativePreflightDiagnostics(
+    const std::string& package_name) {
+  const auto staged_report = BuildLoadedApkReportFromNativeLookup(
+      ResolveNativePackageLookup(package_name));
+  const auto plan = BuildNativeLaunchPlan(staged_report, ResolveNativeSpikeRoot());
+  const auto bootstrap = BuildNativeActivityBootstrap(
+      plan, ResolveCompatctlPathForNativeRuntime());
+  const auto resolution =
+      RunNativeArtClassResolutionFixture(bootstrap.bootstrap_manifest_path);
+  const auto runtime_smoke = BuildNativeArtRuntimeSmokeFixture(resolution);
+  const auto activity_bootstrap =
+      BuildNativeArtActivityBootstrapFixture(runtime_smoke);
+  const auto health = RunRuntimeHealthFixture(
+      bootstrap.bootstrap_manifest_path, "baseline");
+  const auto diagnostic =
+      ReplayRuntimeDiagnosticBundle(bootstrap.bootstrap_manifest_path);
+
+  NativePreflightDiagnostics diagnostics;
+  diagnostics.art_runtime_probe_source = runtime_smoke.art_runtime_probe_source;
+  diagnostics.bootstrap_manifest_path = bootstrap.bootstrap_manifest_path;
+  diagnostics.runtime_health_json_path = health.health_json_path;
+  diagnostics.runtime_diagnostic_replay_json_path = diagnostic.result_json_path;
+  diagnostics.dependency_blocked = health.dependency_blocked;
+  diagnostics.failing_subsystem_count = health.failing_subsystem_count;
+  diagnostics.failing_subsystems = health.failing_subsystems;
+  diagnostics.bootstrap_planned = activity_bootstrap.runtime_bootstrap_planned;
+
+  const bool override_allowed =
+      EnvFlagEnabled("LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE");
+  const bool fixture_only_probe =
+      runtime_smoke.art_runtime_probe_source == "override" && !override_allowed;
+  diagnostics.runtime_probe_ready =
+      runtime_smoke.runtime_class_resolution_succeeded && !fixture_only_probe;
+
+  if (runtime_smoke.art_runtime_probe_source == "missing") {
+    diagnostics.notes =
+        "host ART runtime is not detected for the staged native launch path";
+  } else if (fixture_only_probe) {
+    diagnostics.notes =
+        "runtime probe resolved through the Linuxoid override seam; set "
+        "LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE=1 to treat it as launch-ready";
+  } else if (!runtime_smoke.runtime_class_resolution_succeeded) {
+    diagnostics.notes =
+        "runtime class resolution is not ready for the staged native launch path";
+  } else if (!activity_bootstrap.runtime_bootstrap_planned) {
+    diagnostics.notes =
+        "activity bootstrap planning is not ready for the staged native launch path";
+  } else {
+    diagnostics.notes =
+        "runtime target looks ready for the staged native bootstrap attempt";
+  }
+
+  return diagnostics;
 }
 
 RuntimeTarget ParseAdbDeviceLine(const std::string& line) {
@@ -883,8 +961,45 @@ std::string RenderRuntimePreflightReport(
          << '\n';
   output << "Component Ready: " << (report.component_ready ? "yes" : "no")
          << '\n';
+  if (report.backend_name == "native" || !report.art_runtime_probe_source.empty() ||
+      !report.bootstrap_manifest_path.empty() ||
+      !report.runtime_health_json_path.empty()) {
+    if (!report.art_runtime_probe_source.empty()) {
+      output << "ART Runtime Probe Source: " << report.art_runtime_probe_source
+             << '\n';
+    }
+    output << "Runtime Probe Ready: "
+           << (report.runtime_probe_ready ? "yes" : "no") << '\n';
+    output << "Bootstrap Planned: "
+           << (report.bootstrap_planned ? "yes" : "no") << '\n';
+    output << "Dependency Blocked: "
+           << (report.dependency_blocked ? "yes" : "no") << '\n';
+    output << "Failing Subsystem Count: " << report.failing_subsystem_count
+           << '\n';
+    output << "Failing Subsystems: "
+           << (report.failing_subsystems.empty()
+                   ? "none"
+                   : JoinStrings(report.failing_subsystems, ", "))
+           << '\n';
+  }
   output << "Ready For Launch: " << (report.ready_for_launch ? "yes" : "no")
          << '\n';
+  if (report.backend_name == "native" || !report.bootstrap_manifest_path.empty() ||
+      !report.runtime_health_json_path.empty() ||
+      !report.runtime_diagnostic_replay_json_path.empty()) {
+    if (!report.bootstrap_manifest_path.empty()) {
+      output << "Bootstrap Manifest Path: " << report.bootstrap_manifest_path
+             << '\n';
+    }
+    if (!report.runtime_health_json_path.empty()) {
+      output << "Runtime Health JSON Path: " << report.runtime_health_json_path
+             << '\n';
+    }
+    if (!report.runtime_diagnostic_replay_json_path.empty()) {
+      output << "Runtime Diagnostic Replay Path: "
+             << report.runtime_diagnostic_replay_json_path << '\n';
+    }
+  }
   output << "Model: " << report.model << '\n';
   output << "Android: " << report.android_release << '\n';
   output << "ABI: " << report.abi << '\n';
@@ -1112,6 +1227,29 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
         report.notes = metadata.notes;
       }
     }
+
+    if (report.package_visible && report.component_ready) {
+      try {
+        const auto diagnostics = BuildNativePreflightDiagnostics(
+            spec.package_name);
+        report.art_runtime_probe_source = diagnostics.art_runtime_probe_source;
+        report.bootstrap_manifest_path = diagnostics.bootstrap_manifest_path;
+        report.runtime_health_json_path = diagnostics.runtime_health_json_path;
+        report.runtime_diagnostic_replay_json_path =
+            diagnostics.runtime_diagnostic_replay_json_path;
+        report.runtime_probe_ready = diagnostics.runtime_probe_ready;
+        report.bootstrap_planned = diagnostics.bootstrap_planned;
+        report.dependency_blocked = diagnostics.dependency_blocked;
+        report.failing_subsystem_count =
+            diagnostics.failing_subsystem_count;
+        report.failing_subsystems = diagnostics.failing_subsystems;
+        report.notes = diagnostics.notes;
+      } catch (const std::exception& error) {
+        report.notes = error.what();
+        report.runtime_probe_ready = false;
+        report.bootstrap_planned = false;
+      }
+    }
   } else {
     report.component_ready =
         spec.backend != RuntimeBackendKind::kAttachedAdb ||
@@ -1123,9 +1261,18 @@ RuntimePreflightReport PreflightRuntimeWithRunner(
     report.notes = "runtime target looks ready for the requested launch path";
   }
 
-  report.ready_for_launch =
-      report.backend_available && report.target_selected && report.target_online &&
-      report.package_visible && report.component_ready;
+  if (spec.backend == RuntimeBackendKind::kNative && !spec.package_name.empty()) {
+    report.ready_for_launch =
+        report.backend_available && report.target_selected &&
+        report.target_online && report.package_visible &&
+        report.component_ready && report.runtime_probe_ready &&
+        report.bootstrap_planned;
+  } else {
+    report.ready_for_launch =
+        report.backend_available && report.target_selected &&
+        report.target_online && report.package_visible &&
+        report.component_ready;
+  }
   return report;
 }
 

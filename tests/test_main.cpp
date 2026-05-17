@@ -4767,8 +4767,28 @@ void TestNativeRuntimePreflightUsesStagedMetadata() {
   namespace fs = std::filesystem;
   auto fixture = CreateNativeRuntimePackageFixture(
       "linuxoid-native-runtime-preflight");
+  const fs::path native_root = fixture.root / "native";
+  const fs::path runtime_probe = fixture.root / "linuxoid-art-runtime-probe";
+  {
+    std::ofstream output(runtime_probe);
+    output << "#!/bin/sh\n";
+    output << "printf '%s\\n' 'runtime-fixture-ok'\n";
+    output << "exit 0\n";
+  }
+  fs::permissions(runtime_probe,
+                  fs::perms::owner_read | fs::perms::owner_write |
+                      fs::perms::owner_exec | fs::perms::group_read |
+                      fs::perms::group_exec | fs::perms::others_read |
+                      fs::perms::others_exec,
+                  fs::perm_options::replace);
   ScopedEnvironmentVariable compat_root_override(
       "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable runtime_override(
+      "LINUXOID_ART_RUNTIME_PROBE_OVERRIDE", runtime_probe.string());
+  ScopedEnvironmentVariable allow_override_launch(
+      "LINUXOID_NATIVE_ALLOW_RUNTIME_OVERRIDE", "1");
 
   const auto report = wfa::PreflightRuntimeWithRunner(
       {.backend = wfa::RuntimeBackendKind::kNative,
@@ -4784,8 +4804,70 @@ void TestNativeRuntimePreflightUsesStagedMetadata() {
   Expect(report.package_visible, "expected staged package visibility");
   Expect(report.component_ready, "expected native component readiness");
   Expect(report.ready_for_launch, "expected native preflight readiness");
+  Expect(report.runtime_probe_ready,
+         "expected runtime probe readiness for override-backed preflight");
+  Expect(report.bootstrap_planned,
+         "expected bootstrap planning for override-backed preflight");
+  Expect(report.art_runtime_probe_source == "override",
+         "expected override-backed preflight runtime source");
+  Expect(!report.bootstrap_manifest_path.empty(),
+         "expected bootstrap manifest path in native preflight");
+  Expect(!report.runtime_health_json_path.empty(),
+         "expected runtime health path in native preflight");
+  Expect(!report.runtime_diagnostic_replay_json_path.empty(),
+         "expected diagnostic replay path in native preflight");
   Expect(report.component == fixture.launcher_component,
          "expected launcher component in preflight result");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestNativeRuntimePreflightBlocksWithoutHostArt() {
+  namespace fs = std::filesystem;
+  auto fixture = CreateNativeRuntimePackageFixture(
+      "linuxoid-native-runtime-preflight-host-art-missing");
+  const fs::path native_root = fixture.root / "native";
+  ScopedEnvironmentVariable compat_root_override(
+      "LINUXOID_NATIVE_COMPAT_ROOT", fixture.compat_root.string());
+  ScopedEnvironmentVariable native_root_override("LINUXOID_NATIVE_SPIKE_ROOT",
+                                                 native_root.string());
+  ScopedEnvironmentVariable disable_host_art(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+
+  const auto report = wfa::PreflightRuntimeWithRunner(
+      {.backend = wfa::RuntimeBackendKind::kNative,
+       .package_name = fixture.package_name},
+      [](const std::string&) -> wfa::CommandResult {
+        throw std::runtime_error("native preflight should not shell out");
+      });
+
+  Expect(report.package_visible, "expected staged package visibility");
+  Expect(report.component_ready, "expected native component readiness");
+  Expect(!report.ready_for_launch,
+         "expected native preflight to block without host ART");
+  Expect(!report.runtime_probe_ready,
+         "expected runtime probe to stay unready without host ART");
+  Expect(report.bootstrap_planned,
+         "expected bootstrap planning even when host ART is unavailable");
+  Expect(report.art_runtime_probe_source == "missing",
+         "expected missing runtime probe source without host ART");
+  Expect(report.dependency_blocked,
+         "expected dependency block without host ART");
+  Expect(report.failing_subsystem_count == 2,
+         "expected dex and bootstrap execution to remain blocked in preflight");
+  Expect(std::find(report.failing_subsystems.begin(),
+                   report.failing_subsystems.end(),
+                   "dex_classloader_readiness") !=
+             report.failing_subsystems.end(),
+         "expected dex classloader failure in native preflight");
+  Expect(std::find(report.failing_subsystems.begin(),
+                   report.failing_subsystems.end(),
+                   "bootstrap_execution_readiness") !=
+             report.failing_subsystems.end(),
+         "expected bootstrap execution failure in native preflight");
+  Expect(report.notes.find("host ART runtime is not detected") !=
+             std::string::npos,
+         "expected missing host ART note in native preflight");
 
   fs::remove_all(fixture.root);
 }
@@ -6321,6 +6403,13 @@ void TestNativeInstalledPackageVerificationUsesPreflightAndOverrideBackedLaunch(
          "expected native package visibility line");
   Expect(rendered.find("Component Ready: yes") != std::string::npos,
          "expected native component readiness line");
+  Expect(rendered.find("ART Runtime Probe Source: override") !=
+             std::string::npos,
+         "expected override probe source in native verification preflight");
+  Expect(rendered.find("Runtime Probe Ready: yes") != std::string::npos,
+         "expected runtime probe readiness in native verification preflight");
+  Expect(rendered.find("Bootstrap Planned: yes") != std::string::npos,
+         "expected bootstrap planning in native verification preflight");
   Expect(rendered.find("Component: com.example.nativebridge/.MainActivity") !=
              std::string::npos,
          "expected native launcher component in verification report");
@@ -6363,19 +6452,21 @@ void TestNativeInstalledPackageVerificationReportsNonCandidateFailureHonestly() 
             "unexpected launcher command in native verification failure test");
       });
 
+  Expect(!report.preflight_ok,
+         "expected native preflight to fail for non-candidate bundle");
   Expect(!report.direct_launch_ok,
          "expected native verification to fail for non-candidate bundle");
   Expect(report.launcher_generation_ok,
          "expected native verification launcher generation success");
   Expect(report.generated_launcher_ok,
          "expected native verification generated launcher success");
-  Expect(report.direct_launch_output.find("native spike candidate") !=
+  Expect(report.preflight_output.find("native spike candidate") !=
              std::string::npos,
-         "expected native candidate failure reason in verification output");
+         "expected native candidate failure reason in verification preflight");
 
   const auto rendered = wfa::RenderInstalledPackageVerificationReport(report);
-  Expect(rendered.find("Preflight OK: yes") != std::string::npos,
-         "expected native preflight success even on non-candidate bundle");
+  Expect(rendered.find("Preflight OK: no") != std::string::npos,
+         "expected native preflight failure on non-candidate bundle");
   Expect(rendered.find("Direct Launch OK: no") != std::string::npos,
          "expected native direct launch failure line");
 
@@ -6967,6 +7058,7 @@ int main() {
     TestNativeRuntimeDiscoveryUsesCompatRootOverride();
     TestNativeRuntimeMetadataReadsStagedPackage();
     TestNativeRuntimePreflightUsesStagedMetadata();
+    TestNativeRuntimePreflightBlocksWithoutHostArt();
     TestNativeRuntimeLaunchCanUseOverrideBackedBootstrapExecution();
     TestNativeRuntimeLaunchRejectsOverrideBackedBootstrapByDefault();
     TestNativeRuntimeLaunchReportsNonCandidateFailureHonestly();

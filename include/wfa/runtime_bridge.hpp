@@ -158,13 +158,22 @@ struct RuntimePreflightReport {
   bool package_visible = false;
   bool component_ready = false;
   bool ready_for_launch = false;
+  bool runtime_probe_ready = false;
+  bool bootstrap_planned = false;
+  bool dependency_blocked = false;
   std::string model;
   std::string android_release;
   std::string abi;
+  std::string art_runtime_probe_source;
+  std::string bootstrap_manifest_path;
+  std::string runtime_health_json_path;
+  std::string runtime_diagnostic_replay_json_path;
   std::string backend_check_output;
   std::string discovery_output;
   std::string package_check_output;
   std::string notes;
+  int failing_subsystem_count = 0;
+  std::vector<std::string> failing_subsystems;
 };
 
 RuntimeBackendKind ParseRuntimeBackendKind(const std::string& backend_name);
