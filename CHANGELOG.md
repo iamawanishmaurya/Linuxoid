@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.75 - 2026-05-18
+
+- Strengthen the self-healing CLI contract regression again by adding one end-to-end matrix that proves health classification, deterministic recovery selection, stable repeated JSON output, and no false success when a dependency is missing all the way through the diagnostic replay surface.
+
 ## v0.1.74 - 2026-05-18
 
 - Extend the public native bridge so `preflight-runtime native`, `verify-package native`, and `launch-package native` now surface the replayable trace bundle directly: health trace JSONL, recovery-actions JSONL, health replay JSON, merged diagnostic events JSONL, trace index JSON, and replay completeness counts are all emitted at the bridge layer instead of only inside deeper health artifacts.

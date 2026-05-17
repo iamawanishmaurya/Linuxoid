@@ -1588,6 +1588,11 @@
   Result: Linuxoid now proves the self-healing health surface stays honest and stable where harnesses actually consume it, not only through in-process fixture helpers.
   Timestamp: 2026-05-18T00:01:10+05:30
 
+- Step: Self-healing CLI replay honesty GREEN
+  Action: Added a higher-level self-healing CLI contract regression that exercises baseline health, failed-native-load recovery planning, repeated missing-native health output, and missing-native diagnostic replay in one matrix.
+  Result: Linuxoid now proves at the command surface that health classification stays deterministic, recovery decision selection stays deterministic, repeated JSON output stays stable, and missing dependencies do not drift into false success even after replay.
+  Timestamp: 2026-05-18T02:22:00+05:30
+
 - Step: Native bridge replay surface GREEN
   Action: Threaded health-trace, recovery-actions-trace, health-replay, merged diagnostic events, trace-index, and replay-completeness fields through the public native preflight and launch reports, then pinned that bridge-level contract with red-first regressions for native preflight, native launch, report rendering, and native verification.
   Result: `preflight-runtime native`, `verify-package native`, and `launch-package native` now expose the JSONL trace bundle needed for diagnosis directly in the public report, so a blocked staged launch can be replayed and investigated without opening the deeper health JSON by hand.
