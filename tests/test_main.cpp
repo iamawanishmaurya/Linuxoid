@@ -6531,7 +6531,8 @@ void TestLaunchApkSelfHealProofCommandRunsFixture() {
       &exit_code);
 
   Expect(exit_code == 0,
-         "expected self-heal-proof command to succeed for valid fixture");
+         "expected self-heal-proof command to succeed for valid fixture; exit=" +
+             std::to_string(exit_code) + " output=" + output);
   Expect(output.find("\"self_heal_proof_requested\": true") !=
              std::string::npos,
          "expected self-heal proof request flag in json");
@@ -7351,6 +7352,80 @@ void TestLaunchApkPermissionsProofHealsMalformedFiles() {
   fs::remove_all(fixture.root);
 }
 
+void TestLaunchApkPermissionsProofHealsIncompleteFiles() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-permissions-heal-incomplete", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto first = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  WriteTextFile(first.permissions.report_json_path,
+                ReplaceFirstOrThrow(
+                    ReadTextFile(first.permissions.report_json_path),
+                    "\"permission_records\": [",
+                    "\"permission_records_missing\": ["));
+  WriteTextFile(first.app_ops.report_json_path,
+                ReplaceFirstOrThrow(
+                    ReadTextFile(first.app_ops.report_json_path),
+                    "\"app_ops\": [", "\"app_ops_missing\": ["));
+
+  const auto healed = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  Expect(healed.permissions.ready,
+         "expected incomplete permission state to heal on launch");
+  Expect(healed.app_ops.ready,
+         "expected incomplete app ops state to heal on launch");
+  const std::string permission_json =
+      ReadTextFile(healed.permissions.report_json_path);
+  const std::string app_ops_json = ReadTextFile(healed.app_ops.report_json_path);
+  Expect(permission_json.find("rebuild_incomplete_permission_state") !=
+             std::string::npos,
+         "expected incomplete permission state rebuild action");
+  Expect(app_ops_json.find("rebuild_incomplete_app_ops_state") !=
+             std::string::npos,
+         "expected incomplete app ops state rebuild action");
+  Expect(permission_json.find("permission_state_incomplete") !=
+             std::string::npos,
+         "expected incomplete permission diagnostic");
+  Expect(app_ops_json.find("app_ops_state_incomplete") != std::string::npos,
+         "expected incomplete app ops diagnostic");
+  Expect(permission_json.find("Self-Healing Android Device") !=
+             std::string::npos,
+         "expected Self-Healing Android Device wording in permission diagnostics");
+  Expect(app_ops_json.find("Self-Healing Android Device") !=
+             std::string::npos,
+         "expected Self-Healing Android Device wording in app ops diagnostics");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestLaunchApkPermissionsProofEmitsDeniedAudioCaptureDiagnostics() {
   namespace fs = std::filesystem;
   const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
@@ -7449,6 +7524,83 @@ void TestInspectApkPermissionsCommandReportsReadyContracts() {
   Expect(output.find("\"schema_version\": \"linuxoid.appops.contract.v1\"") !=
              std::string::npos,
          "expected appops schema version in inspect-apk-permissions json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestInspectApkPermissionsCommandHealsIncompleteContracts() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-inspect-apk-permissions-heal-incomplete", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  ReadCommandOutput(compatctl.string() + " inspect-apk-permissions " +
+                        fixture.apk_path.string() + " " +
+                        fixture.staging_root.string(),
+                    &exit_code);
+  Expect(exit_code == 0,
+         "expected initial inspect-apk-permissions command to succeed");
+
+  const fs::path permissions_root =
+      fixture.staging_root / "users/0/packages/com.example.launchapk/vc1-1.0.0" /
+      "launch-apk/default/sandbox/data/data/com.example.launchapk/permissions";
+  const fs::path permission_state_path = permissions_root / "permission-state.json";
+  const fs::path app_ops_path = permissions_root / "app-ops.json";
+
+  WriteTextFile(permission_state_path,
+                ReplaceFirstOrThrow(ReadTextFile(permission_state_path),
+                                    "\"permission_records\": [",
+                                    "\"permission_records_missing\": ["));
+  WriteTextFile(app_ops_path,
+                ReplaceFirstOrThrow(ReadTextFile(app_ops_path),
+                                    "\"app_ops\": [",
+                                    "\"app_ops_missing\": ["));
+
+  const std::string healed_output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-permissions " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected healed inspect-apk-permissions command to succeed");
+  Expect(healed_output.find("rebuild_incomplete_permission_state") !=
+             std::string::npos,
+         "expected incomplete permission healing action in cli json");
+  Expect(healed_output.find("rebuild_incomplete_app_ops_state") !=
+             std::string::npos,
+         "expected incomplete app ops healing action in cli json");
+  Expect(healed_output.find("permission_state_incomplete") !=
+             std::string::npos,
+         "expected incomplete permission diagnostic in cli json");
+  Expect(healed_output.find("app_ops_state_incomplete") != std::string::npos,
+         "expected incomplete app ops diagnostic in cli json");
+  Expect(healed_output.find("Self-Healing Android Device") !=
+             std::string::npos,
+         "expected Self-Healing Android Device wording in cli json");
+  Expect(healed_output.find("\"permission_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready permission health after cli healing");
+  Expect(healed_output.find("\"app_ops_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready app ops health after cli healing");
 
   fs::remove_all(fixture.root);
 }
@@ -7575,6 +7727,260 @@ void TestLaunchApkPermissionsProofHealsStaleFiles() {
   Expect(app_ops_json.find("refresh_stale_app_ops_state") !=
              std::string::npos,
          "expected stale app ops state refresh action");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkProcessProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <application android:name="com.example.launchapk.App">
+    <activity android:name="com.example.launchapk.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-process-valid", manifest, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --process-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected launch-apk process proof command to succeed");
+  Expect(output.find("\"process_proof_requested\": true") !=
+             std::string::npos,
+         "expected process proof request flag in json");
+  Expect(output.find("\"activity_manager\": {") != std::string::npos,
+         "expected activity_manager section in process proof json");
+  Expect(output.find("\"process_manager\": {") != std::string::npos,
+         "expected process_manager section in process proof json");
+  Expect(output.find("\"activity_manager_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready activity manager health in process proof json");
+  Expect(output.find("\"process_health\": \"ready\"") != std::string::npos,
+         "expected ready process health in process proof json");
+  Expect(output.find("\"start_reason\": \"launcher_intent\"") !=
+             std::string::npos,
+         "expected launcher-intent start reason in process proof json");
+  Expect(output.find("\"process_name\": \"com.example.launchapk\"") !=
+             std::string::npos,
+         "expected process name in process proof json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkProcessProofTracksSandboxArtifacts() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-process-artifacts", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --process-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected process proof fixture to succeed");
+  Expect(output.find("\"report_json_path\": ") != std::string::npos,
+         "expected process/activity manager artifact paths in json");
+
+  const fs::path process_root =
+      fixture.staging_root / "users/0/packages/com.example.launchapk/vc1-1.0.0" /
+      "launch-apk/default/sandbox/data/data/com.example.launchapk/process-manager";
+  Expect(fs::exists(process_root / "activity-manager-state.json"),
+         "expected sandbox-backed activity-manager artifact");
+  Expect(fs::exists(process_root / "process-state.json"),
+         "expected sandbox-backed process-manager artifact");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestInspectApkProcessCommandReportsReadyContracts() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-inspect-apk-process-ready", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-process " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected inspect-apk-process command to succeed");
+  Expect(!output.empty() && output.front() == '{',
+         "expected structured json from inspect-apk-process");
+  Expect(output.find("\"activity_manager_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready activity_manager_health in inspect-apk-process json");
+  Expect(output.find("\"process_health\": \"ready\"") != std::string::npos,
+         "expected ready process_health in inspect-apk-process json");
+  Expect(output.find("\"activity_manager\": {") != std::string::npos,
+         "expected activity_manager section in inspect-apk-process json");
+  Expect(output.find("\"process_manager\": {") != std::string::npos,
+         "expected process_manager section in inspect-apk-process json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkProcessProofHealsMalformedFiles() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-process-heal-malformed", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+  int exit_code = 0;
+  ReadCommandOutput(compatctl.string() + " launch-apk --process-proof " +
+                        fixture.apk_path.string() + " " +
+                        fixture.staging_root.string(),
+                    &exit_code);
+  Expect(exit_code == 0, "expected initial process proof command to succeed");
+
+  const fs::path process_root =
+      fixture.staging_root / "users/0/packages/com.example.launchapk/vc1-1.0.0" /
+      "launch-apk/default/sandbox/data/data/com.example.launchapk/process-manager";
+  WriteTextFile(process_root / "activity-manager-state.json", "{malformed");
+  WriteTextFile(process_root / "process-state.json", "{malformed");
+
+  const std::string healed_output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-process " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected malformed process-manager state to heal on inspect");
+  Expect(healed_output.find("rebuild_malformed_activity_manager_state") !=
+             std::string::npos,
+         "expected activity-manager malformed healing action in json");
+  Expect(healed_output.find("rebuild_malformed_process_manager_state") !=
+             std::string::npos,
+         "expected process-manager malformed healing action in json");
+  Expect(healed_output.find("\"activity_manager_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready activity manager health after healing");
+  Expect(healed_output.find("\"process_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready process health after healing");
+  Expect(healed_output.find("Self-Healing Android Device") !=
+             std::string::npos,
+         "expected Self-Healing Android Device wording in process healing json");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofCommandRebuildsMalformedProcessManagerState() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-process-self-heal-cli", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+  int exit_code = 0;
+  ReadCommandOutput(compatctl.string() + " launch-apk --process-proof " +
+                        fixture.apk_path.string() + " " +
+                        fixture.staging_root.string(),
+                    &exit_code);
+  Expect(exit_code == 0, "expected initial process proof command to succeed");
+
+  const fs::path process_root =
+      fixture.staging_root / "users/0/packages/com.example.launchapk/vc1-1.0.0" /
+      "launch-apk/default/sandbox/data/data/com.example.launchapk/process-manager";
+  WriteTextFile(process_root / "activity-manager-state.json", "{malformed");
+  WriteTextFile(process_root / "process-state.json", "{malformed");
+
+  const std::string healed_output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --self-heal-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected self-heal-proof command to succeed after rebuilding malformed process-manager state");
+  Expect(healed_output.find("\"final_health\": \"recovered\"") !=
+             std::string::npos,
+         "expected recovered final health in self-heal process json");
+  Expect(healed_output.find("rebuild_process_manager_state") !=
+             std::string::npos,
+         "expected process-manager rebuild recovery action in self-heal json");
+  Expect(healed_output.find("\"activity_manager_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready activity manager health after self-heal");
+  Expect(healed_output.find("\"process_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready process health after self-heal");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofRebuildsProcessManagerState() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-self-heal-process", true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                   "Lcom/example/launchapk/MainActivity;"})}});
+
+  const auto first = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .process_proof_requested = true});
+  Expect(first.launch_ready, "expected initial process-proof launch to succeed");
+
+  const fs::path process_root =
+      fs::path(first.storage.app_data_dir) / "process-manager";
+  WriteTextFile(process_root / "activity-manager-state.json", "{malformed");
+  WriteTextFile(process_root / "process-state.json", "{malformed");
+
+  const auto healed = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .self_heal_proof_requested = true});
+
+  Expect(healed.self_healing_android_device.ready,
+         "expected self-heal report for malformed process-manager state");
+  Expect(healed.self_healing_android_device.final_health == "recovered",
+         "expected process-manager self-heal recovery to converge");
+  Expect(healed.self_healing_android_device.activity_manager_health == "ready",
+         "expected activity manager health to recover");
+  Expect(healed.self_healing_android_device.process_health == "ready",
+         "expected process health to recover");
+  Expect(!healed.self_healing_android_device.actions.empty(),
+         "expected recovery action for malformed process-manager state");
+  Expect(healed.self_healing_android_device.actions.front().action ==
+             "rebuild_process_manager_state",
+         "expected process-manager rebuild recovery action");
+  Expect(healed.self_healing_android_device.actions.front().result ==
+             "attempted_succeeded",
+         "expected successful process-manager rebuild");
+  Expect(fs::exists(healed.self_healing_android_device.journal_path),
+         "expected process-manager recovery journal path");
 
   fs::remove_all(fixture.root);
 }
@@ -11852,11 +12258,19 @@ int main() {
   TestLaunchApkSelfHealProofRebuildsPermissionState();
     TestLaunchApkPermissionsProofPersistsStateUnderSandbox();
     TestLaunchApkPermissionsProofPersistenceRoundTripIsDeterministic();
-    TestLaunchApkPermissionsProofHealsMissingFiles();
-    TestLaunchApkPermissionsProofHealsMalformedFiles();
-    TestInspectApkPermissionsCommandReportsReadyContracts();
-    TestLaunchApkPermissionsProofHealsIncompatibleFiles();
+  TestLaunchApkPermissionsProofHealsMissingFiles();
+  TestLaunchApkPermissionsProofHealsMalformedFiles();
+  TestLaunchApkPermissionsProofHealsIncompleteFiles();
+  TestInspectApkPermissionsCommandReportsReadyContracts();
+  TestInspectApkPermissionsCommandHealsIncompleteContracts();
+  TestLaunchApkPermissionsProofHealsIncompatibleFiles();
     TestLaunchApkPermissionsProofHealsStaleFiles();
+    TestLaunchApkProcessProofCommandRunsFixture();
+    TestLaunchApkProcessProofTracksSandboxArtifacts();
+    TestInspectApkProcessCommandReportsReadyContracts();
+    TestLaunchApkProcessProofHealsMalformedFiles();
+    TestLaunchApkSelfHealProofCommandRebuildsMalformedProcessManagerState();
+    TestLaunchApkSelfHealProofRebuildsProcessManagerState();
     TestLaunchApkPermissionsProofEmitsDeniedAudioCaptureDiagnostics();
   TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();

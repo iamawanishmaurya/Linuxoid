@@ -1,6 +1,7 @@
 #include "wfa/apk_permission_bridge.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -17,7 +18,14 @@ namespace fs = std::filesystem;
 namespace {
 
 struct ContractValidationOutcome {
-  enum class State { kValid, kMissing, kMalformed, kIncompatible, kStale };
+  enum class State {
+    kValid,
+    kMissing,
+    kMalformed,
+    kIncompatible,
+    kStale,
+    kIncomplete
+  };
 
   State state = State::kValid;
   std::vector<std::string> diagnostics;
@@ -75,6 +83,23 @@ std::string ReadTextFile(const fs::path& path) {
   std::ostringstream buffer;
   buffer << input.rdbuf();
   return buffer.str();
+}
+
+std::string_view TrimWhitespace(std::string_view value) {
+  while (!value.empty() &&
+         std::isspace(static_cast<unsigned char>(value.front())) != 0) {
+    value.remove_prefix(1);
+  }
+  while (!value.empty() &&
+         std::isspace(static_cast<unsigned char>(value.back())) != 0) {
+    value.remove_suffix(1);
+  }
+  return value;
+}
+
+bool LooksLikeJsonObject(std::string_view json) {
+  const std::string_view trimmed = TrimWhitespace(json);
+  return trimmed.size() >= 2 && trimmed.front() == '{' && trimmed.back() == '}';
 }
 
 void AppendUnique(std::vector<std::string>* values, const std::string& value) {
@@ -199,10 +224,30 @@ std::optional<bool> ExtractJsonBoolField(const std::string& json,
   return match[1].str() == "true";
 }
 
+bool JsonContainsArrayField(const std::string& json, const std::string& field) {
+  return std::regex_search(
+      json, std::regex("\"" + field + "\"\\s*:\\s*\\["));
+}
+
+std::size_t CountJsonFieldOccurrences(const std::string& json,
+                                      const std::string& field) {
+  std::size_t count = 0;
+  const std::regex pattern("\"" + field + "\"\\s*:");
+  for (std::sregex_iterator it(json.begin(), json.end(), pattern),
+       end_it;
+       it != end_it; ++it) {
+    ++count;
+  }
+  return count;
+}
+
 ContractValidationOutcome ValidateExistingContract(
     const fs::path& path, const std::string& expected_schema,
     const std::string& expected_package_name, int expected_user_id,
     int expected_app_id, const std::string& expected_sandbox_root,
+    const std::string& expected_app_data_dir,
+    const std::string& expected_apk_path,
+    const std::string& expected_staged_dir,
     std::uint64_t expected_updated_at_unix_ms,
     const std::string& missing_diagnostic,
     const std::string& missing_action,
@@ -221,7 +266,7 @@ ContractValidationOutcome ValidateExistingContract(
   }
 
   const std::string json = ReadTextFile(path);
-  if (json.empty()) {
+  if (json.empty() || !LooksLikeJsonObject(json)) {
     outcome.state = ContractValidationOutcome::State::kMalformed;
     outcome.diagnostics = {malformed_diagnostic};
     outcome.healing_actions = {malformed_action};
@@ -231,14 +276,18 @@ ContractValidationOutcome ValidateExistingContract(
   const auto schema_version = ExtractJsonStringField(json, "schema_version");
   const auto package_name = ExtractJsonStringField(json, "package_name");
   const auto sandbox_root = ExtractJsonStringField(json, "sandbox_root");
+  const auto app_data_dir = ExtractJsonStringField(json, "app_data_dir");
+  const auto apk_path = ExtractJsonStringField(json, "apk_path");
+  const auto staged_dir = ExtractJsonStringField(json, "staged_dir");
   const auto user_id = ExtractJsonIntegerField(json, "user_id");
   const auto app_id = ExtractJsonIntegerField(json, "app_id");
   const auto updated_at_unix_ms =
       ExtractJsonIntegerField(json, "updated_at_unix_ms");
   const auto contract_ready = ExtractJsonBoolField(json, "contract_ready");
 
-  if (!schema_version || !package_name || !sandbox_root || !user_id || !app_id ||
-      !updated_at_unix_ms || !contract_ready) {
+  if (!schema_version || !package_name || !sandbox_root || !app_data_dir ||
+      !apk_path || !staged_dir || !user_id || !app_id || !updated_at_unix_ms ||
+      !contract_ready) {
     outcome.state = ContractValidationOutcome::State::kMalformed;
     outcome.diagnostics = {malformed_diagnostic};
     outcome.healing_actions = {malformed_action};
@@ -247,6 +296,8 @@ ContractValidationOutcome ValidateExistingContract(
 
   if (*schema_version != expected_schema || *package_name != expected_package_name ||
       *sandbox_root != expected_sandbox_root ||
+      *app_data_dir != expected_app_data_dir ||
+      *apk_path != expected_apk_path || *staged_dir != expected_staged_dir ||
       *user_id != expected_user_id || *app_id != expected_app_id) {
     outcome.state = ContractValidationOutcome::State::kIncompatible;
     outcome.diagnostics = {incompatible_diagnostic};
@@ -264,6 +315,70 @@ ContractValidationOutcome ValidateExistingContract(
   }
 
   return outcome;
+}
+
+bool PermissionContractLooksComplete(const std::string& json,
+                                     const NativeApkPermissionsReport& report) {
+  if (!JsonContainsArrayField(json, "requested_permissions") ||
+      !JsonContainsArrayField(json, "granted_permissions") ||
+      !JsonContainsArrayField(json, "denied_permissions") ||
+      !JsonContainsArrayField(json, "permission_records") ||
+      !JsonContainsArrayField(json, "healing_actions") ||
+      !JsonContainsArrayField(json, "diagnostics") ||
+      !JsonContainsArrayField(json, "errors")) {
+    return false;
+  }
+
+  const auto decode_level = ExtractJsonStringField(json, "decode_level");
+  if (!decode_level || *decode_level != report.decode_level) {
+    return false;
+  }
+
+  if (CountJsonFieldOccurrences(json, "permission_name") !=
+      report.permission_records.size()) {
+    return false;
+  }
+
+  for (const auto& requested_permission : report.requested_permissions) {
+    if (json.find("\"" + requested_permission + "\"") == std::string::npos) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool AppOpsContractLooksComplete(const std::string& json,
+                                 const NativeApkAppOpsReport& report) {
+  if (!JsonContainsArrayField(json, "allowed_operations") ||
+      !JsonContainsArrayField(json, "denied_operations") ||
+      !JsonContainsArrayField(json, "default_operations") ||
+      !JsonContainsArrayField(json, "ignored_placeholder_operations") ||
+      !JsonContainsArrayField(json, "app_ops") ||
+      !JsonContainsArrayField(json, "healing_actions") ||
+      !JsonContainsArrayField(json, "diagnostics") ||
+      !JsonContainsArrayField(json, "errors")) {
+    return false;
+  }
+
+  const auto operations_count = ExtractJsonIntegerField(json, "operations_count");
+  if (!operations_count ||
+      static_cast<std::size_t>(*operations_count) != report.operations_count) {
+    return false;
+  }
+
+  if (CountJsonFieldOccurrences(json, "op_name") != report.operation_records.size()) {
+    return false;
+  }
+
+  for (const auto& operation : report.operation_records) {
+    if (json.find("\"op_name\": \"" + operation.operation_name + "\"") ==
+        std::string::npos) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 std::string RenderPermissionRecordsArray(
@@ -505,7 +620,8 @@ NativeApkPermissionBridgeSession::BuildPermissionsReport() const {
 
   const auto validation = ValidateExistingContract(
       report.report_json_path, report.schema_version, report.package_name,
-      report.user_id, report.app_id, report.sandbox_root,
+      report.user_id, report.app_id, report.sandbox_root, report.app_data_dir,
+      report.apk_path, report.staged_dir,
       report.updated_at_unix_ms, "permission_state_missing",
       "initialize_missing_permission_state",
       "permission_state_json_malformed",
@@ -516,6 +632,16 @@ NativeApkPermissionBridgeSession::BuildPermissionsReport() const {
   report.healing_actions = validation.healing_actions;
   for (const auto& diagnostic : validation.diagnostics) {
     AppendUnique(&report.diagnostics, diagnostic);
+  }
+  if (validation.state == ContractValidationOutcome::State::kValid) {
+    const std::string existing_json = ReadTextFile(report.report_json_path);
+    if (!PermissionContractLooksComplete(existing_json, report)) {
+      report.healing_actions = {"rebuild_incomplete_permission_state"};
+      AppendUnique(&report.diagnostics, "permission_state_incomplete");
+      AppendUnique(
+          &report.diagnostics,
+          "Self-Healing Android Device permission contract incomplete; rebuilding deterministic state");
+    }
   }
 
   report.ready = true;
@@ -547,7 +673,8 @@ NativeApkAppOpsReport NativeApkPermissionBridgeSession::BuildAppOpsReport(
 
   const auto validation = ValidateExistingContract(
       report.report_json_path, report.schema_version, report.package_name,
-      report.user_id, report.app_id, report.sandbox_root,
+      report.user_id, report.app_id, report.sandbox_root, report.app_data_dir,
+      report.apk_path, report.staged_dir,
       report.updated_at_unix_ms, "app_ops_state_missing",
       "initialize_missing_app_ops_state", "app_ops_json_malformed",
       "rebuild_malformed_app_ops_state", "app_ops_state_incompatible",
@@ -647,6 +774,16 @@ NativeApkAppOpsReport NativeApkPermissionBridgeSession::BuildAppOpsReport(
                   report.updated_at_unix_ms);
 
   report.operations_count = report.operation_records.size();
+  if (validation.state == ContractValidationOutcome::State::kValid) {
+    const std::string existing_json = ReadTextFile(report.report_json_path);
+    if (!AppOpsContractLooksComplete(existing_json, report)) {
+      report.healing_actions = {"rebuild_incomplete_app_ops_state"};
+      AppendUnique(&report.diagnostics, "app_ops_state_incomplete");
+      AppendUnique(
+          &report.diagnostics,
+          "Self-Healing Android Device AppOps contract incomplete; rebuilding deterministic state");
+    }
+  }
   report.ready = true;
   report.contract_ready = true;
   if (!report.denied_operations.empty()) {

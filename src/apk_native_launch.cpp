@@ -501,7 +501,9 @@ std::string DetermineRecommendedRecoveryAction(
       (!report.dex_proof_requested || report.art_bootstrap.ready) &&
       (!report.activity_proof_requested || report.package_manager.ready) &&
       (!report.activity_proof_requested || report.intent_resolution.ready) &&
-      (!report.activity_proof_requested || report.activity_launch.ready)) {
+      (!report.activity_proof_requested || report.activity_launch.ready) &&
+      (!report.process_proof_requested || report.activity_manager.ready) &&
+      (!report.process_proof_requested || report.process_manager.ready)) {
     return "none";
   }
   if (std::find(report.errors.begin(), report.errors.end(),
@@ -609,6 +611,12 @@ std::string DetermineRecommendedRecoveryAction(
     }
     return "rebuild_activity_launch_contract";
   }
+  if (report.process_proof_requested &&
+      (report.activity_manager_health != "ready" ||
+       !report.activity_manager.ready || report.process_health != "ready" ||
+       !report.process_manager.ready)) {
+    return "rebuild_process_manager_state";
+  }
   if (report.surface_proof_requested && !report.surface_proof_ready) {
     return "recreate_native_surface_session";
   }
@@ -630,7 +638,9 @@ bool DetermineRecoverable(const NativeApkLaunchReport& report) {
       (!report.dex_proof_requested || report.art_bootstrap.ready) &&
       (!report.activity_proof_requested || report.package_manager.ready) &&
       (!report.activity_proof_requested || report.intent_resolution.ready) &&
-      (!report.activity_proof_requested || report.activity_launch.ready)) {
+      (!report.activity_proof_requested || report.activity_launch.ready) &&
+      (!report.process_proof_requested || report.activity_manager.ready) &&
+      (!report.process_proof_requested || report.process_manager.ready)) {
     return false;
   }
   return report.launch_status != "invalid_apk" &&
@@ -772,6 +782,79 @@ NativeApkPermissionBridgeSession BuildPermissionBridgeSession(
        .dex_proof_requested = report.dex_proof_requested});
 }
 
+NativeApkProcessManagerSession BuildProcessManagerBridgeSession(
+    const NativeApkLaunchReport& report, bool allow_persisted_contract_repair) {
+  const fs::path app_data_dir =
+      !report.storage.app_data_dir.empty()
+          ? fs::path(report.storage.app_data_dir)
+          : (fs::path(report.sandbox_root) / "data" / "data" /
+             report.package_name);
+  const fs::path artifact_root = app_data_dir / "process-manager";
+  return NativeApkProcessManagerSession(
+      {.session_id =
+           report.package_name + ":" + report.install_id + ":process-manager",
+       .package_name = report.package_name,
+       .requested_package_name = report.requested_package_name,
+       .requested_component = report.requested_component,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .sandbox_root = report.sandbox_root,
+       .app_data_dir = app_data_dir.string(),
+       .artifact_root = artifact_root.string(),
+       .install_id = report.install_id,
+       .version_name = report.version_name,
+       .version_code = report.version_code,
+       .user_id = report.permissions.user_id,
+       .app_id = report.permissions.app_id,
+       .uid_placeholder = report.storage.uid_placeholder,
+       .gid_placeholder = report.storage.gid_placeholder,
+       .launch_status = report.launch_status,
+       .launch_ready = report.launch_ready,
+       .recoverable = report.recoverable,
+       .launcher_component = report.launcher_component,
+       .resolved_component = report.intent_resolution.resolved_component,
+       .resolution_status = report.intent_resolution.resolution_status,
+       .resolution_mode = report.intent_resolution.resolution_mode,
+       .resolution_reason = report.intent_resolution.resolution_reason,
+       .resolution_blocking_reason = report.intent_resolution.blocking_reason,
+       .resolution_recovery_action =
+           report.intent_resolution.recommended_recovery_action,
+       .activity_launch_status = report.activity_launch.activity_launch_status,
+       .activity_launch_blocking_reason =
+           report.activity_launch.blocking_reason,
+       .activity_launch_recovery_action =
+           report.activity_launch.recommended_recovery_action,
+       .intent_action = report.intent_resolution.action.empty()
+                            ? "android.intent.action.MAIN"
+                            : report.intent_resolution.action,
+       .intent_categories = report.intent_resolution.categories.empty()
+                                ? std::vector<std::string>{
+                                      "android.intent.category.LAUNCHER"}
+                                : report.intent_resolution.categories,
+       .lifecycle_state = report.lifecycle.current_state,
+       .surface_health = report.surface_health,
+       .lifecycle_health = report.lifecycle_health,
+       .looper_health = report.looper_health,
+       .input_health = report.input_health,
+       .dex_health = report.dex_health,
+       .art_health = report.art_health,
+       .binder_health = report.binder_health,
+       .activity_health = report.activity_health,
+       .storage_health = report.storage_health,
+       .sandbox_health = report.sandbox_health,
+       .permission_health = report.permission_health,
+       .app_ops_health = report.app_ops_health,
+       .package_manager_ready = report.package_manager.ready,
+       .intent_resolution_ready = report.intent_resolution.ready,
+       .activity_launch_ready = report.activity_launch.ready,
+       .dex_bootstrap_ready = report.art_bootstrap.dex_bootstrap_ready,
+       .art_runtime_available = report.art_bootstrap.art_runtime_available,
+       .java_execution_supported =
+           report.art_bootstrap.java_execution_supported,
+       .persisted_artifact_root_preexisting = fs::exists(artifact_root),
+       .allow_persisted_contract_repair = allow_persisted_contract_repair});
+}
+
 NativeApkActivityLaunchBridgeSession BuildActivityLaunchBridgeSession(
     const NativeApkLaunchReport& report, const ParsedManifestMetadata& manifest) {
   return NativeApkActivityLaunchBridgeSession(
@@ -881,6 +964,15 @@ void PopulateRequestedProofFailures(NativeApkLaunchReport* report) {
   } else {
     report->permission_health = "not_requested";
     report->app_ops_health = "not_requested";
+  }
+  if (report->process_proof_requested) {
+    report->activity_manager.errors = report->errors;
+    report->process_manager.errors = report->errors;
+    report->activity_manager_health = "blocked";
+    report->process_health = "blocked";
+  } else {
+    report->activity_manager_health = "not_requested";
+    report->process_health = "not_requested";
   }
   if (report->activity_proof_requested) {
     report->binder_health = "blocked";
@@ -1207,12 +1299,17 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
   report.requested_package_name = options.requested_package_name;
   report.requested_component = options.requested_component;
   report.self_heal_proof_requested = options.self_heal_proof_requested;
+  report.process_proof_requested =
+      options.process_proof_requested || options.self_heal_proof_requested;
   report.activity_proof_requested =
-      options.activity_proof_requested || options.self_heal_proof_requested;
+      options.activity_proof_requested || report.process_proof_requested ||
+      options.self_heal_proof_requested;
   report.storage_proof_requested =
-      options.storage_proof_requested || options.self_heal_proof_requested;
+      options.storage_proof_requested || report.process_proof_requested ||
+      options.self_heal_proof_requested;
   report.permissions_proof_requested =
-      options.permissions_proof_requested || options.self_heal_proof_requested;
+      options.permissions_proof_requested || report.process_proof_requested ||
+      options.self_heal_proof_requested;
   report.surface_proof_requested =
       options.surface_proof_requested || report.activity_proof_requested ||
       options.self_heal_proof_requested;
@@ -1247,6 +1344,12 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
     AppendError(&report.limitations, "permissions_and_appops_contract_only");
     AppendError(&report.limitations,
                 "binary_manifest_permission_decode_not_supported_yet");
+  }
+  if (report.process_proof_requested) {
+    AppendError(&report.limitations,
+                "local_activity_manager_contract_only");
+    AppendError(&report.limitations,
+                "local_process_manager_contract_only");
   }
   if (report.self_heal_proof_requested) {
     AppendError(&report.limitations,
@@ -1602,6 +1705,27 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
 
   ApplySimulatedSubsystemFaults(&report, options);
 
+  if (report.process_proof_requested) {
+    const auto process_session = BuildProcessManagerBridgeSession(
+        report, !report.self_heal_proof_requested);
+    report.activity_manager = process_session.BuildActivityManagerReport();
+    report.process_manager =
+        process_session.BuildProcessManagerReport(report.activity_manager);
+    report.activity_manager_health =
+        report.activity_manager.ready ? "ready" : "blocked";
+    report.process_health =
+        report.process_manager.ready ? "ready" : "blocked";
+    for (const auto& error : report.activity_manager.errors) {
+      AppendError(&report.errors, error);
+    }
+    for (const auto& error : report.process_manager.errors) {
+      AppendError(&report.errors, error);
+    }
+  } else {
+    report.activity_manager_health = "not_requested";
+    report.process_health = "not_requested";
+  }
+
   const bool asset_contract_ready =
       !report.asset_proof_requested ||
       (report.asset_bridge.ready && report.resource_bridge.ready);
@@ -1620,6 +1744,9 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       !report.activity_proof_requested ||
       (report.package_manager.ready && report.intent_resolution.ready &&
        report.activity_launch.ready);
+  const bool process_contract_ready =
+      !report.process_proof_requested ||
+      (report.activity_manager.ready && report.process_manager.ready);
   report.launch_health =
       report.launch_ready &&
               (!report.surface_proof_requested || report.surface_proof_ready) &&
@@ -1628,7 +1755,8 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
               permissions_contract_ready &&
               lifecycle_contract_ready &&
               dex_contract_ready &&
-              activity_contract_ready
+              activity_contract_ready &&
+              process_contract_ready
           ? "ready"
           : "blocked";
   report.recoverable = DetermineRecoverable(report);
@@ -1671,6 +1799,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << (report.dex_proof_requested ? "true" : "false") << ",\n"
          << "  \"activity_proof_requested\": "
          << (report.activity_proof_requested ? "true" : "false") << ",\n"
+         << "  \"process_proof_requested\": "
+         << (report.process_proof_requested ? "true" : "false") << ",\n"
          << "  \"storage_proof_requested\": "
          << (report.storage_proof_requested ? "true" : "false") << ",\n"
          << "  \"permissions_proof_requested\": "
@@ -1732,6 +1862,10 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "  \"binder_health\": \"" << EscapeJson(report.binder_health)
          << "\",\n"
          << "  \"activity_health\": \"" << EscapeJson(report.activity_health)
+         << "\",\n"
+         << "  \"activity_manager_health\": \""
+         << EscapeJson(report.activity_manager_health) << "\",\n"
+         << "  \"process_health\": \"" << EscapeJson(report.process_health)
          << "\",\n"
          << "  \"storage_health\": \"" << EscapeJson(report.storage_health)
          << "\",\n"
@@ -2146,6 +2280,186 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"errors\": "
          << RenderJsonArray(report.activity_launch.errors) << "\n"
          << "  },\n"
+         << "  \"activity_manager\": {\n"
+         << "    \"schema_version\": \""
+         << EscapeJson(report.activity_manager.schema_version) << "\",\n"
+         << "    \"ready\": "
+         << (report.activity_manager.ready ? "true" : "false") << ",\n"
+         << "    \"contract_ready\": "
+         << (report.activity_manager.contract_ready ? "true" : "false")
+         << ",\n"
+         << "    \"session_id\": \""
+         << EscapeJson(report.activity_manager.session_id) << "\",\n"
+         << "    \"artifact_root\": \""
+         << EscapeJson(report.activity_manager.artifact_root) << "\",\n"
+         << "    \"report_json_path\": \""
+         << EscapeJson(report.activity_manager.report_json_path)
+         << "\",\n"
+         << "    \"package_name\": \""
+         << EscapeJson(report.activity_manager.package_name) << "\",\n"
+         << "    \"user_id\": " << report.activity_manager.user_id << ",\n"
+         << "    \"app_id\": " << report.activity_manager.app_id << ",\n"
+         << "    \"sandbox_root\": \""
+         << EscapeJson(report.activity_manager.sandbox_root) << "\",\n"
+         << "    \"app_data_dir\": \""
+         << EscapeJson(report.activity_manager.app_data_dir) << "\",\n"
+         << "    \"apk_path\": \""
+         << EscapeJson(report.activity_manager.apk_path) << "\",\n"
+         << "    \"staged_dir\": \""
+         << EscapeJson(report.activity_manager.staged_dir) << "\",\n"
+         << "    \"updated_at_unix_ms\": "
+         << report.activity_manager.updated_at_unix_ms << ",\n"
+         << "    \"requested_package_name\": \""
+         << EscapeJson(report.activity_manager.requested_package_name)
+         << "\",\n"
+         << "    \"requested_component\": \""
+         << EscapeJson(report.activity_manager.requested_component)
+         << "\",\n"
+         << "    \"resolved_component\": \""
+         << EscapeJson(report.activity_manager.resolved_component)
+         << "\",\n"
+         << "    \"launch_component\": \""
+         << EscapeJson(report.activity_manager.launch_component)
+         << "\",\n"
+         << "    \"process_name\": \""
+         << EscapeJson(report.activity_manager.process_name) << "\",\n"
+         << "    \"start_reason\": \""
+         << EscapeJson(report.activity_manager.start_reason) << "\",\n"
+         << "    \"resolution_mode\": \""
+         << EscapeJson(report.activity_manager.resolution_mode) << "\",\n"
+         << "    \"intent_action\": \""
+         << EscapeJson(report.activity_manager.intent_action) << "\",\n"
+         << "    \"intent_categories\": "
+         << RenderJsonArray(report.activity_manager.intent_categories)
+         << ",\n"
+         << "    \"resolution_status\": \""
+         << EscapeJson(report.activity_manager.resolution_status)
+         << "\",\n"
+         << "    \"resolution_reason\": \""
+         << EscapeJson(report.activity_manager.resolution_reason)
+         << "\",\n"
+         << "    \"launch_state\": \""
+         << EscapeJson(report.activity_manager.launch_state) << "\",\n"
+         << "    \"lifecycle_state\": \""
+         << EscapeJson(report.activity_manager.lifecycle_state) << "\",\n"
+         << "    \"blocking_reason\": \""
+         << EscapeJson(report.activity_manager.blocking_reason) << "\",\n"
+         << "    \"recommended_recovery_action\": \""
+         << EscapeJson(report.activity_manager.recommended_recovery_action)
+         << "\",\n"
+         << "    \"restart_policy\": \""
+         << EscapeJson(report.activity_manager.restart_policy) << "\",\n"
+         << "    \"termination_policy\": \""
+         << EscapeJson(report.activity_manager.termination_policy)
+         << "\",\n"
+         << "    \"storage_health\": \""
+         << EscapeJson(report.activity_manager.storage_health) << "\",\n"
+         << "    \"sandbox_health\": \""
+         << EscapeJson(report.activity_manager.sandbox_health) << "\",\n"
+         << "    \"permission_health\": \""
+         << EscapeJson(report.activity_manager.permission_health)
+         << "\",\n"
+         << "    \"app_ops_health\": \""
+         << EscapeJson(report.activity_manager.app_ops_health) << "\",\n"
+         << "    \"binder_health\": \""
+         << EscapeJson(report.activity_manager.binder_health) << "\",\n"
+         << "    \"surface_health\": \""
+         << EscapeJson(report.activity_manager.surface_health) << "\",\n"
+         << "    \"lifecycle_health\": \""
+         << EscapeJson(report.activity_manager.lifecycle_health) << "\",\n"
+         << "    \"looper_health\": \""
+         << EscapeJson(report.activity_manager.looper_health) << "\",\n"
+         << "    \"input_health\": \""
+         << EscapeJson(report.activity_manager.input_health) << "\",\n"
+         << "    \"dex_health\": \""
+         << EscapeJson(report.activity_manager.dex_health) << "\",\n"
+         << "    \"art_health\": \""
+         << EscapeJson(report.activity_manager.art_health) << "\",\n"
+         << "    \"healing_actions\": "
+         << RenderJsonArray(report.activity_manager.healing_actions)
+         << ",\n"
+         << "    \"diagnostics\": "
+         << RenderJsonArray(report.activity_manager.diagnostics) << ",\n"
+         << "    \"errors\": "
+         << RenderJsonArray(report.activity_manager.errors) << "\n"
+         << "  },\n"
+         << "  \"process_manager\": {\n"
+         << "    \"schema_version\": \""
+         << EscapeJson(report.process_manager.schema_version) << "\",\n"
+         << "    \"ready\": "
+         << (report.process_manager.ready ? "true" : "false") << ",\n"
+         << "    \"contract_ready\": "
+         << (report.process_manager.contract_ready ? "true" : "false")
+         << ",\n"
+         << "    \"session_id\": \""
+         << EscapeJson(report.process_manager.session_id) << "\",\n"
+         << "    \"artifact_root\": \""
+         << EscapeJson(report.process_manager.artifact_root) << "\",\n"
+         << "    \"report_json_path\": \""
+         << EscapeJson(report.process_manager.report_json_path)
+         << "\",\n"
+         << "    \"package_name\": \""
+         << EscapeJson(report.process_manager.package_name) << "\",\n"
+         << "    \"user_id\": " << report.process_manager.user_id << ",\n"
+         << "    \"app_id\": " << report.process_manager.app_id << ",\n"
+         << "    \"uid_placeholder\": "
+         << report.process_manager.uid_placeholder << ",\n"
+         << "    \"gid_placeholder\": "
+         << report.process_manager.gid_placeholder << ",\n"
+         << "    \"sandbox_root\": \""
+         << EscapeJson(report.process_manager.sandbox_root) << "\",\n"
+         << "    \"app_data_dir\": \""
+         << EscapeJson(report.process_manager.app_data_dir) << "\",\n"
+         << "    \"apk_path\": \""
+         << EscapeJson(report.process_manager.apk_path) << "\",\n"
+         << "    \"staged_dir\": \""
+         << EscapeJson(report.process_manager.staged_dir) << "\",\n"
+         << "    \"updated_at_unix_ms\": "
+         << report.process_manager.updated_at_unix_ms << ",\n"
+         << "    \"process_identity\": \""
+         << EscapeJson(report.process_manager.process_identity)
+         << "\",\n"
+         << "    \"process_name\": \""
+         << EscapeJson(report.process_manager.process_name) << "\",\n"
+         << "    \"pid_value\": " << report.process_manager.pid_value
+         << ",\n"
+         << "    \"pid_source\": \""
+         << EscapeJson(report.process_manager.pid_source) << "\",\n"
+         << "    \"launch_component\": \""
+         << EscapeJson(report.process_manager.launch_component)
+         << "\",\n"
+         << "    \"start_reason\": \""
+         << EscapeJson(report.process_manager.start_reason) << "\",\n"
+         << "    \"process_state\": \""
+         << EscapeJson(report.process_manager.process_state) << "\",\n"
+         << "    \"lifecycle_state\": \""
+         << EscapeJson(report.process_manager.lifecycle_state) << "\",\n"
+         << "    \"restart_policy\": \""
+         << EscapeJson(report.process_manager.restart_policy) << "\",\n"
+         << "    \"termination_policy\": \""
+         << EscapeJson(report.process_manager.termination_policy)
+         << "\",\n"
+         << "    \"intent_action\": \""
+         << EscapeJson(report.process_manager.intent_action) << "\",\n"
+         << "    \"intent_categories\": "
+         << RenderJsonArray(report.process_manager.intent_categories)
+         << ",\n"
+         << "    \"blocking_reason\": \""
+         << EscapeJson(report.process_manager.blocking_reason) << "\",\n"
+         << "    \"recommended_recovery_action\": \""
+         << EscapeJson(report.process_manager.recommended_recovery_action)
+         << "\",\n"
+         << "    \"dependency_details\": "
+         << RenderJsonArray(report.process_manager.dependency_details)
+         << ",\n"
+         << "    \"healing_actions\": "
+         << RenderJsonArray(report.process_manager.healing_actions)
+         << ",\n"
+         << "    \"diagnostics\": "
+         << RenderJsonArray(report.process_manager.diagnostics) << ",\n"
+         << "    \"errors\": "
+         << RenderJsonArray(report.process_manager.errors) << "\n"
+         << "  },\n"
          << "  \"storage\": {\n"
          << "    \"ready\": " << (report.storage.ready ? "true" : "false")
          << ",\n"
@@ -2334,6 +2648,13 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "    \"app_ops_health\": \""
          << EscapeJson(report.self_healing_android_device.app_ops_health)
+         << "\",\n"
+         << "    \"activity_manager_health\": \""
+         << EscapeJson(
+                report.self_healing_android_device.activity_manager_health)
+         << "\",\n"
+         << "    \"process_health\": \""
+         << EscapeJson(report.self_healing_android_device.process_health)
          << "\",\n"
          << "    \"recoverable\": "
          << (report.self_healing_android_device.recoverable ? "true"

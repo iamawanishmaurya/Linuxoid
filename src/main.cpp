@@ -47,10 +47,12 @@ void PrintUsage() {
       << "  compatctl launch-apk --dex-proof <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --storage-proof <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --permissions-proof <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --process-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --activity-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --self-heal-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk-surface <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-permissions <apk-path> [staging-root]\n"
+      << "  compatctl inspect-apk-process <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-resources <apk-path> [resource-root-or-dash]\n"
       << "  compatctl plan-native-spike <apk-path> [compat-root] [native-root]\n"
       << "  compatctl bootstrap-native-spike <apk-path> [compat-root] [native-root]\n"
@@ -242,6 +244,7 @@ int main(int argc, char** argv) {
       bool lifecycle_proof_requested = false;
       bool dex_proof_requested = false;
       bool activity_proof_requested = false;
+      bool process_proof_requested = false;
       bool storage_proof_requested = false;
       bool permissions_proof_requested = false;
       bool self_heal_proof_requested = false;
@@ -285,6 +288,11 @@ int main(int argc, char** argv) {
           ++apk_arg_index;
           continue;
         }
+        if (argument == "--process-proof") {
+          process_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
         if (argument == "--self-heal-proof") {
           self_heal_proof_requested = true;
           ++apk_arg_index;
@@ -321,39 +329,38 @@ int main(int argc, char** argv) {
           .lifecycle_proof_requested = lifecycle_proof_requested,
           .dex_proof_requested = dex_proof_requested,
           .activity_proof_requested = activity_proof_requested,
+          .process_proof_requested = process_proof_requested,
           .storage_proof_requested = storage_proof_requested,
           .permissions_proof_requested = permissions_proof_requested,
           .self_heal_proof_requested = self_heal_proof_requested,
       };
       const auto report = wfa::LaunchNativeApk(argv[apk_arg_index], options);
       std::cout << wfa::RenderNativeApkLaunchJson(report);
-      const bool success = report.launch_ready &&
-                           (!report.surface_proof_requested ||
-                           report.surface_proof_ready) &&
-                           (!report.asset_proof_requested ||
-                            (report.asset_bridge.ready &&
-                             report.resource_bridge.ready)) &&
-                           (!report.storage_proof_requested ||
-                            report.storage.ready) &&
-                           (!report.permissions_proof_requested ||
-                            (report.permissions.ready &&
-                             report.app_ops.ready)) &&
-                           (!report.lifecycle_proof_requested ||
-                            (report.lifecycle.ready && report.looper.ready &&
-                             report.input_queue.ready)) &&
-                           (!report.dex_proof_requested ||
-                            (report.dex.ready &&
-                             report.art_bootstrap.ready)) &&
-                           (!report.activity_proof_requested ||
-                           (report.package_manager.ready &&
-                             report.intent_resolution.ready &&
-                             report.activity_launch.ready)) &&
-                           (!report.self_heal_proof_requested ||
-                            (report.self_healing_android_device.ready &&
-                             (report.self_healing_android_device.final_health ==
-                                  "healthy" ||
-                              report.self_healing_android_device.final_health ==
-                                  "recovered")));
+      const bool proof_ready_without_self_heal =
+          report.launch_ready &&
+          (!report.surface_proof_requested || report.surface_proof_ready) &&
+          (!report.asset_proof_requested ||
+           (report.asset_bridge.ready && report.resource_bridge.ready)) &&
+          (!report.storage_proof_requested || report.storage.ready) &&
+          (!report.permissions_proof_requested ||
+           (report.permissions.ready && report.app_ops.ready)) &&
+          (!report.lifecycle_proof_requested ||
+           (report.lifecycle.ready && report.looper.ready &&
+            report.input_queue.ready)) &&
+          (!report.dex_proof_requested ||
+           (report.dex.ready && report.art_bootstrap.ready)) &&
+          (!report.activity_proof_requested ||
+           (report.package_manager.ready && report.intent_resolution.ready &&
+            report.activity_launch.ready)) &&
+          (!report.process_proof_requested ||
+           (report.activity_manager.ready && report.process_manager.ready));
+      const bool self_heal_converged =
+          report.self_healing_android_device.ready &&
+          (report.self_healing_android_device.final_health == "healthy" ||
+           report.self_healing_android_device.final_health == "recovered");
+      const bool success = report.self_heal_proof_requested
+                               ? self_heal_converged
+                               : proof_ready_without_self_heal;
       return success ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
@@ -386,6 +393,24 @@ int main(int argc, char** argv) {
       std::cout << wfa::RenderNativeApkLaunchJson(report);
       const bool success =
           report.storage.ready && report.permissions.ready && report.app_ops.ready;
+      return success ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "inspect-apk-process") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const wfa::NativeApkLaunchOptions options{
+          .staging_root = argc == 4 ? argv[3] : "/tmp/linuxoid-apk-launch",
+          .watchdog_seconds = 1,
+          .process_proof_requested = true,
+      };
+      const auto report = wfa::LaunchNativeApk(argv[2], options);
+      std::cout << wfa::RenderNativeApkLaunchJson(report);
+      const bool success = report.activity_manager.ready &&
+                           report.process_manager.ready;
       return success ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 

@@ -214,6 +214,8 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 - `compatctl launch-apk --permissions-proof <apk-path> [staging-root]`
 - `compatctl inspect-apk-permissions <apk-path> [staging-root]`
 - `compatctl launch-apk --activity-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`
+- `compatctl launch-apk --process-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`
+- `compatctl inspect-apk-process <apk-path> [staging-root]`
 - `compatctl launch-apk --self-heal-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`
 - `compatctl launch-apk-surface <apk-path> [staging-root]`
 
@@ -221,13 +223,17 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 
 `--storage-proof` now implements **P9 Android App Storage + Sandbox Contract** for the direct APK session path. It materializes deterministic `sandbox/data/data/<package>`-style directories, exposes `files` plus `cache` plus native-lib plus asset/resource roots, validates app-relative paths through a Linuxoid safe resolver, writes a session marker file, rejects escape attempts explicitly, and emits nested `storage` JSON plus `storage_health` and `sandbox_health` fields for the Self-Healing Android Device loop while keeping `isolation_level: path_sandbox_only` honest.
 
-`--permissions-proof` now implements **P10 Android Permissions + AppOps Contract** for the same direct APK session path. It parses plain-XML `uses-permission` entries when available, materializes deterministic `requested_permissions`, `granted_permissions`, and `denied_permissions`, persists sandbox-backed contract artifacts under `sandbox/data/data/<package>/permissions/permission-state.json` plus `sandbox/data/data/<package>/permissions/app-ops.json`, and emits nested `permissions` plus `app_ops` JSON with explicit `schema_version`, `package_name`, `user_id`, `app_id`, `sandbox_root`, `updated_at_unix_ms`, `contract_ready`, `healing_actions`, `diagnostics`, `permission_health`, and `app_ops_health` fields for the Self-Healing Android Device loop. Linuxoid now validates and heals missing, malformed, stale, or incompatible permission/AppOps files across repeated launches, but it still does **not** silently grant dangerous permissions: unsupported/binary manifests report an explicit limitation, `RECORD_AUDIO` stays denied without an explicit local grant path, and AppOps remain Linuxoid-owned local contract records rather than full Android framework enforcement.
+`--permissions-proof` now implements **P10 Android Permissions + AppOps Contract** for the same direct APK session path. It parses plain-XML `uses-permission` entries when available, materializes deterministic `requested_permissions`, `granted_permissions`, and `denied_permissions`, persists sandbox-backed contract artifacts under `sandbox/data/data/<package>/permissions/permission-state.json` plus `sandbox/data/data/<package>/permissions/app-ops.json`, and emits nested `permissions` plus `app_ops` JSON with explicit `schema_version`, `package_name`, `user_id`, `app_id`, `sandbox_root`, `updated_at_unix_ms`, `contract_ready`, `healing_actions`, `diagnostics`, `permission_health`, and `app_ops_health` fields for the Self-Healing Android Device loop. Linuxoid now validates and heals missing, malformed, incomplete, stale, or incompatible permission/AppOps files across repeated launches, but it still does **not** silently grant dangerous permissions: unsupported/binary manifests report an explicit limitation, `RECORD_AUDIO` stays denied without an explicit local grant path, and AppOps remain Linuxoid-owned local contract records rather than full Android framework enforcement.
 
-`inspect-apk-permissions` now gives that same durable contract a focused operator surface without requiring developers to sift through the full direct-launch report. It reuses the session-bound sandbox and permission/AppOps machinery, writes or heals deterministic contract files under `sandbox/data/data/<package>/permissions`, and returns stable JSON that exposes `storage`, `permissions`, `app_ops`, `sandbox_health`, `permission_health`, `app_ops_health`, and the current recovery guidance for the Self-Healing Android Device path.
+`inspect-apk-permissions` now gives that same durable contract a focused operator surface without requiring developers to sift through the full direct-launch report. It reuses the session-bound sandbox and permission/AppOps machinery, writes or heals deterministic contract files under `sandbox/data/data/<package>/permissions`, validates incomplete persisted state before trusting it, and returns stable JSON that exposes `storage`, `permissions`, `app_ops`, `sandbox_health`, `permission_health`, `app_ops_health`, and the current recovery guidance for the Self-Healing Android Device path.
 
 `--activity-proof` now binds that same staged APK session to a Linuxoid-owned `package_manager`, `intent_resolution`, and `activity_launch` contract. It writes a deterministic package record with activity labels, exported flags, enabled flags, and manifest-declared intent filters, resolves either a `MAIN` plus `LAUNCHER` target or an explicit `--component` request, ties the resulting activity launch record back to lifecycle, surface, input, Binder, and DEX/bootstrap readiness, and emits explicit `binder_health` plus `activity_health` fields for future Self-Healing Android Device work without claiming full Android framework startup yet.
 
-`--self-heal-proof` now runs the existing Self-Healing Android Device watchdog on top of that same staged APK session, and **P10 Android Permissions + AppOps Contract** extends the inputs it consumes with `permission_health` and `app_ops_health` alongside the earlier storage/sandbox contract. The watchdog can now record and replay deterministic `rebuild_permission_state` attempts for missing, malformed, stale, or incompatible sandbox-backed permission/AppOps files alongside `repair_app_storage`, `restage_assets`, `restart_surface`, `refresh_binder_services`, `rebuild_dex_bootstrap`, and `rerun_intent_resolution`, without pretending real Android framework recovery already exists.
+`--process-proof` now implements **P11 Minimal ActivityManager/ProcessManager Contract** for the same direct APK session path. It binds the staged session to a Linuxoid-owned `activity_manager` plus `process_manager` contract, persists deterministic process identity plus lifecycle state under `sandbox/data/data/<package>/process-manager/activity-manager-state.json` and `sandbox/data/data/<package>/process-manager/process-state.json`, exposes Linuxoid app identity placeholders like `user_id`, `app_id`, `uid_placeholder`, `gid_placeholder`, `process_name`, `pid_value`, `pid_source`, `start_reason`, `restart_policy`, and `termination_policy`, and ties process readiness back to the existing package, intent, activity, lifecycle, storage, permission/AppOps, Binder, surface/input, and DEX/bootstrap contracts without pretending full Android framework process execution already exists.
+
+`inspect-apk-process` now gives that P11 contract a focused operator surface. It reuses the same sandbox-backed session data, heals missing, malformed, stale, or incompatible process-manager artifacts before trusting them, and returns stable JSON that exposes `activity_manager`, `process_manager`, `activity_manager_health`, `process_health`, and the current recovery guidance for the Self-Healing Android Device path.
+
+`--self-heal-proof` now runs the existing Self-Healing Android Device watchdog on top of that same staged APK session, and **P11 Minimal ActivityManager/ProcessManager Contract** extends the inputs it consumes with `activity_manager_health` and `process_health` alongside the earlier storage/sandbox and permission/AppOps contracts. The watchdog can now record and replay deterministic `rebuild_process_manager_state` attempts for missing, malformed, incomplete, stale, or incompatible sandbox-backed process-manager files alongside `rebuild_permission_state`, `repair_app_storage`, `restage_assets`, `restart_surface`, `refresh_binder_services`, `rebuild_dex_bootstrap`, and `rerun_intent_resolution`, without pretending real Android framework recovery already exists.
 
 Current P10 inspection flow:
 
@@ -238,16 +244,25 @@ Current P10 inspection flow:
   - `sandbox/data/data/<package>/permissions/permission-state.json`
   - `sandbox/data/data/<package>/permissions/app-ops.json`
 
-What remains blocked after P10:
+What remains blocked after P11:
 
-- full Android framework permission manager behavior
-- full AppOps service semantics
-- Java/Kotlin ART execution
-- process lifecycle ownership beyond the current session contract
+- real host-side process creation and liveness beyond the current Linuxoid placeholder process identity
+- real Java/Kotlin ART execution
+- full Android `ActivityManagerService` / `ProcessList` behavior
+- full Android framework permission manager and AppOps service semantics
 
-Next phase: **P11 Minimal ActivityManager/ProcessManager Contract**
+Next phase: **P12 Runtime Process Handoff + Resume Contract**
 
-GitHub update blocked: direct GitHub authentication not available from this environment
+P12 handoff from P11:
+
+- reuse the existing sandbox-backed `package_manager`, `intent_resolution`, `activity_launch`, `storage`, `permissions`, `app_ops`, `activity_manager`, and `process_manager` session contracts as the stable inputs for real process handoff and resume sequencing
+- treat `activity_manager_health`, `process_health`, `permission_health`, `app_ops_health`, `storage_health`, `sandbox_health`, `binder_health`, `dex_health`, and `activity_health` as first-class gating signals for Linuxoid runtime start, stop, and restart decisions
+- keep the current Self-Healing Android Device recovery loop honest by distinguishing:
+  - contract-ready metadata and process planning
+  - real process creation, supervision, and resume ownership
+- preserve the current no-Waydroid, no-emulator, no-ADB constraint on the direct native Linuxoid runtime path
+
+Git/GitHub update path: use normal git remotes from this environment; if direct authentication is unavailable in a later environment, record `GitHub update blocked: direct GitHub authentication not available from this environment`.
 
 Current direct APK activity-proof operator surface:
 

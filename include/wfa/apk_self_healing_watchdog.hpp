@@ -23,7 +23,7 @@ struct SelfHealingAndroidDeviceRecoveryAction {
 struct SelfHealingAndroidDeviceReport {
   bool ready = false;
   std::string phase_name =
-      "P10 Android Permissions + AppOps Contract";
+      "P11 Minimal ActivityManager/ProcessManager Contract";
   std::string session_id;
   std::string artifact_root;
   std::string report_json_path;
@@ -34,6 +34,8 @@ struct SelfHealingAndroidDeviceReport {
   std::string sandbox_health = "not_requested";
   std::string permission_health = "not_requested";
   std::string app_ops_health = "not_requested";
+  std::string activity_manager_health = "not_requested";
+  std::string process_health = "not_requested";
   bool recoverable = false;
   int actions_attempted = 0;
   int actions_succeeded = 0;

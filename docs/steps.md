@@ -1,8 +1,18 @@
 # Steps Log
 
+- Step: P11 ActivityManager ProcessManager Contract GREEN
+  Action: Added `launch-apk --process-proof` and `inspect-apk-process`, persisted deterministic sandbox-backed `activity_manager` plus `process_manager` artifacts, validated or healed malformed/incomplete/stale/incompatible process-manager state, and threaded `activity_manager_health` plus `process_health` back into the Self-Healing Android Device watchdog with deterministic `rebuild_process_manager_state` recovery.
+  Result: Linuxoid now has a Linuxoid-owned ActivityManager/ProcessManager contract for direct APK sessions, plus an honest Self-Healing Android Device repair loop that can rebuild blocked process-manager state after upstream storage, permission/AppOps, surface, Binder, lifecycle, or DEX/bootstrap repairs converge.
+  Timestamp: 2026-05-17T23:48:00+05:30
+
+- Step: P10 -> P11 HANDOFF DOCS GREEN
+  Action: Updated repo-facing docs and status output so the next handoff toward **P11 Minimal ActivityManager/ProcessManager Contract** is explicit about which P10 session contracts and Self-Healing Android Device health gates the next phase must consume.
+  Result: Linuxoid now states more clearly that P11 should build on the existing package/activity/storage/permission/AppOps contracts rather than bypassing them, while keeping the current no-Waydroid, no-emulator, no-ADB direct runtime path intact.
+  Timestamp: 2026-05-18T21:35:00+05:30
+
 - Step: P10 Android Permissions + AppOps Contract INSPECT SURFACE GREEN
-  Action: Added `compatctl inspect-apk-permissions`, reused the same sandbox-backed permission/AppOps session contract from `launch-apk --permissions-proof`, and expanded deterministic healing coverage to include incompatible and stale persisted permission/AppOps files.
-  Result: Linuxoid now has a focused inspection surface for the Self-Healing Android Device permission/AppOps contract, and repeated launches can heal missing, malformed, incompatible, or stale persisted files while keeping dangerous permissions denied unless a local grant path exists.
+  Action: Added `compatctl inspect-apk-permissions`, reused the same sandbox-backed permission/AppOps session contract from `launch-apk --permissions-proof`, and expanded deterministic healing coverage to include incomplete, incompatible, and stale persisted permission/AppOps files through both direct runtime tests and the real CLI surface.
+  Result: Linuxoid now has a focused inspection surface for the Self-Healing Android Device permission/AppOps contract, and repeated launches can heal missing, malformed, incomplete, incompatible, or stale persisted files while keeping dangerous permissions denied unless a local grant path exists.
   Timestamp: 2026-05-18T21:05:00+05:30
 
 - Step: P10 Android Permissions + AppOps Contract GREEN

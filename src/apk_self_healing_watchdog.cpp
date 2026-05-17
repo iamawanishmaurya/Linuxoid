@@ -7,6 +7,7 @@
 #include "wfa/apk_lifecycle_bridge.hpp"
 #include "wfa/apk_native_launch.hpp"
 #include "wfa/apk_permission_bridge.hpp"
+#include "wfa/apk_process_bridge.hpp"
 #include "wfa/apk_storage_bridge.hpp"
 #include "wfa/binder_service_manager.hpp"
 #include "wfa/native_window_surface.hpp"
@@ -43,6 +44,8 @@ struct WorkingHealthState {
   bool sandbox_ready = false;
   bool permission_ready = false;
   bool app_ops_ready = false;
+  bool activity_manager_ready = false;
+  bool process_ready = false;
   bool recoverable = false;
 };
 
@@ -170,6 +173,10 @@ WorkingHealthState BuildWorkingHealthState(
               report.permissions.ready,
           .app_ops_ready =
               !report.permissions_proof_requested || report.app_ops.ready,
+          .activity_manager_ready =
+              !report.process_proof_requested || report.activity_manager.ready,
+          .process_ready =
+              !report.process_proof_requested || report.process_manager.ready,
           .recoverable = report.recoverable};
 }
 
@@ -181,7 +188,8 @@ bool AllContractsReady(const NativeApkLaunchReport& report,
          state.art_ready && state.package_manager_ready &&
          state.intent_resolution_ready && state.activity_launch_ready &&
          state.storage_ready && state.sandbox_ready &&
-         state.permission_ready && state.app_ops_ready;
+         state.permission_ready && state.app_ops_ready &&
+         state.activity_manager_ready && state.process_ready;
 }
 
 std::string ClassifyHealth(const NativeApkLaunchReport& report,
@@ -203,7 +211,8 @@ std::string ClassifyHealth(const NativeApkLaunchReport& report,
       !state.dex_ready || !state.art_ready || !state.package_manager_ready ||
       !state.intent_resolution_ready || !state.activity_launch_ready ||
       !state.storage_ready || !state.sandbox_ready ||
-      !state.permission_ready || !state.app_ops_ready;
+      !state.permission_ready || !state.app_ops_ready ||
+      !state.activity_manager_ready || !state.process_ready;
   if (blocking_issue) {
     return state.recoverable ? "blocked" : "unrecoverable";
   }
@@ -251,6 +260,9 @@ std::string DetermineRecommendedNextAction(
       return report.activity_launch.recommended_recovery_action;
     }
     return "rerun_intent_resolution";
+  }
+  if (!state.activity_manager_ready || !state.process_ready) {
+    return "rebuild_process_manager_state";
   }
   if (!state.launch_ready) {
     return "safe_mode_launch";
@@ -430,6 +442,82 @@ NativeApkPermissionBridgeSession BuildPermissionSession(
        .dex_proof_requested = report.dex_proof_requested});
 }
 
+NativeApkProcessManagerSession BuildProcessSession(
+    const NativeApkLaunchReport& report, const WorkingHealthState& state) {
+  const fs::path app_data_dir =
+      !report.storage.app_data_dir.empty()
+          ? fs::path(report.storage.app_data_dir)
+          : (fs::path(report.sandbox_root) / "data" / "data" /
+             report.package_name);
+  return NativeApkProcessManagerSession(
+      {.session_id = report.package_name + ":" + report.install_id +
+                     ":self-heal-process-manager",
+       .package_name = report.package_name,
+       .requested_package_name = report.requested_package_name,
+       .requested_component = report.requested_component,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .sandbox_root = report.sandbox_root,
+       .app_data_dir = app_data_dir.string(),
+       .artifact_root = (app_data_dir / "process-manager").string(),
+       .install_id = report.install_id,
+       .version_name = report.version_name,
+       .version_code = report.version_code,
+       .user_id = report.permissions.user_id,
+       .app_id = report.permissions.app_id,
+       .uid_placeholder = report.storage.uid_placeholder,
+       .gid_placeholder = report.storage.gid_placeholder,
+       .launch_status = report.launch_status,
+       .launch_ready = report.launch_ready,
+       .recoverable = report.recoverable,
+       .launcher_component = report.launcher_component,
+       .resolved_component = report.intent_resolution.resolved_component,
+       .resolution_status = report.intent_resolution.resolution_status,
+       .resolution_mode = report.intent_resolution.resolution_mode,
+       .resolution_reason = report.intent_resolution.resolution_reason,
+       .resolution_blocking_reason = report.intent_resolution.blocking_reason,
+       .resolution_recovery_action =
+           report.intent_resolution.recommended_recovery_action,
+       .activity_launch_status = report.activity_launch.activity_launch_status,
+       .activity_launch_blocking_reason =
+           report.activity_launch.blocking_reason,
+       .activity_launch_recovery_action =
+           report.activity_launch.recommended_recovery_action,
+       .intent_action = report.intent_resolution.action.empty()
+                            ? "android.intent.action.MAIN"
+                            : report.intent_resolution.action,
+       .intent_categories = report.intent_resolution.categories.empty()
+                            ? std::vector<std::string>{
+                                      "android.intent.category.LAUNCHER"}
+                                : report.intent_resolution.categories,
+       .lifecycle_state = report.lifecycle.current_state,
+       .surface_health = state.surface_ready ? "ready" : report.surface_health,
+       .lifecycle_health =
+           state.lifecycle_ready ? "ready" : report.lifecycle_health,
+       .looper_health = state.looper_ready ? "ready" : report.looper_health,
+       .input_health = state.input_ready ? "ready" : report.input_health,
+       .dex_health = state.dex_ready ? "ready" : report.dex_health,
+       .art_health = state.art_ready ? "ready" : report.art_health,
+       .binder_health = state.binder_ready ? "ready" : report.binder_health,
+       .activity_health = report.activity_health,
+       .storage_health = state.storage_ready ? "ready" : report.storage_health,
+       .sandbox_health = state.sandbox_ready ? "ready" : report.sandbox_health,
+       .permission_health =
+           state.permission_ready ? "ready" : report.permission_health,
+       .app_ops_health = state.app_ops_ready ? "ready" : report.app_ops_health,
+       .package_manager_ready = state.package_manager_ready,
+       .intent_resolution_ready = state.intent_resolution_ready,
+       .activity_launch_ready = state.activity_launch_ready,
+       .dex_bootstrap_ready =
+           state.dex_ready && state.art_ready
+               ? true
+               : report.art_bootstrap.dex_bootstrap_ready,
+       .art_runtime_available = report.art_bootstrap.art_runtime_available,
+       .java_execution_supported =
+           report.art_bootstrap.java_execution_supported,
+       .allow_persisted_contract_repair = true});
+}
+
 bool AttemptRestageAssets(const NativeApkLaunchReport& report,
                           WorkingHealthState* state,
                           std::vector<std::string>* errors) {
@@ -501,6 +589,24 @@ bool AttemptRebuildPermissionState(const NativeApkLaunchReport& report,
   state->permission_ready = permissions_report.ready;
   state->app_ops_ready = app_ops_report.ready;
   return state->permission_ready && state->app_ops_ready;
+}
+
+bool AttemptRebuildProcessManagerState(const NativeApkLaunchReport& report,
+                                       WorkingHealthState* state,
+                                       std::vector<std::string>* errors) {
+  const auto process_session = BuildProcessSession(report, *state);
+  const auto activity_manager = process_session.BuildActivityManagerReport();
+  const auto process_manager =
+      process_session.BuildProcessManagerReport(activity_manager);
+  for (const auto& error : activity_manager.errors) {
+    AppendError(errors, error);
+  }
+  for (const auto& error : process_manager.errors) {
+    AppendError(errors, error);
+  }
+  state->activity_manager_ready = activity_manager.ready;
+  state->process_ready = process_manager.ready;
+  return state->activity_manager_ready && state->process_ready;
 }
 
 bool AttemptRestartSurface(const NativeApkLaunchReport& report,
@@ -728,6 +834,10 @@ void WriteRecoveryReport(const SelfHealingAndroidDeviceReport& report) {
          << EscapeJson(report.permission_health) << "\",\n"
          << "  \"app_ops_health\": \"" << EscapeJson(report.app_ops_health)
          << "\",\n"
+         << "  \"activity_manager_health\": \""
+         << EscapeJson(report.activity_manager_health) << "\",\n"
+         << "  \"process_health\": \"" << EscapeJson(report.process_health)
+         << "\",\n"
          << "  \"recoverable\": " << (report.recoverable ? "true" : "false")
          << ",\n"
          << "  \"actions_attempted\": " << report.actions_attempted << ",\n"
@@ -789,6 +899,8 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
   watchdog.sandbox_health = report_.sandbox_health;
   watchdog.permission_health = report_.permission_health;
   watchdog.app_ops_health = report_.app_ops_health;
+  watchdog.activity_manager_health = report_.activity_manager_health;
+  watchdog.process_health = report_.process_health;
 
   auto attempt_action = [&](const std::string& subsystem,
                             const std::string& reason,
@@ -827,7 +939,7 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
                        return AttemptRebuildPermissionState(
                            report_, fs::path(watchdog.artifact_root), &state,
                            errors);
-                     });
+                    });
     }
     if (report_.storage_proof_requested &&
         (!state.storage_ready || !state.sandbox_ready)) {
@@ -907,6 +1019,15 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
                            errors);
                      });
     }
+    if (report_.process_proof_requested &&
+        (!state.activity_manager_ready || !state.process_ready)) {
+      attempt_action("process_manager", "process_manager_contract_blocked",
+                     "rebuild_process_manager_state",
+                     [&](std::vector<std::string>* errors) {
+                       return AttemptRebuildProcessManagerState(report_, &state,
+                                                                errors);
+                     });
+    }
     if (!state.launch_ready && watchdog.actions.empty()) {
       attempt_action("launch", "launch_not_ready", "safe_mode_launch",
                      [&](std::vector<std::string>* errors) {
@@ -936,6 +1057,11 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
   watchdog.permission_health =
       state.permission_ready ? "ready" : report_.permission_health;
   watchdog.app_ops_health = state.app_ops_ready ? "ready" : report_.app_ops_health;
+  watchdog.activity_manager_health =
+      state.activity_manager_ready ? "ready"
+                                   : report_.activity_manager_health;
+  watchdog.process_health =
+      state.process_ready ? "ready" : report_.process_health;
   watchdog.recoverable = state.recoverable;
   watchdog.recommended_next_action =
       DetermineRecommendedNextAction(report_, state);
