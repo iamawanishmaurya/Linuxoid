@@ -74,6 +74,14 @@ struct NativeExecuteReport {
   std::string post_jni_dispatch_symbol_kind = "none";
   std::string post_jni_dispatch_symbol;
   std::string post_jni_dispatch_reason = "none";
+  std::string managed_activity_dispatch_state = "not_applicable";
+  std::string managed_activity_dispatch_reason = "none";
+  std::string managed_activity_dispatch_component;
+  std::string managed_activity_dispatch_class_name;
+  std::string managed_activity_dispatch_class_descriptor;
+  std::string managed_activity_dispatch_method_name;
+  std::string managed_activity_dispatch_method_signature;
+  std::string managed_activity_runtime_binding_state = "not_applicable";
   std::string android_compat_state;
   int elf_undefined_versions_normalized = 0;
   std::vector<std::string> android_compat_preloaded_paths;

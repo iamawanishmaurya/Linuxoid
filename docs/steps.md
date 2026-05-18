@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Managed Activity Dispatch Bridge Checkpoint GREEN
+  Action: Extended the direct native execute path so Linuxoid now turns successful JNI registration into a Linuxoid-owned managed activity dispatch attempt, selects the real launcher lifecycle target, and reports explicit managed-dispatch plus runtime-context-binding facts instead of stopping at the broader managed-dispatch-required seam.
+  Result: The real keyboard APK path now reports `native_loading_state: managed_runtime_context_required`, `native_managed_activity_dispatch_state: linuxoid_dispatch_attempted`, `native_post_jni_dispatch_symbol: org.futo.inputmethod.latin.uix.settings.SettingsActivity->onCreate(Landroid/os/Bundle;)V`, `primary_blocker_reason: managed_runtime_context_required:libjni_latinime.so`, and `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`, while the deeper managed seam remains explicit instead of being blurred back into native startup.
+  Timestamp: 2026-05-19T10:40:00+05:30
+
 - Step: JNI Registration Dispatch Checkpoint GREEN
   Action: Extended the direct native execute path so Linuxoid now builds a richer JNI stub environment, dispatches a real registration callback after `JNI_OnLoad`, observes `RegisterNatives`, and threads registration dispatch plus registration outcome facts through `launch-apk`, `--first-app-start-proof`, and the watchdog instead of stopping at a generic registration-required seam.
   Result: The real keyboard APK path now reports `native_loading_state: managed_activity_dispatch_required`, `native_registration_dispatch_state: called`, `native_registration_outcome_state: register_natives_completed`, `native_registration_class_name: org/futo/inputmethod/latin/xlm/LanguageModel`, `native_registration_method_count: 4`, and `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`, while the deeper managed seam remains explicit instead of being blurred back into native startup.

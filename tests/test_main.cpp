@@ -6867,12 +6867,12 @@ void TestLaunchApkReportsJniRegistrationCallbackDispatchOutcomePrecisely() {
          "expected blocked launch readiness for JNI registration fixture");
   Expect(output.find(
              "\"launch_status\": "
-             "\"managed_activity_dispatch_required\"") !=
+             "\"managed_runtime_context_required\"") !=
              std::string::npos,
-         "expected managed activity dispatch boundary after registration fixture");
+         "expected managed runtime context boundary after registration fixture");
   Expect(output.find(
              "\"native_loading_state\": "
-             "\"managed_activity_dispatch_required\"") !=
+             "\"managed_runtime_context_required\"") !=
              std::string::npos,
          "expected native loading state to preserve post-registration seam");
   Expect(output.find("\"native_jni_state\": \"called\"") !=
@@ -6908,17 +6908,39 @@ void TestLaunchApkReportsJniRegistrationCallbackDispatchOutcomePrecisely() {
          "expected registered method count in launch json");
   Expect(output.find(
              "\"native_post_jni_startup_state\": "
-             "\"managed_activity_dispatch_required\"") !=
+             "\"managed_runtime_context_required\"") !=
              std::string::npos,
-         "expected precise post-JNI managed dispatch state");
+         "expected precise post-JNI managed runtime state");
   Expect(output.find(
              "\"native_post_jni_dispatch_symbol_kind\": "
-             "\"registration_callback\"") != std::string::npos,
-         "expected registration-callback dispatch symbol kind");
+             "\"managed_activity_lifecycle_method\"") != std::string::npos,
+         "expected managed activity lifecycle dispatch symbol kind");
   Expect(output.find(
-             "\"native_post_jni_dispatch_symbol\": \"register_LinuxoidFixture\"") !=
+             "\"native_post_jni_dispatch_symbol\": "
+             "\"com.example.launchapk.MainActivity->onCreate(Landroid/os/Bundle;)V\"") !=
              std::string::npos,
-         "expected registration callback symbol in post-JNI launch json");
+         "expected managed activity lifecycle symbol in post-JNI launch json");
+  Expect(output.find(
+             "\"native_managed_activity_dispatch_state\": "
+             "\"linuxoid_dispatch_attempted\"") != std::string::npos,
+         "expected managed activity dispatch attempt state in launch json");
+  Expect(output.find(
+             "\"native_managed_activity_dispatch_component\": "
+             "\"com.example.launchapk/.MainActivity\"") != std::string::npos,
+         "expected managed activity dispatch component in launch json");
+  Expect(output.find(
+             "\"native_managed_activity_dispatch_class_descriptor\": "
+             "\"Lcom/example/launchapk/MainActivity;\"") !=
+             std::string::npos,
+         "expected managed activity class descriptor in launch json");
+  Expect(output.find(
+             "\"native_managed_activity_dispatch_method_signature\": "
+             "\"(Landroid/os/Bundle;)V\"") != std::string::npos,
+         "expected managed activity lifecycle signature in launch json");
+  Expect(output.find(
+             "\"native_managed_activity_runtime_binding_state\": "
+             "\"managed_runtime_context_required\"") != std::string::npos,
+         "expected managed runtime binding seam in launch json");
   Expect(output.find("\"native_loading_library_name\": \"libjni_latinime.so\"") !=
              std::string::npos,
          "expected selected registration fixture library name");
@@ -6933,9 +6955,13 @@ void TestLaunchApkReportsJniRegistrationCallbackDispatchOutcomePrecisely() {
          "expected nested native execute registration outcome state");
   Expect(output.find(
              "\"post_jni_startup_state\": "
-             "\"managed_activity_dispatch_required\"") !=
+             "\"managed_runtime_context_required\"") !=
              std::string::npos,
-         "expected nested native execute post-registration dispatch state");
+         "expected nested native execute post-registration runtime-context state");
+  Expect(output.find(
+             "\"managed_activity_dispatch_state\": "
+             "\"linuxoid_dispatch_attempted\"") != std::string::npos,
+         "expected nested native execute managed dispatch state");
 
   fs::remove_all(fixture.root);
 }
@@ -6976,16 +7002,25 @@ void TestLaunchApkFirstAppStartReportsPostRegistrationManagedDispatchBoundary() 
          "expected registration completion state in first-app-start proof");
   Expect(output.find(
              "\"native_post_jni_startup_state\": "
-             "\"managed_activity_dispatch_required\"") !=
+             "\"managed_runtime_context_required\"") !=
              std::string::npos,
-         "expected managed dispatch seam in first-app-start proof");
+         "expected managed runtime-context seam in first-app-start proof");
   Expect(output.find(
-             "\"native_post_jni_dispatch_symbol\": \"register_LinuxoidFixture\"") !=
+             "\"native_post_jni_dispatch_symbol\": "
+             "\"com.example.launchapk.MainActivity->onCreate(Landroid/os/Bundle;)V\"") !=
              std::string::npos,
-         "expected registration callback symbol in first-app-start proof");
+         "expected managed activity lifecycle symbol in first-app-start proof");
+  Expect(output.find(
+             "\"native_managed_activity_dispatch_state\": "
+             "\"linuxoid_dispatch_attempted\"") != std::string::npos,
+         "expected managed activity dispatch attempt state in first-app-start proof");
+  Expect(output.find(
+             "\"native_managed_activity_runtime_binding_state\": "
+             "\"managed_runtime_context_required\"") != std::string::npos,
+         "expected runtime binding seam in first-app-start proof");
   Expect(output.find(
              "\"blocking_reason\": "
-             "\"managed_activity_dispatch_required_for_first_app_start:libjni_latinime.so\"") !=
+             "\"managed_runtime_context_required_for_first_app_start:libjni_latinime.so\"") !=
              std::string::npos,
          "expected narrowed first-app-start blocker for post-registration seam");
   Expect(output.find(

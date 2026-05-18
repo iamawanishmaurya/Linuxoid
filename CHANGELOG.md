@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.129 - 2026-05-19
+
+- Close **Phase 11: Managed Activity Dispatch Bridge** around the real keyboard APK's post-registration handoff instead of widening into a broad framework rewrite.
+- Extend the direct native execute path so once `libjni_latinime.so` loads, `JNI_OnLoad` succeeds, and `RegisterNatives` completes, Linuxoid now selects the real launcher activity lifecycle target and surfaces `native_managed_activity_dispatch_*` plus `native_post_jni_dispatch_symbol: org.futo.inputmethod.latin.uix.settings.SettingsActivity->onCreate(Landroid/os/Bundle;)V` instead of stopping at the broader `managed_activity_dispatch_required` seam.
+- Tighten `launch-apk --first-app-start-proof`, watchdog gating, and the JNI registration regression fixtures so the current live blocker stays stable and honest: `blocking_reason: managed_runtime_context_required_for_first_app_start:libjni_latinime.so`, `primary_blocker_reason: managed_runtime_context_required:libjni_latinime.so`, and the next exact seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+
 ## v0.1.128 - 2026-05-19
 
 - Close **Phase 10: JNI Registration Dispatch** around the real keyboard APK's post-`JNI_OnLoad` seam instead of widening into a broad framework rewrite.

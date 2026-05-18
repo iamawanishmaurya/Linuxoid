@@ -54,6 +54,17 @@ struct RegistrationDispatchOutcome {
   std::string error_detail;
 };
 
+struct ManagedActivityDispatchAttempt {
+  std::string dispatch_state = "not_attempted";
+  std::string dispatch_reason = "none";
+  std::string component;
+  std::string class_name;
+  std::string class_descriptor;
+  std::string method_name = "onCreate";
+  std::string method_signature = "(Landroid/os/Bundle;)V";
+  std::string runtime_binding_state = "not_attempted";
+};
+
 #ifndef SHT_GNU_versym
 #define SHT_GNU_versym 0x6fffffff
 #endif
@@ -82,6 +93,61 @@ std::string EscapeJson(const std::string& value) {
 
 std::vector<std::string> BuildEntrypointLibraryNames() {
   return {"libmain.so", "libcalculator.so", "libapp.so"};
+}
+
+std::string ReplaceAll(std::string value, char from, char to) {
+  std::replace(value.begin(), value.end(), from, to);
+  return value;
+}
+
+std::string ResolveActivityClassName(const std::string& package_name,
+                                     const std::string& launcher_component) {
+  if (launcher_component.empty()) {
+    return "";
+  }
+  const std::size_t slash = launcher_component.find('/');
+  std::string class_name =
+      slash == std::string::npos ? launcher_component
+                                 : launcher_component.substr(slash + 1);
+  if (class_name.empty()) {
+    return "";
+  }
+  if (class_name.front() == '.') {
+    return package_name + class_name;
+  }
+  if (class_name.find('.') == std::string::npos && !package_name.empty()) {
+    return package_name + "." + class_name;
+  }
+  return class_name;
+}
+
+std::string BuildClassDescriptor(const std::string& class_name) {
+  if (class_name.empty()) {
+    return "";
+  }
+  return "L" + ReplaceAll(class_name, '.', '/') + ";";
+}
+
+ManagedActivityDispatchAttempt BuildManagedActivityDispatchAttempt(
+    const NativeExecuteRequest& request) {
+  ManagedActivityDispatchAttempt attempt;
+  attempt.component = request.launcher_component;
+  attempt.class_name =
+      ResolveActivityClassName(request.package_name, request.launcher_component);
+  attempt.class_descriptor = BuildClassDescriptor(attempt.class_name);
+  if (attempt.component.empty() || attempt.class_name.empty() ||
+      attempt.class_descriptor.empty()) {
+    attempt.dispatch_state = "blocked";
+    attempt.dispatch_reason = "managed_activity_component_unresolved";
+    attempt.runtime_binding_state = "component_unresolved";
+    return attempt;
+  }
+
+  attempt.dispatch_state = "linuxoid_dispatch_attempted";
+  attempt.dispatch_reason =
+      "jni_registration_completed_and_managed_activity_dispatch_target_selected";
+  attempt.runtime_binding_state = "managed_runtime_context_required";
+  return attempt;
 }
 
 bool IsEntrypointLibraryName(const std::string& file_name) {
@@ -1106,12 +1172,46 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
         report.post_jni_startup_state = "jni_registration_callback_crashed";
         report.exit_reason = "jni_registration_callback_crashed";
       } else if (registration_callback_completed) {
+        const ManagedActivityDispatchAttempt dispatch_attempt =
+            BuildManagedActivityDispatchAttempt(request);
         report.app_start_bridge_state =
             "linuxoid_managed_app_start_bridge_selected";
         report.app_start_bridge_reason =
-            "jni_registration_completed_without_native_activity_entrypoint";
-        report.post_jni_startup_state = "managed_activity_dispatch_required";
-        report.exit_reason = "managed_activity_dispatch_required";
+            dispatch_attempt.dispatch_state == "linuxoid_dispatch_attempted"
+                ? "jni_registration_completed_and_managed_activity_dispatch_target_selected"
+                : "jni_registration_completed_without_managed_activity_target";
+        report.managed_activity_dispatch_state =
+            dispatch_attempt.dispatch_state;
+        report.managed_activity_dispatch_reason =
+            dispatch_attempt.dispatch_reason;
+        report.managed_activity_dispatch_component =
+            dispatch_attempt.component;
+        report.managed_activity_dispatch_class_name =
+            dispatch_attempt.class_name;
+        report.managed_activity_dispatch_class_descriptor =
+            dispatch_attempt.class_descriptor;
+        report.managed_activity_dispatch_method_name =
+            dispatch_attempt.method_name;
+        report.managed_activity_dispatch_method_signature =
+            dispatch_attempt.method_signature;
+        report.managed_activity_runtime_binding_state =
+            dispatch_attempt.runtime_binding_state;
+        if (dispatch_attempt.dispatch_state == "linuxoid_dispatch_attempted") {
+          report.post_jni_startup_state = "managed_runtime_context_required";
+          report.post_jni_dispatch_symbol_kind =
+              "managed_activity_lifecycle_method";
+          report.post_jni_dispatch_symbol =
+              dispatch_attempt.class_name + "->" + dispatch_attempt.method_name +
+              dispatch_attempt.method_signature;
+          report.post_jni_dispatch_reason =
+              "linuxoid_managed_activity_dispatch_attempted_without_runtime_context";
+          report.exit_reason = "managed_runtime_context_required";
+        } else {
+          report.post_jni_startup_state = "managed_activity_dispatch_required";
+          report.post_jni_dispatch_reason =
+              "managed_activity_component_unresolved_after_jni_registration";
+          report.exit_reason = "managed_activity_dispatch_required";
+        }
       } else {
         const PostJniDispatchBoundary boundary =
             DiscoverPostJniDispatchBoundary(selected_jni_library->path);
@@ -1162,6 +1262,12 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
         output << "[p1] post-JNI dispatch symbol: "
                << report.post_jni_dispatch_symbol_kind << " "
                << report.post_jni_dispatch_symbol << "\n";
+      }
+      if (!report.managed_activity_dispatch_component.empty()) {
+        output << "[p1] managed activity dispatch target: "
+               << report.managed_activity_dispatch_component << " -> "
+               << report.managed_activity_dispatch_method_name
+               << report.managed_activity_dispatch_method_signature << "\n";
       }
       output << "[p1] next seam: " << report.post_jni_startup_state
              << " after JNI_OnLoad\n";
@@ -1290,6 +1396,26 @@ std::string RenderNativeExecuteReportJson(const NativeExecuteReport& report) {
          << EscapeJson(report.post_jni_dispatch_symbol) << "\",\n"
          << "  \"post_jni_dispatch_reason\": \""
          << EscapeJson(report.post_jni_dispatch_reason) << "\",\n"
+         << "  \"managed_activity_dispatch_state\": \""
+         << EscapeJson(report.managed_activity_dispatch_state) << "\",\n"
+         << "  \"managed_activity_dispatch_reason\": \""
+         << EscapeJson(report.managed_activity_dispatch_reason) << "\",\n"
+         << "  \"managed_activity_dispatch_component\": \""
+         << EscapeJson(report.managed_activity_dispatch_component) << "\",\n"
+         << "  \"managed_activity_dispatch_class_name\": \""
+         << EscapeJson(report.managed_activity_dispatch_class_name) << "\",\n"
+         << "  \"managed_activity_dispatch_class_descriptor\": \""
+         << EscapeJson(report.managed_activity_dispatch_class_descriptor)
+         << "\",\n"
+         << "  \"managed_activity_dispatch_method_name\": \""
+         << EscapeJson(report.managed_activity_dispatch_method_name)
+         << "\",\n"
+         << "  \"managed_activity_dispatch_method_signature\": \""
+         << EscapeJson(report.managed_activity_dispatch_method_signature)
+         << "\",\n"
+         << "  \"managed_activity_runtime_binding_state\": \""
+         << EscapeJson(report.managed_activity_runtime_binding_state)
+         << "\",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
          << "\",\n"
          << "  \"working_directory\": \""

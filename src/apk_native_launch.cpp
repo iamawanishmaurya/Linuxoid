@@ -584,6 +584,7 @@ std::string DetermineRecommendedRecoveryAction(
       report.launch_status == "jni_registration_dispatch_required" ||
       report.launch_status == "jni_registration_callback_crashed" ||
       report.launch_status == "managed_activity_dispatch_required" ||
+      report.launch_status == "managed_runtime_context_required" ||
       report.launch_status == "jni_direct_method_dispatch_required") {
     return "inspect_native_launch_diagnostics";
   }
@@ -1718,6 +1719,9 @@ std::string DetermineNativeLoadingState(const NativeApkLaunchReport& report) {
   if (report.launch_status == "managed_activity_dispatch_required") {
     return "managed_activity_dispatch_required";
   }
+  if (report.launch_status == "managed_runtime_context_required") {
+    return "managed_runtime_context_required";
+  }
   if (report.launch_status == "jni_direct_method_dispatch_required") {
     return "jni_direct_method_dispatch_required";
   }
@@ -1819,6 +1823,22 @@ void RefreshNativeLoadingDetails(NativeApkLaunchReport* report) {
       report->native_execute.post_jni_dispatch_symbol;
   report->native_post_jni_dispatch_reason =
       report->native_execute.post_jni_dispatch_reason;
+  report->native_managed_activity_dispatch_state =
+      report->native_execute.managed_activity_dispatch_state;
+  report->native_managed_activity_dispatch_reason =
+      report->native_execute.managed_activity_dispatch_reason;
+  report->native_managed_activity_dispatch_component =
+      report->native_execute.managed_activity_dispatch_component;
+  report->native_managed_activity_dispatch_class_name =
+      report->native_execute.managed_activity_dispatch_class_name;
+  report->native_managed_activity_dispatch_class_descriptor =
+      report->native_execute.managed_activity_dispatch_class_descriptor;
+  report->native_managed_activity_dispatch_method_name =
+      report->native_execute.managed_activity_dispatch_method_name;
+  report->native_managed_activity_dispatch_method_signature =
+      report->native_execute.managed_activity_dispatch_method_signature;
+  report->native_managed_activity_runtime_binding_state =
+      report->native_execute.managed_activity_runtime_binding_state;
   report->native_loading_library_name.clear();
   report->native_loading_library_path.clear();
   report->native_loading_detail.clear();
@@ -1886,6 +1906,11 @@ std::string DetermineFirstAppStartNativeBlockingReason(
   if (report.launch_status == "managed_activity_dispatch_required" &&
       attempt != nullptr) {
     return "managed_activity_dispatch_required_for_first_app_start:" +
+           attempt->library_name;
+  }
+  if (report.launch_status == "managed_runtime_context_required" &&
+      attempt != nullptr) {
+    return "managed_runtime_context_required_for_first_app_start:" +
            attempt->library_name;
   }
   if (report.launch_status == "jni_direct_method_dispatch_required" &&
@@ -2031,6 +2056,8 @@ std::string DetermineFirstAppStartRecoveryAction(
       blocking_reason.rfind("jni_registration_callback_crashed_for_first_app_start:",
                             0) == 0 ||
       blocking_reason.rfind("managed_activity_dispatch_required_for_first_app_start:",
+                            0) == 0 ||
+      blocking_reason.rfind("managed_runtime_context_required_for_first_app_start:",
                             0) == 0 ||
       blocking_reason.rfind("native_activity_entrypoint_missing_for_first_app_start:",
                             0) == 0 ||
@@ -2182,6 +2209,10 @@ std::string DetermineFirstAppStartNextBlocker(
     return "bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context";
   }
   if (blocking_reason.rfind(
+          "managed_runtime_context_required_for_first_app_start:", 0) == 0) {
+    return "bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context";
+  }
+  if (blocking_reason.rfind(
           "linuxoid_managed_app_start_bridge_required_for_first_app_start:",
           0) == 0) {
     return "implement_linuxoid_managed_app_start_bridge_for_" +
@@ -2321,6 +2352,30 @@ std::string RenderFirstAppStartJson(
          << EscapeJson(proof.native_post_jni_dispatch_symbol) << "\",\n"
          << "  \"native_post_jni_dispatch_reason\": \""
          << EscapeJson(proof.native_post_jni_dispatch_reason) << "\",\n"
+         << "  \"native_managed_activity_dispatch_state\": \""
+         << EscapeJson(proof.native_managed_activity_dispatch_state)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_reason\": \""
+         << EscapeJson(proof.native_managed_activity_dispatch_reason)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_component\": \""
+         << EscapeJson(proof.native_managed_activity_dispatch_component)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_class_name\": \""
+         << EscapeJson(proof.native_managed_activity_dispatch_class_name)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_class_descriptor\": \""
+         << EscapeJson(proof.native_managed_activity_dispatch_class_descriptor)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_method_name\": \""
+         << EscapeJson(proof.native_managed_activity_dispatch_method_name)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_method_signature\": \""
+         << EscapeJson(proof.native_managed_activity_dispatch_method_signature)
+         << "\",\n"
+         << "  \"native_managed_activity_runtime_binding_state\": \""
+         << EscapeJson(proof.native_managed_activity_runtime_binding_state)
+         << "\",\n"
          << "  \"native_loading_library_name\": \""
          << EscapeJson(proof.native_loading_library_name) << "\",\n"
          << "  \"native_loading_detail\": \""
@@ -2518,6 +2573,22 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
       report.native_post_jni_dispatch_symbol;
   proof.native_post_jni_dispatch_reason =
       report.native_post_jni_dispatch_reason;
+  proof.native_managed_activity_dispatch_state =
+      report.native_managed_activity_dispatch_state;
+  proof.native_managed_activity_dispatch_reason =
+      report.native_managed_activity_dispatch_reason;
+  proof.native_managed_activity_dispatch_component =
+      report.native_managed_activity_dispatch_component;
+  proof.native_managed_activity_dispatch_class_name =
+      report.native_managed_activity_dispatch_class_name;
+  proof.native_managed_activity_dispatch_class_descriptor =
+      report.native_managed_activity_dispatch_class_descriptor;
+  proof.native_managed_activity_dispatch_method_name =
+      report.native_managed_activity_dispatch_method_name;
+  proof.native_managed_activity_dispatch_method_signature =
+      report.native_managed_activity_dispatch_method_signature;
+  proof.native_managed_activity_runtime_binding_state =
+      report.native_managed_activity_runtime_binding_state;
   proof.native_loading_library_name = report.native_loading_library_name;
   proof.native_loading_detail = report.native_loading_detail;
   proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
@@ -2673,6 +2744,11 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
     proof.diagnostics.push_back(
         "Self-Healing Android Device first app start checkpoint completed JNI registration dispatch for the staged primary library and now needs Linuxoid-owned managed activity dispatch");
   } else if (proof.blocking_reason.rfind(
+                 "managed_runtime_context_required_for_first_app_start:", 0) ==
+             0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint selected the launcher activity lifecycle target after JNI registration and now needs a managed runtime context binding to dispatch onCreate(Bundle)");
+  } else if (proof.blocking_reason.rfind(
                  "linuxoid_managed_app_start_bridge_required_for_first_app_start:",
                  0) == 0) {
     proof.diagnostics.push_back(
@@ -2715,6 +2791,8 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
           "jni_direct_method_dispatch_required_for_first_app_start:", 0) == 0 ||
       proof.blocking_reason.rfind(
           "managed_activity_dispatch_required_for_first_app_start:", 0) == 0 ||
+      proof.blocking_reason.rfind(
+          "managed_runtime_context_required_for_first_app_start:", 0) == 0 ||
       proof.blocking_reason.rfind(
           "linuxoid_managed_app_start_bridge_required_for_first_app_start:",
           0) == 0 ||
@@ -3565,6 +3643,12 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
                     "managed_activity_dispatch_required:" +
                         attempt->library_name);
       } else if (report.native_execute.exit_reason ==
+                     "managed_runtime_context_required" &&
+                 attempt != nullptr && !attempt->library_name.empty()) {
+        AppendError(&report.errors,
+                    "managed_runtime_context_required:" +
+                        attempt->library_name);
+      } else if (report.native_execute.exit_reason ==
                      "jni_direct_method_dispatch_required" &&
                  attempt != nullptr && !attempt->library_name.empty()) {
         AppendError(&report.errors,
@@ -3861,6 +3945,30 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << EscapeJson(report.native_post_jni_dispatch_symbol) << "\",\n"
          << "  \"native_post_jni_dispatch_reason\": \""
          << EscapeJson(report.native_post_jni_dispatch_reason) << "\",\n"
+         << "  \"native_managed_activity_dispatch_state\": \""
+         << EscapeJson(report.native_managed_activity_dispatch_state)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_reason\": \""
+         << EscapeJson(report.native_managed_activity_dispatch_reason)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_component\": \""
+         << EscapeJson(report.native_managed_activity_dispatch_component)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_class_name\": \""
+         << EscapeJson(report.native_managed_activity_dispatch_class_name)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_class_descriptor\": \""
+         << EscapeJson(report.native_managed_activity_dispatch_class_descriptor)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_method_name\": \""
+         << EscapeJson(report.native_managed_activity_dispatch_method_name)
+         << "\",\n"
+         << "  \"native_managed_activity_dispatch_method_signature\": \""
+         << EscapeJson(report.native_managed_activity_dispatch_method_signature)
+         << "\",\n"
+         << "  \"native_managed_activity_runtime_binding_state\": \""
+         << EscapeJson(report.native_managed_activity_runtime_binding_state)
+         << "\",\n"
          << "  \"native_loading_library_name\": \""
          << EscapeJson(report.native_loading_library_name) << "\",\n"
          << "  \"native_loading_library_path\": \""
@@ -5036,6 +5144,38 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << EscapeJson(
                 report.first_android_app_start.native_post_jni_dispatch_reason)
          << "\",\n"
+         << "    \"native_managed_activity_dispatch_state\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_dispatch_state)
+         << "\",\n"
+         << "    \"native_managed_activity_dispatch_reason\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_dispatch_reason)
+         << "\",\n"
+         << "    \"native_managed_activity_dispatch_component\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_dispatch_component)
+         << "\",\n"
+         << "    \"native_managed_activity_dispatch_class_name\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_dispatch_class_name)
+         << "\",\n"
+         << "    \"native_managed_activity_dispatch_class_descriptor\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_dispatch_class_descriptor)
+         << "\",\n"
+         << "    \"native_managed_activity_dispatch_method_name\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_dispatch_method_name)
+         << "\",\n"
+         << "    \"native_managed_activity_dispatch_method_signature\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_dispatch_method_signature)
+         << "\",\n"
+         << "    \"native_managed_activity_runtime_binding_state\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_runtime_binding_state)
+         << "\",\n"
          << "    \"native_loading_library_name\": \""
          << EscapeJson(report.first_android_app_start.native_loading_library_name)
          << "\",\n"
@@ -5599,6 +5739,34 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "    \"post_jni_dispatch_reason\": \""
          << EscapeJson(report.native_execute.post_jni_dispatch_reason)
+         << "\",\n"
+         << "    \"managed_activity_dispatch_state\": \""
+         << EscapeJson(report.native_execute.managed_activity_dispatch_state)
+         << "\",\n"
+         << "    \"managed_activity_dispatch_reason\": \""
+         << EscapeJson(report.native_execute.managed_activity_dispatch_reason)
+         << "\",\n"
+         << "    \"managed_activity_dispatch_component\": \""
+         << EscapeJson(report.native_execute.managed_activity_dispatch_component)
+         << "\",\n"
+         << "    \"managed_activity_dispatch_class_name\": \""
+         << EscapeJson(report.native_execute.managed_activity_dispatch_class_name)
+         << "\",\n"
+         << "    \"managed_activity_dispatch_class_descriptor\": \""
+         << EscapeJson(
+                report.native_execute.managed_activity_dispatch_class_descriptor)
+         << "\",\n"
+         << "    \"managed_activity_dispatch_method_name\": \""
+         << EscapeJson(
+                report.native_execute.managed_activity_dispatch_method_name)
+         << "\",\n"
+         << "    \"managed_activity_dispatch_method_signature\": \""
+         << EscapeJson(
+                report.native_execute.managed_activity_dispatch_method_signature)
+         << "\",\n"
+         << "    \"managed_activity_runtime_binding_state\": \""
+         << EscapeJson(
+                report.native_execute.managed_activity_runtime_binding_state)
          << "\",\n"
          << "    \"exit_reason\": \""
          << EscapeJson(report.native_execute.exit_reason) << "\",\n"
