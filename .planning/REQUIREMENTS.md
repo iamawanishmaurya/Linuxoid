@@ -31,6 +31,8 @@ Requirements for the first real Android app execution milestone centered on `key
 - [ ] **JNI-08**: Linuxoid keeps JNI registration, managed app-start dispatch, and later framework bootstrap seams distinct in launch and first-app-start reporting
 - [ ] **JNI-09**: Linuxoid can execute or precisely attempt the `libjni_latinime.so` JNI registration-helper boundary and report the exact registration outcome
 - [ ] **JNI-10**: Linuxoid keeps JNI registration dispatch, registration outcome, and later managed bootstrap seams distinct in launch and first-app-start reporting
+- [ ] **JNI-11**: Linuxoid can bridge the post-registration `managed_activity_dispatch_required` seam into a Linuxoid-owned managed activity dispatch attempt for the verification APK
+- [ ] **JNI-12**: Linuxoid keeps managed activity dispatch, runtime-context binding, and later framework bootstrap seams distinct in launch and first-app-start reporting
 
 ### Window and Input
 
@@ -52,6 +54,7 @@ Requirements for the first real Android app execution milestone centered on `key
 - [ ] **VER-05**: User can push the real verification APK one step past the current `native_activity_entrypoint_missing` seam and see the next exact native, JNI registration, or managed startup blocker on the same direct Linuxoid path
 - [ ] **VER-06**: User can push the real verification APK one step past the current `linuxoid_managed_app_start_bridge_required` seam and see the first exact post-bridge dispatch, registration, or managed bootstrap blocker
 - [ ] **VER-07**: User can push the real verification APK one step past the current `jni_registration_dispatch_required` seam and see the first exact post-registration managed or framework startup blocker
+- [ ] **VER-08**: User can push the real verification APK one step past the current `managed_activity_dispatch_required` seam and see the first exact managed activity-dispatch or runtime/framework bootstrap blocker
 
 ## v2 Requirements
 
@@ -102,6 +105,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JNI-08 | Phase 9 | Pending |
 | JNI-09 | Phase 10 | Pending |
 | JNI-10 | Phase 10 | Pending |
+| JNI-11 | Phase 11 | Pending |
+| JNI-12 | Phase 11 | Pending |
 | WIN-01 | Phase 5 | Pending |
 | WIN-02 | Phase 5 | Pending |
 | APP-01 | Phase 6 | Pending |
@@ -114,10 +119,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VER-05 | Phase 8 | Pending |
 | VER-06 | Phase 9 | Pending |
 | VER-07 | Phase 10 | Pending |
+| VER-08 | Phase 11 | Pending |
 
 **Coverage:**
-- v1 requirements: 28 total
-- Mapped to phases: 28
+- v1 requirements: 31 total
+- Mapped to phases: 31
 - Unmapped: 0 ✓
 
 ---
