@@ -10,7 +10,7 @@ This roadmap turns Linuxoid's existing proof-oriented runtime into a first real 
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Keyboard APK Intake** - Make the real verification APK parse, stage, and surface trustworthy runtime metadata
+- [x] **Phase 1: Keyboard APK Intake** - Make the real verification APK parse, stage, and surface trustworthy runtime metadata
 - [ ] **Phase 2: Managed Activity Start** - Resolve and drive the launcher settings activity through a deeper managed startup path
 - [ ] **Phase 3: Runtime Context Bridge** - Reduce the gap between the minimal interpreter path and a real ART-owned activity context
 - [ ] **Phase 4: JNI and Native Loading** - Bring x86_64 native libraries and JNI boundaries into the verification path
@@ -31,9 +31,9 @@ This roadmap turns Linuxoid's existing proof-oriented runtime into a first real 
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Harden real-world APK manifest and metadata intake for the keyboard target
-- [ ] 01-02: Validate staging, assets, permissions, and native library inventory for the target APK
-- [ ] 01-03: Turn the real APK intake into a stable launch precondition and regression proof
+- [x] 01-01: Harden real-world APK manifest and metadata intake for the keyboard target
+- [x] 01-02: Validate staging, assets, permissions, and native library inventory for the target APK
+- [x] 01-03: Turn the real APK intake into a stable launch precondition and regression proof
 
 ### Phase 2: Managed Activity Start
 **Goal**: Linuxoid resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity` and drives its startup path deeper than the current minimal DEX checkpoints.
@@ -120,7 +120,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Keyboard APK Intake | 0/3 | Not started | - |
+| 1. Keyboard APK Intake | 3/3 | Complete | 2026-05-18 |
 | 2. Managed Activity Start | 0/3 | Not started | - |
 | 3. Runtime Context Bridge | 0/3 | Not started | - |
 | 4. JNI and Native Loading | 0/2 | Not started | - |
