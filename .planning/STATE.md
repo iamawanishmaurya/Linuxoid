@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-stopped_at: Phase 2 complete; next action is to plan Phase 3 runtime context bridge around invoke receiver propagation and ActivityThread handoff
-last_updated: "2026-05-18T18:30:00.000Z"
-last_activity: 2026-05-18 -- Phase 2 managed activity start complete
+status: planned
+stopped_at: Phase 3 planned; next action is to execute 03-01 and narrow the invoke receiver seam
+last_updated: "2026-05-18T19:10:00.000Z"
+last_activity: 2026-05-18 -- Phase 3 planning complete
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 6
+  total_plans: 9
   completed_plans: 6
   percent: 33
 ---
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 3 of 6 (Runtime Context Bridge)
-Plan: planning not started for the next phase
-Status: Phase 2 complete - the real keyboard settings activity is now resolved into staged DEX lifecycle lookup with exact blocker reporting
-Last activity: 2026-05-18 -- Phase 2 completed around real activity resolution, lifecycle entrypoint reporting, and regression proof
+Plan: 3 plans across 3 waves
+Status: Ready to execute - Phase 3 now targets receiver propagation, post-invoke runtime-context narrowing, and regression lock-in for the managed `SettingsActivity` seam
+Last activity: 2026-05-18 -- Phase 3 planned around invoke receiver propagation and the next exact managed-runtime blocker
 
 Progress: [███░░░░░░░] 33%
 
@@ -52,16 +52,17 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Plan Phase 3 around `propagate_framework_invoke_receiver_registers` and real managed receiver propagation
+- Execute Phase 3 plan 03-01 to propagate framework invoke receiver state through the synthetic managed seam
 - Narrow the staged `x86_64` native-library loading blocker while keeping the managed `SettingsActivity.onCreate(Landroid/os/Bundle;)V` seam explicit
 
 ### Blockers/Concerns
 
 - Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity` and `onCreate(Landroid/os/Bundle;)V` from staged DEX metadata, but the direct launch path still stops at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start` before end-to-end managed start can continue
 - Next managed-runtime seam after lookup: `framework_boundary_reason: invoke_receiver_missing` with `next_blocker: propagate_framework_invoke_receiver_registers`
+- Phase 3 target outcome: replace `invoke_receiver_missing` with one smaller post-receiver runtime-context blocker while preserving the real keyboard APK's upstream native/surface blocker
 
 ## Session Continuity
 
-Last session: 2026-05-18 22:30
-Stopped at: Phase 2 complete; next action is to plan Phase 3 runtime context bridge around invoke receiver propagation and ActivityThread handoff
-Resume file: .planning/ROADMAP.md
+Last session: 2026-05-18 23:10
+Stopped at: Phase 3 planned; next action is to execute 03-01 and narrow the invoke receiver seam
+Resume file: .planning/phases/03-runtime-context-bridge/03-01-PLAN.md
