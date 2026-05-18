@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Phase 3 complete; next action is to plan Phase 4 JNI and Native Loading around the real keyboard x86_64 library seam
-last_updated: "2026-05-18T22:30:00.000Z"
-last_activity: 2026-05-18 -- Phase 3 runtime context bridge complete
+stopped_at: Phase 4 planned; next action is to execute 04-01 around the real keyboard x86_64 native-library load seam
+last_updated: "2026-05-18T14:24:50.000Z"
+last_activity: 2026-05-18 -- Phase 4 JNI and Native Loading planned
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 9
+  total_plans: 11
   completed_plans: 9
   percent: 50
 ---
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 4 of 6 (JNI and Native Loading)
-Plan: pending
-Status: Phase 3 complete - the managed `SettingsActivity` seam now reaches the stubbed Bundle lifecycle boundary and Phase 4 should tackle the real keyboard library load seam
-Last activity: 2026-05-18 -- Phase 3 completed around receiver propagation, Bundle placeholder materialization, and exact post-receiver blocker reporting
+Plan: 04-01 planned
+Status: Phase 4 planned - the real keyboard APK already stages `x86_64` libraries and now needs exact native-load/JNI seam work before managed start can move forward end to end
+Last activity: 2026-05-18 -- Phase 4 planned around per-library load attempts, JNI seams, and exact blocker propagation
 
 Progress: [█████░░░░░] 50%
 
@@ -52,17 +52,17 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Plan Phase 4 around the real keyboard APK `x86_64` native-library loading seam
-- Preserve the narrowed managed `SettingsActivity.onCreate(Landroid/os/Bundle;)V` blocker while Phase 4 tackles the upstream launch blocker
+- Execute 04-01 to turn `libraries_failed_to_load` into a smaller exact native-load seam for `/home/astra/Downloads/keyboard-0.1.28.apk`
+- Preserve the narrowed managed `SettingsActivity.onCreate(Landroid/os/Bundle;)V` blocker while Phase 4 tackles the upstream native/JNI launch blocker
 
 ### Blockers/Concerns
 
-- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity` and `onCreate(Landroid/os/Bundle;)V` from staged DEX metadata, but the direct launch path still stops at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start` before end-to-end managed start can continue
+- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, stages six `x86_64` native libraries, and resolves `onCreate(Landroid/os/Bundle;)V` from staged DEX metadata, but the direct launch path still stops at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start` before end-to-end managed start can continue
 - Next managed-runtime seam after lookup: `framework_boundary_reason: android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint` with `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
-- Phase 4 target outcome: narrow or remove the upstream native-library blocker while preserving the managed Bundle-boundary seam honestly
+- Phase 4 target outcome: narrow or remove the upstream native/JNI blocker while preserving the managed Bundle-boundary seam honestly
 
 ## Session Continuity
 
-Last session: 2026-05-18 22:30
-Stopped at: Phase 3 complete; next action is to plan Phase 4 JNI and Native Loading
+Last session: 2026-05-18 19:54
+Stopped at: Phase 4 planned; next action is to execute 04-01 around the real keyboard x86_64 native-library load seam
 Resume file: .planning/ROADMAP.md

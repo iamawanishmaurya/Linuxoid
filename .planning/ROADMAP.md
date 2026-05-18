@@ -103,7 +103,12 @@ Plans:
 
 Plans:
 
+**Wave 1**
+
 - [ ] 04-01: Bring x86_64 native library staging/loading into the real APK path
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 04-02: Add exact JNI/native failure reporting for the verification app
 
 ### Phase 5: Visible Wayland Interaction
