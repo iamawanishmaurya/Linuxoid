@@ -21,7 +21,33 @@ struct NativeApkDexFileReport {
   std::uint32_t header_size = 0;
   std::uint32_t string_ids_size = 0;
   std::uint32_t type_ids_size = 0;
+  std::uint32_t proto_ids_size = 0;
+  std::uint32_t method_ids_size = 0;
   std::uint32_t class_defs_count = 0;
+  std::vector<std::string> class_descriptors;
+  std::vector<std::string> errors;
+};
+
+struct NativeApkDexExecutionProbeReport {
+  bool ready = false;
+  bool target_method_found = false;
+  bool code_item_found = false;
+  bool execution_attempted = false;
+  bool decoded_instruction = false;
+  bool reached_return = false;
+  std::string target_class_descriptor;
+  std::string target_method_name = "linuxoidCheckpoint";
+  std::string target_method_signature = "()V";
+  std::string execution_backend = "linuxoid_minimal_dex_interpreter";
+  std::string parse_state = "not_requested";
+  std::string execution_state = "not_attempted";
+  std::uint32_t code_item_offset = 0;
+  std::uint32_t instruction_offset = 0;
+  std::uint16_t opcode_value = 0;
+  std::string opcode_name;
+  int executed_instruction_count = 0;
+  std::string exact_blocker = "none";
+  std::vector<std::string> diagnostics;
   std::vector<std::string> errors;
 };
 
@@ -37,8 +63,10 @@ struct NativeApkDexProofReport {
   int files_count = 0;
   std::size_t total_bytes = 0;
   std::string decode_level = "not_requested";
+  std::string parse_state = "not_requested";
   std::uint32_t class_defs_count = 0;
   std::vector<NativeApkDexFileReport> files;
+  NativeApkDexExecutionProbeReport execution_probe;
   std::vector<std::string> errors;
 };
 
@@ -59,7 +87,7 @@ struct NativeApkArtBootstrapReport {
   bool class_loader_ready = false;
   bool java_execution_supported = false;
   std::string limitation =
-      "metadata probe only; full ART execution not implemented";
+      "minimal dex parse and interpreter probe only; full ART execution not implemented";
   std::vector<std::string> dex_files;
   std::vector<std::string> errors;
 };
@@ -71,6 +99,8 @@ struct NativeApkDexBridgeSessionConfig {
   std::string staged_dir;
   std::string dex_root;
   std::string artifact_root;
+  std::string entrypoint_class_descriptor;
+  std::string entrypoint_method_name = "linuxoidCheckpoint";
   std::string asset_bridge_status = "not_requested";
   std::string lifecycle_status = "not_requested";
   std::string binder_service_registry_status = "not_present";

@@ -36,6 +36,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -240,25 +241,84 @@ std::string EncodeUleb128(std::uint32_t value) {
   return encoded;
 }
 
-std::string BuildResolvableDexPayload(
-    const std::vector<std::string>& class_descriptors) {
-  std::vector<std::string> strings = class_descriptors;
-  std::sort(strings.begin(), strings.end());
-  strings.erase(std::unique(strings.begin(), strings.end()), strings.end());
+std::uint32_t Align4(std::uint32_t value) {
+  return (value + 3u) & ~3u;
+}
+
+std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions) {
+  std::string code_item;
+  auto append_le16 = [&](std::uint16_t value) {
+    code_item.push_back(static_cast<char>(value & 0xFFu));
+    code_item.push_back(static_cast<char>((value >> 8) & 0xFFu));
+  };
+  auto append_le32 = [&](std::uint32_t value) {
+    code_item.push_back(static_cast<char>(value & 0xFFu));
+    code_item.push_back(static_cast<char>((value >> 8) & 0xFFu));
+    code_item.push_back(static_cast<char>((value >> 16) & 0xFFu));
+    code_item.push_back(static_cast<char>((value >> 24) & 0xFFu));
+  };
+
+  append_le16(0u);  // registers_size
+  append_le16(0u);  // ins_size
+  append_le16(0u);  // outs_size
+  append_le16(0u);  // tries_size
+  append_le32(0u);  // debug_info_off
+  append_le32(static_cast<std::uint32_t>(instructions.size()));
+  for (const auto instruction : instructions) {
+    append_le16(instruction);
+  }
+  return code_item;
+}
+
+std::string BuildDexPayloadWithEntrypoint(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor,
+    const std::vector<std::uint16_t>& entrypoint_instructions) {
+  std::vector<std::string> classes = class_descriptors;
+  std::sort(classes.begin(), classes.end());
+  classes.erase(std::unique(classes.begin(), classes.end()), classes.end());
+  Expect(!classes.empty(), "expected at least one class descriptor for DEX payload");
+
+  const std::string entrypoint_class_descriptor =
+      requested_entrypoint_class_descriptor.empty()
+          ? classes.back()
+          : requested_entrypoint_class_descriptor;
+
+  std::vector<std::string> strings = classes;
+  auto append_unique = [&](const std::string& value) {
+    if (std::find(strings.begin(), strings.end(), value) == strings.end()) {
+      strings.push_back(value);
+    }
+  };
+  append_unique("V");
+  append_unique("linuxoidCheckpoint");
+
+  std::vector<std::string> type_descriptors = classes;
+  type_descriptors.push_back("V");
 
   const std::uint32_t string_ids_size =
       static_cast<std::uint32_t>(strings.size());
-  const std::uint32_t type_ids_size = string_ids_size;
-  const std::uint32_t class_defs_size = string_ids_size;
+  const std::uint32_t type_ids_size =
+      static_cast<std::uint32_t>(type_descriptors.size());
+  const std::uint32_t proto_ids_size = 1u;
+  const std::uint32_t method_ids_size = 1u;
+  const std::uint32_t class_defs_size =
+      static_cast<std::uint32_t>(classes.size());
 
   const std::uint32_t header_size = 0x70u;
   const std::uint32_t string_ids_off = header_size;
   const std::uint32_t type_ids_off = string_ids_off + string_ids_size * 4u;
-  const std::uint32_t class_defs_off = type_ids_off + type_ids_size * 4u;
+  const std::uint32_t proto_ids_off = type_ids_off + type_ids_size * 4u;
+  const std::uint32_t method_ids_off = proto_ids_off + proto_ids_size * 12u;
+  const std::uint32_t class_defs_off = method_ids_off + method_ids_size * 8u;
   const std::uint32_t data_off = class_defs_off + class_defs_size * 32u;
 
   std::string payload(data_off, '\0');
 
+  auto write_le16 = [&](std::size_t offset, std::uint16_t value) {
+    payload[offset + 0] = static_cast<char>(value & 0xFFu);
+    payload[offset + 1] = static_cast<char>((value >> 8) & 0xFFu);
+  };
   auto write_le32 = [&](std::size_t offset, std::uint32_t value) {
     payload[offset + 0] = static_cast<char>(value & 0xFFu);
     payload[offset + 1] = static_cast<char>((value >> 8) & 0xFFu);
@@ -275,21 +335,81 @@ std::string BuildResolvableDexPayload(
   payload[6] = '5';
   payload[7] = '\0';
 
+  std::map<std::string, std::uint32_t> string_indices;
+  for (std::size_t index = 0; index < strings.size(); ++index) {
+    string_indices[strings[index]] = static_cast<std::uint32_t>(index);
+  }
+  std::map<std::string, std::uint32_t> type_indices;
+  for (std::size_t index = 0; index < type_descriptors.size(); ++index) {
+    type_indices[type_descriptors[index]] = static_cast<std::uint32_t>(index);
+  }
+
   std::uint32_t cursor = data_off;
   for (std::size_t index = 0; index < strings.size(); ++index) {
     write_le32(string_ids_off + index * 4u, cursor);
-    payload += EncodeUleb128(
-        static_cast<std::uint32_t>(strings[index].size()));
+    payload += EncodeUleb128(static_cast<std::uint32_t>(strings[index].size()));
     payload += strings[index];
     payload.push_back('\0');
     cursor = static_cast<std::uint32_t>(payload.size());
   }
 
-  for (std::size_t index = 0; index < strings.size(); ++index) {
+  for (std::size_t index = 0; index < type_descriptors.size(); ++index) {
     write_le32(type_ids_off + index * 4u,
-               static_cast<std::uint32_t>(index));
-    write_le32(class_defs_off + index * 32u,
-               static_cast<std::uint32_t>(index));
+               string_indices.at(type_descriptors[index]));
+  }
+
+  write_le32(proto_ids_off + 0u, string_indices.at("V"));
+  write_le32(proto_ids_off + 4u, type_indices.at("V"));
+  write_le32(proto_ids_off + 8u, 0u);
+
+  write_le16(method_ids_off + 0u,
+             static_cast<std::uint16_t>(
+                 type_indices.at(entrypoint_class_descriptor)));
+  write_le16(method_ids_off + 2u, 0u);
+  write_le32(method_ids_off + 4u, string_indices.at("linuxoidCheckpoint"));
+
+  const std::string code_item = BuildDexCodeItem(entrypoint_instructions);
+  std::vector<std::uint32_t> class_data_offsets(classes.size(), 0u);
+  for (std::size_t index = 0; index < classes.size(); ++index) {
+    if (classes[index] != entrypoint_class_descriptor) {
+      continue;
+    }
+    const std::uint32_t class_data_off =
+        static_cast<std::uint32_t>(payload.size());
+    const std::string method_prefix =
+        EncodeUleb128(0u) + EncodeUleb128(0u) + EncodeUleb128(1u) +
+        EncodeUleb128(0u) + EncodeUleb128(0u) + EncodeUleb128(0x9u);
+
+    std::uint32_t code_off = Align4(class_data_off + method_prefix.size() + 1u);
+    while (true) {
+      const std::string encoded_code_off = EncodeUleb128(code_off);
+      const std::uint32_t next_code_off =
+          Align4(class_data_off + static_cast<std::uint32_t>(method_prefix.size()) +
+                 static_cast<std::uint32_t>(encoded_code_off.size()));
+      if (next_code_off == code_off) {
+        payload += method_prefix;
+        payload += encoded_code_off;
+        while (payload.size() < code_off) {
+          payload.push_back('\0');
+        }
+        payload += code_item;
+        class_data_offsets[index] = class_data_off;
+        break;
+      }
+      code_off = next_code_off;
+    }
+  }
+
+  for (std::size_t index = 0; index < classes.size(); ++index) {
+    const std::size_t class_def_off = class_defs_off + index * 32u;
+    write_le32(class_def_off + 0u, static_cast<std::uint32_t>(index));
+    write_le32(class_def_off + 4u, 0x1u);
+    write_le32(class_def_off + 8u, 0u);
+    write_le32(class_def_off + 12u, 0u);
+    write_le32(class_def_off + 16u, 0xffffffffu);
+    write_le32(class_def_off + 20u, 0u);
+    write_le32(class_def_off + 24u, class_data_offsets[index]);
+    write_le32(class_def_off + 28u, 0u);
   }
 
   write_le32(32, static_cast<std::uint32_t>(payload.size()));
@@ -299,11 +419,25 @@ std::string BuildResolvableDexPayload(
   write_le32(60, string_ids_off);
   write_le32(64, type_ids_size);
   write_le32(68, type_ids_off);
+  write_le32(72, proto_ids_size);
+  write_le32(76, proto_ids_off);
+  write_le32(88, method_ids_size);
+  write_le32(92, method_ids_off);
   write_le32(96, class_defs_size);
   write_le32(100, class_defs_off);
   write_le32(104, static_cast<std::uint32_t>(payload.size() - data_off));
   write_le32(108, data_off);
   return payload;
+}
+
+std::string BuildResolvableDexPayload(
+    const std::vector<std::string>& class_descriptors) {
+  return BuildDexPayloadWithEntrypoint(class_descriptors, "", {0x000eu});
+}
+
+std::string BuildUnsupportedOpcodeDexPayload(
+    const std::vector<std::string>& class_descriptors) {
+  return BuildDexPayloadWithEntrypoint(class_descriptors, "", {0x00ffu});
 }
 
 std::string BuildInvalidDexMagicPayload(
@@ -6063,9 +6197,10 @@ void TestLaunchApkDexProofCommandRunsFixture() {
          "expected ready dex/art proof state in launch-apk dex proof json");
   Expect(output.find("\"files_count\": 1") != std::string::npos,
          "expected one dex file in launch-apk dex proof json");
-  Expect(output.find("\"decode_level\": \"header_and_counts\"") !=
+  Expect(output.find(
+             "\"decode_level\": \"header_tables_methods_and_code_item\"") !=
              std::string::npos,
-         "expected header-and-counts decode level in launch-apk dex proof json");
+         "expected method-and-code-item decode level in launch-apk dex proof json");
   Expect(output.find("\"class_defs_count\": 2") != std::string::npos,
          "expected class defs count in launch-apk dex proof json");
   Expect(output.find("\"class_loader_ready\": true") != std::string::npos,
@@ -8690,7 +8825,7 @@ void TestLaunchApkJavaProofHealsMalformedFiles() {
   fs::remove_all(fixture.launch.root);
 }
 
-void TestLaunchApkFirstAppStartCheckpointReachesExactArtBoundary() {
+void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
   namespace fs = std::filesystem;
   const auto fixture = CreateJavaKotlinApkProofFixture(
       "linuxoid-first-app-start-checkpoint-ready");
@@ -8706,7 +8841,7 @@ void TestLaunchApkFirstAppStartCheckpointReachesExactArtBoundary() {
       &exit_code);
 
   Expect(exit_code == 0,
-         "expected first app start checkpoint command to succeed at the ART boundary");
+         "expected first app start checkpoint command to succeed with bytecode proof");
   Expect(output.find("\"first_app_start_proof_requested\": true") !=
              std::string::npos,
          "expected first app start proof request flag in json");
@@ -8727,21 +8862,92 @@ void TestLaunchApkFirstAppStartCheckpointReachesExactArtBoundary() {
          "expected ready runtime state in first app start json");
   Expect(output.find("\"class_loader_ready\": true") != std::string::npos,
          "expected class loader readiness in first app start json");
+  Expect(output.find(
+             "\"dex_parse_state\": \"header_tables_methods_and_code_item\"") !=
+             std::string::npos,
+         "expected dex parse state in first app start json");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned bytecode execution state in first app start json");
+  Expect(output.find(
+             "\"bytecode_execution_backend\": "
+             "\"linuxoid_minimal_dex_interpreter\"") != std::string::npos,
+         "expected minimal interpreter backend in first app start json");
+  Expect(output.find("\"target_method_name\": \"linuxoidCheckpoint\"") !=
+             std::string::npos,
+         "expected deterministic target method name in first app start json");
   Expect(output.find("\"java_art_bytecode_execution_requested\": true") !=
              std::string::npos,
          "expected bytecode execution request flag in first app start json");
-  Expect(output.find("\"java_art_bytecode_executed\": false") !=
+  Expect(output.find("\"java_art_bytecode_execution_attempted\": true") !=
              std::string::npos,
-         "expected honest no-bytecode-executed flag in first app start json");
-  Expect(output.find("\"blocking_reason\": \"needs-real-art-execution\"") !=
+         "expected bytecode execution attempt flag in first app start json");
+  Expect(output.find("\"java_art_bytecode_executed\": true") !=
              std::string::npos,
-         "expected exact real-art blocker in first app start json");
+         "expected real decoded instruction execution in first app start json");
+  Expect(output.find("\"executed_instruction_count\": 1") !=
+             std::string::npos,
+         "expected one executed instruction in first app start json");
+  Expect(output.find("\"first_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected first executed opcode in first app start json");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected reached-return marker in first app start json");
+  Expect(output.find(
+             "\"blocking_reason\": \"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected precise post-bytecode blocker in first app start json");
   Expect(output.find("\"next_blocker\": "
-                     "\"implement_real_art_activity_bytecode_invocation\"") !=
+                     "\"bridge_activity_oncreate_into_real_art_runtime_context\"") !=
              std::string::npos,
          "expected actionable next blocker in first app start json");
   Expect(output.find("Self-Healing Android Device") != std::string::npos,
          "expected Self-Healing Android Device diagnostics in first app start json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-unsupported-opcode", true,
+      {{"classes.dex",
+        BuildUnsupportedOpcodeDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"})}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected unsupported-opcode checkpoint command to succeed with precise boundary proof");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for unsupported opcode boundary");
+  Expect(output.find("\"bytecode_execution_state\": \"unsupported_opcode\"") !=
+             std::string::npos,
+         "expected unsupported opcode execution state in first app start json");
+  Expect(output.find("\"first_executed_opcode\": \"opcode-0xff\"") !=
+             std::string::npos,
+         "expected exact unsupported opcode name in first app start json");
+  Expect(output.find("\"reached_return\": false") != std::string::npos,
+         "expected no return when first opcode is unsupported");
+  Expect(output.find(
+             "\"blocking_reason\": \"unsupported-dex-opcode:opcode-0xff\"") !=
+             std::string::npos,
+         "expected precise unsupported opcode blocker in first app start json");
+  Expect(output.find(
+             "\"next_blocker\": "
+             "\"extend_minimal_dex_interpreter_for_opcode_0xff\"") !=
+             std::string::npos,
+         "expected actionable unsupported opcode next blocker in first app start json");
 
   fs::remove_all(fixture.launch.root);
 }
@@ -13427,7 +13633,8 @@ int main() {
     TestLaunchApkJavaProofBlocksWhenRuntimeUnavailable();
     TestLaunchApkJavaProofBlocksWhenDexInvalid();
     TestLaunchApkJavaProofHealsMalformedFiles();
-    TestLaunchApkFirstAppStartCheckpointReachesExactArtBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction();
+    TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary();
     TestLaunchApkFirstAppStartCheckpointBlocksWithoutRuntimeRoot();
     TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid();
     TestInspectApkCompatibilityCommandReportsNeedsRealArtForJavaFixture();

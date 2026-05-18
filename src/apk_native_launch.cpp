@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstdint>
 #include <cstdio>
@@ -744,6 +745,71 @@ std::string DetectBinderServiceRegistryStatus(
                                           : "not_present";
 }
 
+std::string NormalizeAndroidClassName(const std::string& package_name,
+                                      const std::string& class_or_component) {
+  if (package_name.empty() || class_or_component.empty()) {
+    return "";
+  }
+  std::string value = class_or_component;
+  const auto slash = value.find('/');
+  if (slash != std::string::npos) {
+    value = value.substr(slash + 1);
+  }
+  if (value.empty()) {
+    return "";
+  }
+  if (value.front() == '.') {
+    return package_name + value;
+  }
+  if (value.rfind(package_name + ".", 0) == 0) {
+    return value;
+  }
+  if (value.find('.') != std::string::npos) {
+    return value;
+  }
+  return package_name + "." + value;
+}
+
+std::string ToDexDescriptorFromClassOrComponent(
+    const std::string& package_name, const std::string& class_or_component) {
+  const std::string class_name =
+      NormalizeAndroidClassName(package_name, class_or_component);
+  if (class_name.empty()) {
+    return "";
+  }
+  std::string descriptor = "L";
+  descriptor.reserve(class_name.size() + 2);
+  for (const char character : class_name) {
+    descriptor.push_back(character == '.' ? '/' : character);
+  }
+  descriptor.push_back(';');
+  return descriptor;
+}
+
+std::string DetermineDexEntrypointClassDescriptor(
+    const NativeApkLaunchReport& report) {
+  if (!report.intent_resolution.resolved_activity_class.empty()) {
+    return ToDexDescriptorFromClassOrComponent(
+        report.package_name, report.intent_resolution.resolved_activity_class);
+  }
+  const std::vector<std::string> candidates = {
+      report.requested_component,
+      report.intent_resolution.resolved_component,
+      report.launcher_component};
+  for (const auto& candidate : candidates) {
+    const std::string descriptor =
+        ToDexDescriptorFromClassOrComponent(report.package_name, candidate);
+    if (!descriptor.empty()) {
+      return descriptor;
+    }
+  }
+  if (!report.declared_activities.empty()) {
+    return ToDexDescriptorFromClassOrComponent(report.package_name,
+                                              report.declared_activities.front());
+  }
+  return "";
+}
+
 NativeApkDexBridgeSession BuildDexBridgeSession(
     const NativeApkLaunchReport& report) {
   return NativeApkDexBridgeSession(
@@ -753,6 +819,9 @@ NativeApkDexBridgeSession BuildDexBridgeSession(
        .staged_dir = report.staged_dir,
        .dex_root = (fs::path(report.staged_dir) / "dex").string(),
        .artifact_root = (fs::path(report.staged_dir) / "art").string(),
+       .entrypoint_class_descriptor =
+           DetermineDexEntrypointClassDescriptor(report),
+       .entrypoint_method_name = "linuxoidCheckpoint",
        .asset_bridge_status = report.asset_health,
        .lifecycle_status = report.lifecycle_health,
        .binder_service_registry_status =
@@ -1496,6 +1565,15 @@ std::string ToDexDescriptor(const std::string& class_name) {
   return descriptor;
 }
 
+std::string SanitizeExecutionToken(std::string value) {
+  std::replace_if(value.begin(), value.end(),
+                  [](unsigned char character) {
+                    return !std::isalnum(character) && character != '_';
+                  },
+                  '_');
+  return value;
+}
+
 std::string DetermineFirstAppStartBlockingReason(
     const NativeApkLaunchReport& report) {
   if (!report.manifest_metadata_ready) {
@@ -1546,6 +1624,15 @@ std::string DetermineFirstAppStartBlockingReason(
   if (!report.window_manager.ready) {
     return "window_manager_not_ready_for_first_app_start";
   }
+  if (report.dex.execution_probe.ready) {
+    if (report.dex.execution_probe.reached_return) {
+      return "needs-real-activitythread-context";
+    }
+    if (!report.dex.execution_probe.exact_blocker.empty() &&
+        report.dex.execution_probe.exact_blocker != "none") {
+      return report.dex.execution_probe.exact_blocker;
+    }
+  }
   if (!report.runtime_bridge.java_execution_supported ||
       !report.runtime_bridge.bytecode_execution_ready) {
     return "needs-real-art-execution";
@@ -1556,8 +1643,12 @@ std::string DetermineFirstAppStartBlockingReason(
 std::string DetermineFirstAppStartRecoveryAction(
     const NativeApkLaunchReport& report, const std::string& blocking_reason) {
   if (blocking_reason == "none" ||
-      blocking_reason == "needs-real-art-execution") {
+      blocking_reason == "needs-real-art-execution" ||
+      blocking_reason == "needs-real-activitythread-context") {
     return "none";
+  }
+  if (blocking_reason.rfind("unsupported-dex-opcode:", 0) == 0) {
+    return "extend_minimal_dex_interpreter";
   }
   if (blocking_reason == "dex_bootstrap_not_ready_for_first_app_start") {
     return "rebuild_dex_bootstrap";
@@ -1610,6 +1701,14 @@ std::string DetermineFirstAppStartNextBlocker(
   if (blocking_reason == "needs-real-art-execution") {
     return "implement_real_art_activity_bytecode_invocation";
   }
+  if (blocking_reason == "needs-real-activitythread-context") {
+    return "bridge_activity_oncreate_into_real_art_runtime_context";
+  }
+  if (blocking_reason.rfind("unsupported-dex-opcode:", 0) == 0) {
+    return "extend_minimal_dex_interpreter_for_" +
+           SanitizeExecutionToken(blocking_reason.substr(
+               std::string("unsupported-dex-opcode:").size()));
+  }
   if (blocking_reason == "art_runtime_unavailable_for_first_app_start") {
     return "provide_discoverable_art_runtime_root";
   }
@@ -1649,6 +1748,15 @@ std::string DetermineFirstAppStartDexState(
   }
   if (!report.runtime_bridge.class_loader_ready) {
     return "class_loader_blocked";
+  }
+  if (report.dex.execution_probe.ready) {
+    if (report.dex.execution_probe.reached_return) {
+      return "bytecode_return_reached";
+    }
+    if (report.dex.execution_probe.execution_state == "unsupported_opcode") {
+      return "bytecode_boundary_reached";
+    }
+    return report.dex.execution_probe.parse_state;
   }
   return "class_loader_ready";
 }
@@ -1698,6 +1806,16 @@ std::string RenderFirstAppStartJson(
          << "  \"runtime_root\": \"" << EscapeJson(proof.runtime_root)
          << "\",\n"
          << "  \"dex_state\": \"" << EscapeJson(proof.dex_state) << "\",\n"
+         << "  \"dex_parse_state\": \""
+         << EscapeJson(proof.dex_parse_state) << "\",\n"
+         << "  \"bytecode_execution_state\": \""
+         << EscapeJson(proof.bytecode_execution_state) << "\",\n"
+         << "  \"bytecode_execution_backend\": \""
+         << EscapeJson(proof.bytecode_execution_backend) << "\",\n"
+         << "  \"target_method_name\": \""
+         << EscapeJson(proof.target_method_name) << "\",\n"
+         << "  \"target_method_signature\": \""
+         << EscapeJson(proof.target_method_signature) << "\",\n"
          << "  \"dex_files_count\": " << proof.dex_files_count << ",\n"
          << "  \"class_loader_ready\": "
          << (proof.class_loader_ready ? "true" : "false") << ",\n"
@@ -1713,6 +1831,16 @@ std::string RenderFirstAppStartJson(
          << ",\n"
          << "  \"java_art_bytecode_executed\": "
          << (proof.java_art_bytecode_executed ? "true" : "false") << ",\n"
+         << "  \"reached_return\": "
+         << (proof.reached_return ? "true" : "false") << ",\n"
+         << "  \"executed_instruction_count\": "
+         << proof.executed_instruction_count << ",\n"
+         << "  \"instruction_offset\": " << proof.instruction_offset
+         << ",\n"
+         << "  \"first_executed_opcode_value\": "
+         << proof.first_executed_opcode_value << ",\n"
+         << "  \"first_executed_opcode\": \""
+         << EscapeJson(proof.first_executed_opcode) << "\",\n"
          << "  \"activity_lifecycle_state\": \""
          << EscapeJson(proof.activity_lifecycle_state) << "\",\n"
          << "  \"activity_states_visited\": "
@@ -1776,11 +1904,27 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.runtime_state = report.runtime_bridge.bootstrap_state;
   proof.runtime_root = report.runtime_bridge.runtime_root;
   proof.dex_state = DetermineFirstAppStartDexState(report);
+  proof.dex_parse_state = report.dex.parse_state;
+  proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
+  proof.bytecode_execution_backend = report.dex.execution_probe.execution_backend;
+  proof.target_method_name = report.dex.execution_probe.target_method_name;
+  proof.target_method_signature = report.dex.execution_probe.target_method_signature;
   proof.dex_files_count = report.dex.files_count;
   proof.class_loader_ready = report.runtime_bridge.class_loader_ready;
   proof.art_runtime_available = report.runtime_bridge.art_runtime_available;
   proof.java_execution_supported = report.runtime_bridge.java_execution_supported;
   proof.java_art_bytecode_execution_requested = report.intent_resolution.ready;
+  proof.java_art_bytecode_execution_attempted =
+      report.dex.execution_probe.execution_attempted;
+  proof.java_art_bytecode_executed =
+      report.dex.execution_probe.decoded_instruction &&
+      report.dex.execution_probe.executed_instruction_count > 0;
+  proof.reached_return = report.dex.execution_probe.reached_return;
+  proof.executed_instruction_count =
+      report.dex.execution_probe.executed_instruction_count;
+  proof.instruction_offset = report.dex.execution_probe.instruction_offset;
+  proof.first_executed_opcode_value = report.dex.execution_probe.opcode_value;
+  proof.first_executed_opcode = report.dex.execution_probe.opcode_name;
   proof.activity_lifecycle_state = report.lifecycle.current_state.empty()
                                        ? report.activity_launch.current_state
                                        : report.lifecycle.current_state;
@@ -1798,25 +1942,40 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.app_started = report.runtime_bridge.java_execution_supported &&
                       report.runtime_bridge.bytecode_execution_ready;
   proof.checkpoint_boundary_reached =
-      proof.blocking_reason == "needs-real-art-execution" || proof.app_started;
+      proof.app_started || proof.blocking_reason == "none" ||
+      proof.blocking_reason == "needs-real-activitythread-context" ||
+      proof.blocking_reason.rfind("unsupported-dex-opcode:", 0) == 0;
   proof.ready = proof.checkpoint_boundary_reached;
   proof.contract_ready = proof.ready;
-  proof.java_art_bytecode_execution_attempted =
-      proof.checkpoint_boundary_reached;
-  proof.java_art_bytecode_executed = proof.app_started;
   proof.recoverable = proof.blocking_reason != "needs-real-art-execution" &&
+                      proof.blocking_reason != "needs-real-activitythread-context" &&
                       report.recoverable;
-  proof.checkpoint_state =
-      proof.app_started ? "started"
-                        : (proof.checkpoint_boundary_reached
-                               ? "needs_real_art_execution"
-                               : "blocked");
+  proof.checkpoint_state = proof.app_started
+                               ? "started"
+                               : (proof.reached_return
+                                      ? "bytecode_return_reached"
+                                      : (proof.checkpoint_boundary_reached
+                                             ? "bytecode_boundary_reached"
+                                             : "blocked"));
 
-  if (proof.blocking_reason == "needs-real-art-execution") {
+  if (proof.blocking_reason == "needs-real-activitythread-context") {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint executed real DEX bytecode through Linuxoid's minimal interpreter");
+    proof.diagnostics.push_back(
+        "Linuxoid has not crossed into real ART-owned ActivityThread context or managed Android framework dispatch yet");
+  } else if (proof.blocking_reason ==
+                 "art_runtime_unavailable_for_first_app_start" &&
+             proof.java_art_bytecode_executed) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint executed real DEX bytecode through Linuxoid's minimal interpreter, but no discoverable ART runtime root was available for a real managed app start");
+  } else if (proof.blocking_reason == "needs-real-art-execution") {
     proof.diagnostics.push_back(
         "Self-Healing Android Device first app start checkpoint reached the real ART execution boundary");
     proof.diagnostics.push_back(
         "Linuxoid resolved the launcher activity, created process and window contracts, and prepared a runtime plus class loader without executing managed bytecode yet");
+  } else if (proof.blocking_reason.rfind("unsupported-dex-opcode:", 0) == 0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint decoded real DEX bytecode and stopped at an exact unsupported opcode boundary");
   } else if (proof.blocking_reason == "none") {
     proof.diagnostics.push_back(
         "Self-Healing Android Device first app start checkpoint completed with managed bytecode execution");
@@ -1844,6 +2003,15 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   }
   for (const auto& error : report.dex.errors) {
     AppendError(&proof.errors, error);
+  }
+  for (const auto& error : report.dex.execution_probe.errors) {
+    AppendError(&proof.errors, error);
+  }
+  for (const auto& diagnostic : report.dex.execution_probe.diagnostics) {
+    if (std::find(proof.diagnostics.begin(), proof.diagnostics.end(),
+                  diagnostic) == proof.diagnostics.end()) {
+      proof.diagnostics.push_back(diagnostic);
+    }
   }
   for (const auto& error : report.art_bootstrap.errors) {
     AppendError(&proof.errors, error);
@@ -2320,14 +2488,15 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       "native_only_no_art_execution_yet",
   };
   if (report.dex_proof_requested) {
-    AppendError(&report.limitations, "dex_header_and_counts_only");
+    AppendError(&report.limitations,
+                "minimal_dex_tables_and_code_probe_only");
     AppendError(&report.limitations, "full_art_execution_not_supported_yet");
   }
   if (report.first_app_start_proof_requested) {
     AppendError(&report.limitations,
                 "first_android_app_start_checkpoint_only");
     AppendError(&report.limitations,
-                "real_art_bytecode_invocation_unimplemented");
+                "real_art_activitythread_handoff_unimplemented");
   }
   if (report.activity_proof_requested) {
     AppendError(&report.limitations, "local_package_manager_contract_only");
@@ -3951,6 +4120,22 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "    \"dex_state\": \""
          << EscapeJson(report.first_android_app_start.dex_state) << "\",\n"
+         << "    \"dex_parse_state\": \""
+         << EscapeJson(report.first_android_app_start.dex_parse_state)
+         << "\",\n"
+         << "    \"bytecode_execution_state\": \""
+         << EscapeJson(report.first_android_app_start.bytecode_execution_state)
+         << "\",\n"
+         << "    \"bytecode_execution_backend\": \""
+         << EscapeJson(
+                report.first_android_app_start.bytecode_execution_backend)
+         << "\",\n"
+         << "    \"target_method_name\": \""
+         << EscapeJson(report.first_android_app_start.target_method_name)
+         << "\",\n"
+         << "    \"target_method_signature\": \""
+         << EscapeJson(report.first_android_app_start.target_method_signature)
+         << "\",\n"
          << "    \"dex_files_count\": "
          << report.first_android_app_start.dex_files_count << ",\n"
          << "    \"class_loader_ready\": "
@@ -3982,6 +4167,20 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
                  ? "true"
                  : "false")
          << ",\n"
+         << "    \"reached_return\": "
+         << (report.first_android_app_start.reached_return ? "true" : "false")
+         << ",\n"
+         << "    \"executed_instruction_count\": "
+         << report.first_android_app_start.executed_instruction_count
+         << ",\n"
+         << "    \"instruction_offset\": "
+         << report.first_android_app_start.instruction_offset << ",\n"
+         << "    \"first_executed_opcode_value\": "
+         << report.first_android_app_start.first_executed_opcode_value
+         << ",\n"
+         << "    \"first_executed_opcode\": \""
+         << EscapeJson(report.first_android_app_start.first_executed_opcode)
+         << "\",\n"
          << "    \"activity_lifecycle_state\": \""
          << EscapeJson(report.first_android_app_start.activity_lifecycle_state)
          << "\",\n"

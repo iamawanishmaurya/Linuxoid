@@ -106,6 +106,11 @@ struct NativeApkFirstAppStartProof {
   std::string runtime_state = "unavailable";
   std::string runtime_root;
   std::string dex_state = "unavailable";
+  std::string dex_parse_state = "not_requested";
+  std::string bytecode_execution_state = "not_attempted";
+  std::string bytecode_execution_backend = "none";
+  std::string target_method_name;
+  std::string target_method_signature;
   int dex_files_count = 0;
   bool class_loader_ready = false;
   bool art_runtime_available = false;
@@ -113,6 +118,11 @@ struct NativeApkFirstAppStartProof {
   bool java_art_bytecode_execution_requested = false;
   bool java_art_bytecode_execution_attempted = false;
   bool java_art_bytecode_executed = false;
+  bool reached_return = false;
+  int executed_instruction_count = 0;
+  std::uint32_t instruction_offset = 0;
+  std::uint16_t first_executed_opcode_value = 0;
+  std::string first_executed_opcode;
   std::string activity_lifecycle_state = "not_requested";
   std::vector<std::string> activity_states_visited;
   std::string surface_window_state = "not_requested";

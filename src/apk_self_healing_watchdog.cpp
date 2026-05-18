@@ -338,6 +338,67 @@ NativeApkLifecycleBridgeSession BuildLifecycleBridgeSession(
        .format = format});
 }
 
+std::string NormalizeAndroidClassName(const std::string& package_name,
+                                      const std::string& class_or_component) {
+  if (package_name.empty() || class_or_component.empty()) {
+    return "";
+  }
+  std::string value = class_or_component;
+  const auto slash = value.find('/');
+  if (slash != std::string::npos) {
+    value = value.substr(slash + 1);
+  }
+  if (value.empty()) {
+    return "";
+  }
+  if (value.front() == '.') {
+    return package_name + value;
+  }
+  if (value.rfind(package_name + ".", 0) == 0) {
+    return value;
+  }
+  if (value.find('.') != std::string::npos) {
+    return value;
+  }
+  return package_name + "." + value;
+}
+
+std::string ToDexDescriptorFromClassOrComponent(
+    const std::string& package_name, const std::string& class_or_component) {
+  const std::string class_name =
+      NormalizeAndroidClassName(package_name, class_or_component);
+  if (class_name.empty()) {
+    return "";
+  }
+  std::string descriptor = "L";
+  descriptor.reserve(class_name.size() + 2);
+  for (const char character : class_name) {
+    descriptor.push_back(character == '.' ? '/' : character);
+  }
+  descriptor.push_back(';');
+  return descriptor;
+}
+
+std::string DetermineDexEntrypointClassDescriptor(
+    const NativeApkLaunchReport& report) {
+  if (!report.intent_resolution.resolved_activity_class.empty()) {
+    return ToDexDescriptorFromClassOrComponent(
+        report.package_name, report.intent_resolution.resolved_activity_class);
+  }
+  const std::vector<std::string> candidates = {
+      report.requested_component,
+      report.intent_resolution.resolved_component,
+      report.launcher_component};
+  for (const auto& candidate : candidates) {
+    const std::string descriptor =
+        ToDexDescriptorFromClassOrComponent(report.package_name, candidate);
+    if (!descriptor.empty()) {
+      return descriptor;
+    }
+  }
+  return "";
+}
+
 NativeApkDexBridgeSession BuildDexBridgeSession(
     const NativeApkLaunchReport& report, const fs::path& artifact_root) {
   return NativeApkDexBridgeSession(
@@ -348,6 +409,9 @@ NativeApkDexBridgeSession BuildDexBridgeSession(
        .staged_dir = report.staged_dir,
        .dex_root = (fs::path(report.staged_dir) / "dex").string(),
        .artifact_root = artifact_root.string(),
+       .entrypoint_class_descriptor =
+           DetermineDexEntrypointClassDescriptor(report),
+       .entrypoint_method_name = "linuxoidCheckpoint",
        .asset_bridge_status = report.asset_health,
        .lifecycle_status = report.lifecycle_health,
        .binder_service_registry_status =

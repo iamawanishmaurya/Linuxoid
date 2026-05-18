@@ -230,7 +230,7 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 - `compatctl launch-apk --self-heal-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`
 - `compatctl launch-apk-surface <apk-path> [staging-root]`
 
-`--dex-proof` now stages `classes.dex`, `classes2.dex`, and similar entries into the deterministic APK session root, parses safe DEX header-and-count metadata, builds a Linuxoid-owned class-loader/bootstrap contract, and emits structured `dex` plus `art_bootstrap` JSON without claiming real Java/Kotlin ART execution yet.
+`--dex-proof` now stages `classes.dex`, `classes2.dex`, and similar entries into the deterministic APK session root, parses safe DEX header plus string/type/proto/method/class metadata, can locate a deterministic entrypoint code item, and emits structured `dex` plus `art_bootstrap` JSON without claiming full Java/Kotlin ART execution yet.
 
 `--storage-proof` now implements **P9 Android App Storage + Sandbox Contract** for the direct APK session path. It materializes deterministic `sandbox/data/data/<package>`-style directories, exposes `files` plus `cache` plus native-lib plus asset/resource roots, validates app-relative paths through a Linuxoid safe resolver, writes a session marker file, rejects escape attempts explicitly, and emits nested `storage` JSON plus `storage_health` and `sandbox_health` fields for the Self-Healing Android Device loop while keeping `isolation_level: path_sandbox_only` honest.
 
@@ -254,7 +254,7 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 
 `--java-proof` now implements **P14 Java/Kotlin APK Proof Contract** on top of the existing package, activity, process, window, and runtime seams. It does not claim real Java/Kotlin bytecode execution yet. Instead, it proves that a Java/Kotlin-style APK can be inspected, resolved through `MAIN`/`LAUNCHER`, mapped onto deterministic process plus window plus runtime session artifacts, and persisted as a Linuxoid-owned `java_apk_proof` contract under `sandbox/data/data/<package>/java-proof/java-proof-state.json`, `java-proof-session-map.json`, and `java-proof-events.jsonl`. `inspect-apk-java` exposes that same proof contract directly, and the diagnostics stay explicit about current limits: this is bootstrap-and-lifecycle wiring proof for the Self-Healing Android Device path, not full ART-owned bytecode execution yet.
 
-### First Android App Start Checkpoint
+### First DEX Bytecode Execution Checkpoint
 
 `launch-apk --first-app-start-proof` and `inspect-apk-first-start` now drive one minimal Android app fixture through the real Linuxoid direct-session path as far as the current runtime honestly can:
 
@@ -264,7 +264,7 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 - process/session creation
 - lifecycle and surface/window proof
 - runtime-root discovery and bootstrap configuration
-- DEX staging and class-loader readiness
+- DEX staging, parsing, and class-loader readiness
 - Self-Healing Android Device diagnostics when anything upstream is blocked
 
 What actually runs today:
@@ -272,25 +272,32 @@ What actually runs today:
 - Linuxoid resolves the fixture `MainActivity`
 - Linuxoid stages the APK, data directory, dex payload, and runtime inputs
 - Linuxoid creates process, window, runtime, and Java-proof session artifacts
-- Linuxoid reaches the managed execution boundary and records it in `first_android_app_start`
+- Linuxoid parses real DEX header, string, type, proto, method, and class tables
+- Linuxoid locates the deterministic fixture method `linuxoidCheckpoint()V`
+- Linuxoid decodes and executes a tiny real DEX instruction path through Linuxoid's minimal interpreter and records it in `first_android_app_start`
 
 What does **not** run yet:
 
-- real Java/Kotlin bytecode execution
-- real `ActivityThread` / application bootstrap
+- real ART-owned `ActivityThread` / application bootstrap
 - managed `MainActivity` method invocation through ART
+- broad Java/Kotlin APK execution beyond the deterministic checkpoint method
+- general Android framework dispatch or compatibility
 
 The checkpoint stays explicit about that boundary. On the healthy fixture path today it reports:
 
 - `first_android_app_start.ready: true`
-- `first_android_app_start.blocking_reason: "needs-real-art-execution"`
-- `first_android_app_start.java_art_bytecode_executed: false`
+- `first_android_app_start.dex_parse_state: "header_tables_methods_and_code_item"`
+- `first_android_app_start.bytecode_execution_state: "returned"`
+- `first_android_app_start.first_executed_opcode: "return-void"`
+- `first_android_app_start.java_art_bytecode_executed: true`
+- `first_android_app_start.reached_return: true`
+- `first_android_app_start.blocking_reason: "needs-real-activitythread-context"`
 
-So this is a truthful first-app-start proof for the Self-Healing Android Device path, not a claim that Linuxoid already executes normal Android Java/Kotlin apps end to end.
+So this is a truthful first DEX bytecode execution proof for the Self-Healing Android Device path. Linuxoid now executes one tiny real DEX instruction path through its own minimal interpreter, but that is still not a claim that Linuxoid already provides full ART or end-to-end Android framework execution.
 
 Immediate next blocker:
 
-- `implement_real_art_activity_bytecode_invocation`
+- `bridge_activity_oncreate_into_real_art_runtime_context`
 
 `inspect-apk-compatibility` and `inspect-apk-compatibility-suite` now implement **P15 Third-Party APK Compatibility Sprint** on top of those same direct-session seams. They do not invent a disconnected mock matrix. Instead, Linuxoid launches the real staged APK session through package inspection, intent/activity resolution, storage sandboxing, permissions/AppOps, native/JNI load, process/session creation, window/surface state, runtime bootstrap, Java/Kotlin proof, and Self-Healing Android Device diagnostics, then emits a deterministic compatibility report under `sandbox/data/data/<package>/compatibility/compatibility-report.json`, `compatibility-domains.json`, and `compatibility-events.jsonl`. The suite command materializes the same contract across a small locally generated APK-like fixture set and summarizes statuses such as `supported`, `partial`, `blocked`, `missing-runtime`, `missing-surface`, `missing-native-lib`, `needs-real-art`, `recovered`, and `degraded`.
 
@@ -623,7 +630,7 @@ Linuxoid is still **not** at “run Android apps directly on Linux end to end”
 
 6. **Real app bootstrap**
    - Linuxoid can now stage, classify, preflight, diagnose, replay, and materialize a deterministic application-plus-activity bootstrap planning seam plus a separate execution seam
-   - Linuxoid can now also stage DEX payloads, parse safe DEX header-and-count metadata, and prepare a session-bound class-loader bootstrap contract from `launch-apk --dex-proof`
+   - Linuxoid can now also stage DEX payloads, parse safe DEX header/table/code-item metadata, and prepare a session-bound class-loader bootstrap contract from `launch-apk --dex-proof`
    - that DEX/bootstrap probe still stops honestly at `java_execution_supported: false`
    - it still needs the first successful host-side Android class execution and application or activity bootstrap on the native path for a real staged candidate app, not only override-backed fixture success
    - in practice, that means the public default path still needs to cross from honest blocked reports in `preflight-runtime native`, `verify-package native`, and `launch-package native` into a genuine no-override host-ART-owned success path

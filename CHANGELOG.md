@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.110 - 2026-05-18
+
+- Add **First DEX Bytecode Execution Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]` and `compatctl inspect-apk-first-start <apk-path> [staging-root]`, reusing the real direct-session package, activity, process, window, runtime, and Java-proof seams instead of adding a disconnected compatibility layer.
+- Extend the DEX bridge from header-and-count metadata into a minimal real DEX reader plus interpreter path that parses string, type, proto, method, and class tables, locates the deterministic fixture method `linuxoidCheckpoint()V`, decodes the first opcode, and either executes through `return-void` or reports the exact unsupported-opcode boundary with instruction offset, opcode name, and executed-instruction count.
+- Keep the checkpoint honest: the healthy fixture path now reports `java_art_bytecode_executed: true`, `bytecode_execution_backend: linuxoid_minimal_dex_interpreter`, `blocking_reason: needs-real-activitythread-context`, and `next_blocker: bridge_activity_oncreate_into_real_art_runtime_context`, while the runtime-missing path stays blocked with `art_runtime_unavailable_for_first_app_start` even if the minimal interpreter can still execute the deterministic probe method.
+- Update repo docs and status output to say plainly that Linuxoid now executes a tiny real DEX bytecode slice for one fixture app, but this is still not full ART-owned Java/Kotlin application execution or Android framework dispatch.
+
 ## v0.1.109 - 2026-05-18
 
 - Add **First Android App Start Checkpoint** through `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]` and `compatctl inspect-apk-first-start <apk-path> [staging-root]`, wiring one deterministic Java/Kotlin-style fixture through APK inspection, launcher intent resolution, storage/sandbox setup, process/window/runtime proof, DEX staging, Java proof, and Self-Healing Android Device diagnostics.
