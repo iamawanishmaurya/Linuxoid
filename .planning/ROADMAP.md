@@ -15,7 +15,7 @@ This roadmap turns Linuxoid's existing proof-oriented runtime into a first real 
 - [x] **Phase 2: Managed Activity Start** - Resolve and drive the launcher settings activity through a deeper managed startup path
 - [x] **Phase 3: Runtime Context Bridge** - Reduce the gap between the minimal interpreter path and a real ART-owned activity context
 - [x] **Phase 4: JNI and Native Loading** - Bring x86_64 native libraries and JNI boundaries into the verification path
-- [ ] **Phase 5: Visible Wayland Interaction** - Make the verification app visibly launch and accept meaningful interaction on Linux
+- [x] **Phase 5: Visible Wayland Interaction** - Make the verification app visibly launch and accept meaningful interaction on Linux
 - [ ] **Phase 6: Recovery and Runtime Hardening** - Stabilize app state, permissions, and recovery diagnostics around the first real app path
 
 ## Phase Details
@@ -155,7 +155,12 @@ Plans:
 
 Plans:
 
+**Wave 1**
+
 - [ ] 06-01: Harden app state, permissions, and sandbox continuity for the verification APK
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-02: Tighten Self-Healing Android Device recovery reporting for the first real app path
 
 ## Progress
