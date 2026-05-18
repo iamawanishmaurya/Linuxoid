@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: active
-stopped_at: Phase 11 complete; real keyboard path now reaches `managed_runtime_context_required` after selecting `SettingsActivity->onCreate(Landroid/os/Bundle;)V`
-last_updated: "2026-05-19T10:45:00.000Z"
-last_activity: 2026-05-19 -- Phase 11 Managed Activity Dispatch Bridge executed
+stopped_at: Phase 12 planned; next work is to bind a managed runtime context for `SettingsActivity->onCreate(Landroid/os/Bundle;)V`
+last_updated: "2026-05-19T11:10:00.000Z"
+last_activity: 2026-05-19 -- Phase 12 Managed Runtime Context Binding planned
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 11
-  total_plans: 31
+  total_plans: 34
   completed_plans: 31
-  percent: 100
+  percent: 91
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Run a real Android app directly on Linux through Linuxoid's own compatibility/runtime path, with honest execution and honest blockers instead of emulator fallback.
-**Current focus:** Phase 11 complete - Managed Activity Dispatch Bridge
+**Current focus:** Phase 12 planned - Managed Runtime Context Binding
 
 ## Current Position
 
-Phase: 11 of 11 (Managed Activity Dispatch Bridge)
-Plan: complete
-Status: Phase 11 complete - Linuxoid now attempts a Linuxoid-owned managed activity dispatch for the real keyboard path and stops at `managed_runtime_context_required`
-Last activity: 2026-05-19 -- Phase 11 execution moved the real keyboard path to the managed runtime-context seam
+Phase: 12 of 12 (Managed Runtime Context Binding)
+Plan: planned
+Status: Phase 12 planned - Linuxoid now needs to bind `managed_runtime_context_required` into a Linuxoid-owned managed runtime-context attempt for the real keyboard path
+Last activity: 2026-05-19 -- Phase 12 planning created around the managed runtime-context seam
 
-Progress: [██████████] 100%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -65,5 +65,5 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-05-19 00:05
-Stopped at: Phase 11 complete; next work is to bridge the managed runtime context for `libjni_latinime.so`, then bridge the managed `Activity.onCreate(Bundle)` seam
+Stopped at: Phase 12 planned; next work is to bind the managed runtime context for `libjni_latinime.so`, then bridge the managed `Activity.onCreate(Bundle)` seam
 Resume file: .planning/ROADMAP.md
