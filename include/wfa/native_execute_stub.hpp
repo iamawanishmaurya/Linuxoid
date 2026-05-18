@@ -82,6 +82,9 @@ struct NativeExecuteReport {
   std::string managed_activity_dispatch_method_name;
   std::string managed_activity_dispatch_method_signature;
   std::string managed_activity_runtime_binding_state = "not_applicable";
+  std::string managed_activity_runtime_binding_reason = "none";
+  std::string managed_activity_runtime_context_id;
+  std::string managed_activity_runtime_context_kind = "not_applicable";
   std::string android_compat_state;
   int elf_undefined_versions_normalized = 0;
   std::vector<std::string> android_compat_preloaded_paths;

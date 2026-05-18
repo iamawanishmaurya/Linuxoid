@@ -63,6 +63,9 @@ struct ManagedActivityDispatchAttempt {
   std::string method_name = "onCreate";
   std::string method_signature = "(Landroid/os/Bundle;)V";
   std::string runtime_binding_state = "not_attempted";
+  std::string runtime_binding_reason = "none";
+  std::string runtime_context_id;
+  std::string runtime_context_kind = "not_applicable";
 };
 
 #ifndef SHT_GNU_versym
@@ -128,6 +131,24 @@ std::string BuildClassDescriptor(const std::string& class_name) {
   return "L" + ReplaceAll(class_name, '.', '/') + ";";
 }
 
+std::string BuildManagedRuntimeContextId(const NativeExecuteRequest& request,
+                                         const std::string& class_name) {
+  std::ostringstream id;
+  id << "linuxoid-runtime-context:";
+  if (!request.package_name.empty()) {
+    id << request.package_name;
+  } else {
+    id << "unknown-package";
+  }
+  id << ":";
+  if (!class_name.empty()) {
+    id << class_name;
+  } else {
+    id << "unknown-activity";
+  }
+  return id.str();
+}
+
 ManagedActivityDispatchAttempt BuildManagedActivityDispatchAttempt(
     const NativeExecuteRequest& request) {
   ManagedActivityDispatchAttempt attempt;
@@ -140,13 +161,20 @@ ManagedActivityDispatchAttempt BuildManagedActivityDispatchAttempt(
     attempt.dispatch_state = "blocked";
     attempt.dispatch_reason = "managed_activity_component_unresolved";
     attempt.runtime_binding_state = "component_unresolved";
+    attempt.runtime_binding_reason = "managed_activity_component_unresolved";
+    attempt.runtime_context_kind = "not_applicable";
     return attempt;
   }
 
   attempt.dispatch_state = "linuxoid_dispatch_attempted";
   attempt.dispatch_reason =
       "jni_registration_completed_and_managed_activity_dispatch_target_selected";
-  attempt.runtime_binding_state = "managed_runtime_context_required";
+  attempt.runtime_binding_state = "linuxoid_runtime_context_bound";
+  attempt.runtime_binding_reason =
+      "managed_activity_dispatch_target_bound_to_linuxoid_runtime_context";
+  attempt.runtime_context_id =
+      BuildManagedRuntimeContextId(request, attempt.class_name);
+  attempt.runtime_context_kind = "linuxoid_managed_runtime_context_placeholder";
   return attempt;
 }
 
@@ -1196,16 +1224,23 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
             dispatch_attempt.method_signature;
         report.managed_activity_runtime_binding_state =
             dispatch_attempt.runtime_binding_state;
+        report.managed_activity_runtime_binding_reason =
+            dispatch_attempt.runtime_binding_reason;
+        report.managed_activity_runtime_context_id =
+            dispatch_attempt.runtime_context_id;
+        report.managed_activity_runtime_context_kind =
+            dispatch_attempt.runtime_context_kind;
         if (dispatch_attempt.dispatch_state == "linuxoid_dispatch_attempted") {
-          report.post_jni_startup_state = "managed_runtime_context_required";
+          report.post_jni_startup_state =
+              "activity_oncreate_bundle_dispatch_required";
           report.post_jni_dispatch_symbol_kind =
               "managed_activity_lifecycle_method";
           report.post_jni_dispatch_symbol =
               dispatch_attempt.class_name + "->" + dispatch_attempt.method_name +
               dispatch_attempt.method_signature;
           report.post_jni_dispatch_reason =
-              "linuxoid_managed_activity_dispatch_attempted_without_runtime_context";
-          report.exit_reason = "managed_runtime_context_required";
+              "linuxoid_runtime_context_bound_without_activitythread_dispatch";
+          report.exit_reason = "activity_oncreate_bundle_dispatch_required";
         } else {
           report.post_jni_startup_state = "managed_activity_dispatch_required";
           report.post_jni_dispatch_reason =
@@ -1415,6 +1450,15 @@ std::string RenderNativeExecuteReportJson(const NativeExecuteReport& report) {
          << "\",\n"
          << "  \"managed_activity_runtime_binding_state\": \""
          << EscapeJson(report.managed_activity_runtime_binding_state)
+         << "\",\n"
+         << "  \"managed_activity_runtime_binding_reason\": \""
+         << EscapeJson(report.managed_activity_runtime_binding_reason)
+         << "\",\n"
+         << "  \"managed_activity_runtime_context_id\": \""
+         << EscapeJson(report.managed_activity_runtime_context_id)
+         << "\",\n"
+         << "  \"managed_activity_runtime_context_kind\": \""
+         << EscapeJson(report.managed_activity_runtime_context_kind)
          << "\",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
          << "\",\n"

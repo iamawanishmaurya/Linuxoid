@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.130 - 2026-05-19
+
+- Close **Phase 12: Managed Runtime Context Binding** around the real keyboard APK's post-dispatch managed handoff instead of widening into broad framework recreation.
+- Extend the direct native execute path so after `libjni_latinime.so` loads, `JNI_OnLoad` succeeds, `RegisterNatives` completes, and Linuxoid selects `SettingsActivity->onCreate(Landroid/os/Bundle;)V`, Linuxoid now binds a deterministic `linuxoid_managed_runtime_context_placeholder` for that lifecycle target instead of stopping at `managed_runtime_context_required`.
+- Tighten `launch-apk --first-app-start-proof`, watchdog gating, and the JNI registration regression fixtures so the current live blocker is now narrower and honest: `blocking_reason: activity_oncreate_bundle_dispatch_required_for_first_app_start:libjni_latinime.so`, `primary_blocker_reason: activity_oncreate_bundle_dispatch_required:libjni_latinime.so`, and the next exact seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+
 ## v0.1.129 - 2026-05-19
 
 - Close **Phase 11: Managed Activity Dispatch Bridge** around the real keyboard APK's post-registration handoff instead of widening into a broad framework rewrite.

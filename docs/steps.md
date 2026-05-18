@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Managed Runtime Context Binding Checkpoint GREEN
+  Action: Extended the direct native execute path so Linuxoid now turns the selected `SettingsActivity->onCreate(Landroid/os/Bundle;)V` target into a deterministic Linuxoid managed runtime-context placeholder binding instead of stopping at the broader managed-runtime-context-required seam.
+  Result: The real keyboard APK path now reports `native_loading_state: activity_oncreate_bundle_dispatch_required`, `native_managed_activity_runtime_binding_state: linuxoid_runtime_context_bound`, `native_managed_activity_runtime_context_kind: linuxoid_managed_runtime_context_placeholder`, `primary_blocker_reason: activity_oncreate_bundle_dispatch_required:libjni_latinime.so`, and `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`, while still honestly not claiming full ActivityThread or framework dispatch.
+  Timestamp: 2026-05-19T12:20:00+05:30
+
 - Step: Managed Activity Dispatch Bridge Checkpoint GREEN
   Action: Extended the direct native execute path so Linuxoid now turns successful JNI registration into a Linuxoid-owned managed activity dispatch attempt, selects the real launcher lifecycle target, and reports explicit managed-dispatch plus runtime-context-binding facts instead of stopping at the broader managed-dispatch-required seam.
   Result: The real keyboard APK path now reports `native_loading_state: managed_runtime_context_required`, `native_managed_activity_dispatch_state: linuxoid_dispatch_attempted`, `native_post_jni_dispatch_symbol: org.futo.inputmethod.latin.uix.settings.SettingsActivity->onCreate(Landroid/os/Bundle;)V`, `primary_blocker_reason: managed_runtime_context_required:libjni_latinime.so`, and `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`, while the deeper managed seam remains explicit instead of being blurred back into native startup.

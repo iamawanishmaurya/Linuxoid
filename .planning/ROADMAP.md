@@ -2,7 +2,7 @@
 
 ## Overview
 
-This roadmap turns Linuxoid's existing proof-oriented runtime into a first real Android app execution path on Linux. The journey starts with real-world APK intake for `keyboard-0.1.28.apk`, then pushes managed execution, native/JNI loading, and Wayland interaction far enough that the verification app can start and be meaningfully used on a Linux desktop, while keeping every missing Android-runtime seam explicit. The newest live seam is now narrower again: `libjni_latinime.so` now loads, runs `JNI_OnLoad`, dispatches a real JNI registration callback, and reaches a real managed activity-dispatch requirement. Linuxoid still needs to bridge that managed bootstrap seam before the later `Activity.onCreate(Bundle)` boundary can move. The next planning slice should stay just as narrow: bridge managed activity dispatch into the runtime context without widening into broad framework recreation.
+This roadmap turns Linuxoid's existing proof-oriented runtime into a first real Android app execution path on Linux. The journey starts with real-world APK intake for `keyboard-0.1.28.apk`, then pushes managed execution, native/JNI loading, and Wayland interaction far enough that the verification app can start and be meaningfully used on a Linux desktop, while keeping every missing Android-runtime seam explicit. The newest live seam is now narrower again: `libjni_latinime.so` now loads, runs `JNI_OnLoad`, dispatches a real JNI registration callback, selects the real `SettingsActivity->onCreate(Landroid/os/Bundle;)V` lifecycle target, and binds a deterministic Linuxoid managed runtime-context placeholder. Linuxoid still needs to bridge that bound context into real `Activity.onCreate(Bundle)` dispatch before the later ActivityThread/framework boundary can move.
 
 ## Phases
 
@@ -22,7 +22,7 @@ This roadmap turns Linuxoid's existing proof-oriented runtime into a first real 
 - [x] **Phase 9: Managed App-Start Dispatch** - Turn the Linuxoid-managed app-start bridge candidate into the first real post-bridge dispatch seam for the keyboard APK path
 - [x] **Phase 10: JNI Registration Dispatch** - Execute the registration-helper boundary for `libjni_latinime.so` and expose the first post-registration managed bootstrap seam
 - [x] **Phase 11: Managed Activity Dispatch Bridge** - Bridge the post-registration `managed_activity_dispatch_required` seam into a Linuxoid-owned managed activity dispatch attempt for the real keyboard APK path
-- [ ] **Phase 12: Managed Runtime Context Binding** - Bridge the post-dispatch `managed_runtime_context_required` seam into a Linuxoid-owned managed runtime context binding attempt for the real keyboard APK path
+- [x] **Phase 12: Managed Runtime Context Binding** - Bridge the post-dispatch `managed_runtime_context_required` seam into a Linuxoid-owned managed runtime context binding attempt for the real keyboard APK path
 
 ## Phase Details
 
@@ -215,7 +215,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 9. Managed App-Start Dispatch | 3/3 | Complete | `libjni_latinime.so` now reaches `jni_registration_dispatch_required`, exposes the registration-helper symbol boundary, and keeps the later managed `Activity.onCreate(Bundle)` seam distinct |
 | 10. JNI Registration Dispatch | 3/3 | Complete | `libjni_latinime.so` now dispatches a real JNI registration callback, observes `RegisterNatives`, and the remaining blocker is managed activity dispatch plus the later `Activity.onCreate(Bundle)` seam |
 | 11. Managed Activity Dispatch Bridge | 3/3 | Complete | `libjni_latinime.so` now selects the real `SettingsActivity->onCreate(Landroid/os/Bundle;)V` lifecycle target and the remaining blocker is the managed runtime-context seam before later framework dispatch |
-| 12. Managed Runtime Context Binding | 0/3 | Planned | Next real blocker: bind a Linuxoid-owned managed runtime context for `SettingsActivity->onCreate(Landroid/os/Bundle;)V` and expose the first exact post-binding lifecycle or framework seam |
+| 12. Managed Runtime Context Binding | 3/3 | Complete | `libjni_latinime.so` now binds `linuxoid_runtime_context_bound` for `SettingsActivity->onCreate(Landroid/os/Bundle;)V`; the next exact blocker is `activity_oncreate_bundle_dispatch_required` |
 
 ### Phase 8: Native App-Start Bridge
 
@@ -347,12 +347,12 @@ Plans:
 
 **Wave 1**
 
-- [ ] 12-01: Research and bind a Linuxoid-owned managed runtime-context strategy for the keyboard startup path
+- [x] 12-01: Research and bind a Linuxoid-owned managed runtime-context strategy for the keyboard startup path
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 12-02: Expose the first exact post-binding lifecycle or framework boundary
+- [x] 12-02: Expose the first exact post-binding lifecycle or framework boundary
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 12-03: Lock the runtime-context seam into first-app-start, recovery, and regression truth
+- [x] 12-03: Lock the runtime-context seam into first-app-start, recovery, and regression truth

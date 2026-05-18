@@ -585,6 +585,7 @@ std::string DetermineRecommendedRecoveryAction(
       report.launch_status == "jni_registration_callback_crashed" ||
       report.launch_status == "managed_activity_dispatch_required" ||
       report.launch_status == "managed_runtime_context_required" ||
+      report.launch_status == "activity_oncreate_bundle_dispatch_required" ||
       report.launch_status == "jni_direct_method_dispatch_required") {
     return "inspect_native_launch_diagnostics";
   }
@@ -1722,6 +1723,9 @@ std::string DetermineNativeLoadingState(const NativeApkLaunchReport& report) {
   if (report.launch_status == "managed_runtime_context_required") {
     return "managed_runtime_context_required";
   }
+  if (report.launch_status == "activity_oncreate_bundle_dispatch_required") {
+    return "activity_oncreate_bundle_dispatch_required";
+  }
   if (report.launch_status == "jni_direct_method_dispatch_required") {
     return "jni_direct_method_dispatch_required";
   }
@@ -1839,6 +1843,12 @@ void RefreshNativeLoadingDetails(NativeApkLaunchReport* report) {
       report->native_execute.managed_activity_dispatch_method_signature;
   report->native_managed_activity_runtime_binding_state =
       report->native_execute.managed_activity_runtime_binding_state;
+  report->native_managed_activity_runtime_binding_reason =
+      report->native_execute.managed_activity_runtime_binding_reason;
+  report->native_managed_activity_runtime_context_id =
+      report->native_execute.managed_activity_runtime_context_id;
+  report->native_managed_activity_runtime_context_kind =
+      report->native_execute.managed_activity_runtime_context_kind;
   report->native_loading_library_name.clear();
   report->native_loading_library_path.clear();
   report->native_loading_detail.clear();
@@ -1911,6 +1921,11 @@ std::string DetermineFirstAppStartNativeBlockingReason(
   if (report.launch_status == "managed_runtime_context_required" &&
       attempt != nullptr) {
     return "managed_runtime_context_required_for_first_app_start:" +
+           attempt->library_name;
+  }
+  if (report.launch_status == "activity_oncreate_bundle_dispatch_required" &&
+      attempt != nullptr) {
+    return "activity_oncreate_bundle_dispatch_required_for_first_app_start:" +
            attempt->library_name;
   }
   if (report.launch_status == "jni_direct_method_dispatch_required" &&
@@ -2059,6 +2074,9 @@ std::string DetermineFirstAppStartRecoveryAction(
                             0) == 0 ||
       blocking_reason.rfind("managed_runtime_context_required_for_first_app_start:",
                             0) == 0 ||
+      blocking_reason.rfind(
+          "activity_oncreate_bundle_dispatch_required_for_first_app_start:",
+          0) == 0 ||
       blocking_reason.rfind("native_activity_entrypoint_missing_for_first_app_start:",
                             0) == 0 ||
       blocking_reason.rfind(
@@ -2210,6 +2228,11 @@ std::string DetermineFirstAppStartNextBlocker(
   }
   if (blocking_reason.rfind(
           "managed_runtime_context_required_for_first_app_start:", 0) == 0) {
+    return "bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context";
+  }
+  if (blocking_reason.rfind(
+          "activity_oncreate_bundle_dispatch_required_for_first_app_start:",
+          0) == 0) {
     return "bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context";
   }
   if (blocking_reason.rfind(
@@ -2375,6 +2398,15 @@ std::string RenderFirstAppStartJson(
          << "\",\n"
          << "  \"native_managed_activity_runtime_binding_state\": \""
          << EscapeJson(proof.native_managed_activity_runtime_binding_state)
+         << "\",\n"
+         << "  \"native_managed_activity_runtime_binding_reason\": \""
+         << EscapeJson(proof.native_managed_activity_runtime_binding_reason)
+         << "\",\n"
+         << "  \"native_managed_activity_runtime_context_id\": \""
+         << EscapeJson(proof.native_managed_activity_runtime_context_id)
+         << "\",\n"
+         << "  \"native_managed_activity_runtime_context_kind\": \""
+         << EscapeJson(proof.native_managed_activity_runtime_context_kind)
          << "\",\n"
          << "  \"native_loading_library_name\": \""
          << EscapeJson(proof.native_loading_library_name) << "\",\n"
@@ -2589,6 +2621,12 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
       report.native_managed_activity_dispatch_method_signature;
   proof.native_managed_activity_runtime_binding_state =
       report.native_managed_activity_runtime_binding_state;
+  proof.native_managed_activity_runtime_binding_reason =
+      report.native_managed_activity_runtime_binding_reason;
+  proof.native_managed_activity_runtime_context_id =
+      report.native_managed_activity_runtime_context_id;
+  proof.native_managed_activity_runtime_context_kind =
+      report.native_managed_activity_runtime_context_kind;
   proof.native_loading_library_name = report.native_loading_library_name;
   proof.native_loading_detail = report.native_loading_detail;
   proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
@@ -2749,6 +2787,11 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
     proof.diagnostics.push_back(
         "Self-Healing Android Device first app start checkpoint selected the launcher activity lifecycle target after JNI registration and now needs a managed runtime context binding to dispatch onCreate(Bundle)");
   } else if (proof.blocking_reason.rfind(
+                 "activity_oncreate_bundle_dispatch_required_for_first_app_start:",
+                 0) == 0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint bound a Linuxoid managed runtime context placeholder and now needs Activity.onCreate(Bundle) dispatch inside that context");
+  } else if (proof.blocking_reason.rfind(
                  "linuxoid_managed_app_start_bridge_required_for_first_app_start:",
                  0) == 0) {
     proof.diagnostics.push_back(
@@ -2793,6 +2836,9 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
           "managed_activity_dispatch_required_for_first_app_start:", 0) == 0 ||
       proof.blocking_reason.rfind(
           "managed_runtime_context_required_for_first_app_start:", 0) == 0 ||
+      proof.blocking_reason.rfind(
+          "activity_oncreate_bundle_dispatch_required_for_first_app_start:",
+          0) == 0 ||
       proof.blocking_reason.rfind(
           "linuxoid_managed_app_start_bridge_required_for_first_app_start:",
           0) == 0 ||
@@ -3649,6 +3695,12 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
                     "managed_runtime_context_required:" +
                         attempt->library_name);
       } else if (report.native_execute.exit_reason ==
+                     "activity_oncreate_bundle_dispatch_required" &&
+                 attempt != nullptr && !attempt->library_name.empty()) {
+        AppendError(&report.errors,
+                    "activity_oncreate_bundle_dispatch_required:" +
+                        attempt->library_name);
+      } else if (report.native_execute.exit_reason ==
                      "jni_direct_method_dispatch_required" &&
                  attempt != nullptr && !attempt->library_name.empty()) {
         AppendError(&report.errors,
@@ -3968,6 +4020,15 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "  \"native_managed_activity_runtime_binding_state\": \""
          << EscapeJson(report.native_managed_activity_runtime_binding_state)
+         << "\",\n"
+         << "  \"native_managed_activity_runtime_binding_reason\": \""
+         << EscapeJson(report.native_managed_activity_runtime_binding_reason)
+         << "\",\n"
+         << "  \"native_managed_activity_runtime_context_id\": \""
+         << EscapeJson(report.native_managed_activity_runtime_context_id)
+         << "\",\n"
+         << "  \"native_managed_activity_runtime_context_kind\": \""
+         << EscapeJson(report.native_managed_activity_runtime_context_kind)
          << "\",\n"
          << "  \"native_loading_library_name\": \""
          << EscapeJson(report.native_loading_library_name) << "\",\n"
@@ -5176,6 +5237,18 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << EscapeJson(report.first_android_app_start
                            .native_managed_activity_runtime_binding_state)
          << "\",\n"
+         << "    \"native_managed_activity_runtime_binding_reason\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_runtime_binding_reason)
+         << "\",\n"
+         << "    \"native_managed_activity_runtime_context_id\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_runtime_context_id)
+         << "\",\n"
+         << "    \"native_managed_activity_runtime_context_kind\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_managed_activity_runtime_context_kind)
+         << "\",\n"
          << "    \"native_loading_library_name\": \""
          << EscapeJson(report.first_android_app_start.native_loading_library_name)
          << "\",\n"
@@ -5767,6 +5840,17 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"managed_activity_runtime_binding_state\": \""
          << EscapeJson(
                 report.native_execute.managed_activity_runtime_binding_state)
+         << "\",\n"
+         << "    \"managed_activity_runtime_binding_reason\": \""
+         << EscapeJson(
+                report.native_execute.managed_activity_runtime_binding_reason)
+         << "\",\n"
+         << "    \"managed_activity_runtime_context_id\": \""
+         << EscapeJson(report.native_execute.managed_activity_runtime_context_id)
+         << "\",\n"
+         << "    \"managed_activity_runtime_context_kind\": \""
+         << EscapeJson(
+                report.native_execute.managed_activity_runtime_context_kind)
          << "\",\n"
          << "    \"exit_reason\": \""
          << EscapeJson(report.native_execute.exit_reason) << "\",\n"
