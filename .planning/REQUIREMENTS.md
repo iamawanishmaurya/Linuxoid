@@ -23,6 +23,8 @@ Requirements for the first real Android app execution milestone centered on `key
 
 - [ ] **JNI-01**: Linuxoid stages the verification APK's `x86_64` native libraries into the launch session and selects the correct host ABI path
 - [ ] **JNI-02**: Linuxoid reports exact native load or JNI blockers instead of silently falling back or claiming success
+- [ ] **JNI-03**: Linuxoid satisfies enough Android-libc compatibility for the verification APK's primary native entry library to load through the host loader instead of stopping at unresolved symbols such as `__strchr_chk`
+- [ ] **JNI-04**: Linuxoid reaches and reports the first true native entry boundary for the verification APK's primary library, including `JNI_OnLoad`, registration, or a specific missing entrypoint or symbol seam
 
 ### Window and Input
 
@@ -40,6 +42,7 @@ Requirements for the first real Android app execution milestone centered on `key
 - [ ] **VER-01**: User can reach `org.futo.inputmethod.latin.uix.settings.SettingsActivity` on Linux through Linuxoid's direct runtime path
 - [ ] **VER-02**: Linuxoid's first-app-start report states clearly whether real Java/Kotlin bytecode executed, whether startup reached a return boundary, and what exact blocker remains if the full activity path still does not run
 - [ ] **VER-03**: The Self-Healing Android Device runtime harness emits actionable recovery diagnostics for verification APK launch failures or degraded startup
+- [ ] **VER-04**: User can push the real verification APK one step past generic native-library load failure and see the next exact native or managed startup blocker on the same direct Linuxoid path
 
 ## v2 Requirements
 
@@ -82,6 +85,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEX-03 | Phase 2 | Pending |
 | JNI-01 | Phase 4 | Pending |
 | JNI-02 | Phase 4 | Pending |
+| JNI-03 | Phase 7 | Pending |
+| JNI-04 | Phase 7 | Pending |
 | WIN-01 | Phase 5 | Pending |
 | WIN-02 | Phase 5 | Pending |
 | APP-01 | Phase 6 | Pending |
@@ -90,12 +95,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VER-01 | Phase 5 | Pending |
 | VER-02 | Phase 3 | Pending |
 | VER-03 | Phase 6 | Pending |
+| VER-04 | Phase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 16 total
-- Mapped to phases: 16
+- v1 requirements: 19 total
+- Mapped to phases: 19
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-05-18*
-*Last updated: 2026-05-18 after initial definition*
+*Last updated: 2026-05-19 after adding the native libc/native-entry follow-on phase*

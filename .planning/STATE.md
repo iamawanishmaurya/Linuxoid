@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 6 complete; repeated keyboard APK state continuity and exact recovery gating are now green
-last_updated: "2026-05-19T09:50:00.000Z"
-last_activity: 2026-05-19 -- Phase 6 Recovery and Runtime Hardening completed
+status: active
+stopped_at: Phase 7 planned; next work is to close the `libjni_latinime.so` Android-libc/native-entry seam
+last_updated: "2026-05-19T16:40:00.000Z"
+last_activity: 2026-05-19 -- Phase 7 Native libc Compatibility and Entry Bridge planned
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 6
-  total_plans: 16
+  total_plans: 19
   completed_plans: 16
-  percent: 100
+  percent: 84
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Run a real Android app directly on Linux through Linuxoid's own compatibility/runtime path, with honest execution and honest blockers instead of emulator fallback.
-**Current focus:** Phase 6 complete - Recovery and Runtime Hardening
+**Current focus:** Phase 7 planned - Native libc Compatibility and Entry Bridge
 
 ## Current Position
 
-Phase: 6 of 6 (Recovery and Runtime Hardening)
-Plan: complete
-Status: Phase 6 complete - repeated keyboard APK state continuity is validated and recovery reporting now stays gated on the upstream native blocker
-Last activity: 2026-05-19 -- Phase 6 execution completed around repeated app-state continuity and exact watchdog gating
+Phase: 7 of 7 (Native libc Compatibility and Entry Bridge)
+Plan: planned
+Status: Phase 7 planned - Linuxoid now needs to get `libjni_latinime.so` past the Android-libc/native-entry seam on the real keyboard APK path
+Last activity: 2026-05-19 -- Phase 7 planning created around the sharpened `__strchr_chk` / native-entry blocker
 
-Progress: [██████████] 100%
+Progress: [████████░░] 84%
 
 ## Performance Metrics
 
@@ -52,18 +52,18 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Resolve the upstream native blocker `resolve_dlopen_failure_for_libandroidx_graphics_path_so`
+- Resolve the upstream native blocker `resolve_native_symbol_gap_for_libjni_latinime_so___strchr_chk`
+- Reach the first post-load native boundary `provide_native_activity_entrypoint_for_libjni_latinime_so`
 - Bridge the downstream managed seam `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
-- Keep repeated keyboard launch artifacts comparable as later native and managed work lands
 
 ### Blockers/Concerns
 
-- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, stages six `x86_64` native libraries, binds that same activity to a concrete `window_manager` target with exact `visible_target_state`, `focus_state`, and `interaction_state` reporting, preserves repeated sandbox/permission/AppOps continuity, and still reports the exact upstream native blocker through `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, and `native_execute.library_load_attempts`
-- Next managed-runtime seam after lookup: `framework_boundary_reason: android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint` with `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
-- Recovery hardening outcome: the Self-Healing Android Device watchdog now keeps `primary_blocker_reason: native_dlopen_failed:libandroidx.graphics.path.so` authoritative and journals downstream launch-dependent repairs as `skipped_upstream_blocker`
+- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, stages six `x86_64` native libraries, preserves repeated sandbox/permission/AppOps continuity, preloads the current Android-compat shim set, and still reports the sharpened upstream blocker through `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, and nested `native_execute.android_compat_*` fields
+- Current exact live blocker: `native_loading_state: native_activity_entrypoint_missing`, `native_loading_library_name: libjni_latinime.so`, `native_loading_detail: undefined symbol: __strchr_chk`
+- Next managed-runtime seam after the native load moves: `framework_boundary_reason: android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint` with `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
 
 ## Session Continuity
 
-Last session: 2026-05-19 09:50
-Stopped at: Phase 6 complete; next work is to resolve the upstream native `dlopen` blocker and then bridge the managed `Activity.onCreate(Bundle)` seam
+Last session: 2026-05-19 16:40
+Stopped at: Phase 7 planned; next work is to resolve the `libjni_latinime.so` Android-libc/native-entry blocker and then bridge the managed `Activity.onCreate(Bundle)` seam
 Resume file: .planning/ROADMAP.md
