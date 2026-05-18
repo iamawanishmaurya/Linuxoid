@@ -25,6 +25,8 @@ Requirements for the first real Android app execution milestone centered on `key
 - [ ] **JNI-02**: Linuxoid reports exact native load or JNI blockers instead of silently falling back or claiming success
 - [ ] **JNI-03**: Linuxoid satisfies enough Android-libc compatibility for the verification APK's primary native entry library to load through the host loader instead of stopping at unresolved symbols such as `__strchr_chk`
 - [ ] **JNI-04**: Linuxoid reaches and reports the first true native entry boundary for the verification APK's primary library, including `JNI_OnLoad`, registration, or a specific missing entrypoint or symbol seam
+- [ ] **JNI-05**: Linuxoid can bridge a JNI-shaped primary library into a Linuxoid-owned app-start strategy when the library loads and `JNI_OnLoad` succeeds but no `ANativeActivity_onCreate` entrypoint exists
+- [ ] **JNI-06**: Linuxoid reports exact JNI registration, native app-start, or managed bootstrap blockers after `JNI_OnLoad` instead of collapsing back to generic missing-entrypoint failure
 
 ### Window and Input
 
@@ -43,6 +45,7 @@ Requirements for the first real Android app execution milestone centered on `key
 - [ ] **VER-02**: Linuxoid's first-app-start report states clearly whether real Java/Kotlin bytecode executed, whether startup reached a return boundary, and what exact blocker remains if the full activity path still does not run
 - [ ] **VER-03**: The Self-Healing Android Device runtime harness emits actionable recovery diagnostics for verification APK launch failures or degraded startup
 - [ ] **VER-04**: User can push the real verification APK one step past generic native-library load failure and see the next exact native or managed startup blocker on the same direct Linuxoid path
+- [ ] **VER-05**: User can push the real verification APK one step past the current `native_activity_entrypoint_missing` seam and see the next exact native, JNI registration, or managed startup blocker on the same direct Linuxoid path
 
 ## v2 Requirements
 
@@ -87,6 +90,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JNI-02 | Phase 4 | Pending |
 | JNI-03 | Phase 7 | Pending |
 | JNI-04 | Phase 7 | Pending |
+| JNI-05 | Phase 8 | Pending |
+| JNI-06 | Phase 8 | Pending |
 | WIN-01 | Phase 5 | Pending |
 | WIN-02 | Phase 5 | Pending |
 | APP-01 | Phase 6 | Pending |
@@ -96,12 +101,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VER-02 | Phase 3 | Pending |
 | VER-03 | Phase 6 | Pending |
 | VER-04 | Phase 7 | Pending |
+| VER-05 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 19 total
-- Mapped to phases: 19
+- v1 requirements: 22 total
+- Mapped to phases: 22
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-05-18*
-*Last updated: 2026-05-19 after adding the native libc/native-entry follow-on phase*
+*Last updated: 2026-05-19 after adding the native app-start bridge follow-on phase*

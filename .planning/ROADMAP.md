@@ -2,7 +2,7 @@
 
 ## Overview
 
-This roadmap turns Linuxoid's existing proof-oriented runtime into a first real Android app execution path on Linux. The journey starts with real-world APK intake for `keyboard-0.1.28.apk`, then pushes managed execution, native/JNI loading, and Wayland interaction far enough that the verification app can start and be meaningfully used on a Linux desktop, while keeping every missing Android-runtime seam explicit. The next live seam is now narrower than the original Phase 4 goal: `libjni_latinime.so` reaches Linuxoid's Android-libc/native-entry boundary and needs a dedicated follow-on phase before managed Activity startup can continue.
+This roadmap turns Linuxoid's existing proof-oriented runtime into a first real Android app execution path on Linux. The journey starts with real-world APK intake for `keyboard-0.1.28.apk`, then pushes managed execution, native/JNI loading, and Wayland interaction far enough that the verification app can start and be meaningfully used on a Linux desktop, while keeping every missing Android-runtime seam explicit. The next live seam is now narrower than the original Phase 4 goal: `libjni_latinime.so` now loads and runs `JNI_OnLoad`, but Linuxoid still needs a dedicated follow-on phase to bridge that JNI-shaped library into a Linuxoid-owned app-start path before managed Activity startup can continue.
 
 ## Phases
 
@@ -18,6 +18,7 @@ This roadmap turns Linuxoid's existing proof-oriented runtime into a first real 
 - [x] **Phase 5: Visible Wayland Interaction** - Make the verification app visibly launch and accept meaningful interaction on Linux
 - [x] **Phase 6: Recovery and Runtime Hardening** - Stabilize app state, permissions, and recovery diagnostics around the first real app path
 - [x] **Phase 7: Native libc Compatibility and Entry Bridge** - Get the real keyboard APK past the current `libjni_latinime.so` Android-libc/native-entry blocker and into the first true native startup boundary
+- [ ] **Phase 8: Native App-Start Bridge** - Turn the JNI-shaped `libjni_latinime.so` boundary into a Linuxoid-owned app-start strategy and expose the next exact startup seam
 
 ## Phase Details
 
@@ -195,7 +196,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -206,3 +207,32 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 5. Visible Wayland Interaction | 3/3 | Complete | Real keyboard `SettingsActivity` now owns a concrete window/focus target while preserving the exact native `dlopen` blocker |
 | 6. Recovery and Runtime Hardening | 2/2 | Complete | Repeated keyboard-state continuity is validated and watchdog recovery now stays gated on the earliest native blocker |
 | 7. Native libc Compatibility and Entry Bridge | 3/3 | Complete | `libjni_latinime.so` now loads, `JNI_OnLoad` runs, and the remaining blocker is the missing native activity entrypoint plus later managed `Activity.onCreate(Bundle)` dispatch |
+| 8. Native App-Start Bridge | 0/3 | Planned | Next real blocker: turn the JNI-shaped `libjni_latinime.so` boundary into a Linuxoid-owned app-start strategy without losing the later managed `Activity.onCreate(Bundle)` seam |
+
+### Phase 8: Native App-Start Bridge
+
+**Goal**: Linuxoid turns the JNI-shaped `libjni_latinime.so` boundary into a Linuxoid-owned app-start strategy and exposes the next exact native or managed startup seam for the real keyboard APK path.
+**Mode:** mvp
+**Depends on**: Phase 7
+**Requirements**: JNI-05, JNI-06, VER-05
+**Success Criteria** (what must be TRUE):
+
+  1. Linuxoid no longer stops at a generic missing `ANativeActivity_onCreate` boundary for `libjni_latinime.so`; it either bridges that JNI-shaped library into a Linuxoid-owned app-start path or reports the next exact registration/bootstrap seam
+  2. `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>` reaches a smaller seam than `native_activity_entrypoint_missing`
+  3. The downstream managed blocker `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context` stays visible and distinct once the upstream native app-start seam moves
+
+**Plans**: 3 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 08-01: Research and bind a Linuxoid-owned app-start strategy for JNI-shaped primary libraries
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 08-02: Expose the first post-`JNI_OnLoad` registration or app-start boundary exactly
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 08-03: Lock the new app-start seam into first-app-start, recovery, and regression truth

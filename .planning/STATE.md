@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: active
-stopped_at: Phase 7 complete; roadmap closed with the native-entry blocker narrowed to `provide_native_activity_entrypoint_for_libjni_latinime_so`
-last_updated: "2026-05-19T18:30:00.000Z"
-last_activity: 2026-05-19 -- Phase 7 Native libc Compatibility and Entry Bridge executed
+stopped_at: Phase 8 planned; next work is to bridge the JNI-shaped `libjni_latinime.so` boundary into a Linuxoid-owned app-start path
+last_updated: "2026-05-19T19:05:00.000Z"
+last_activity: 2026-05-19 -- Phase 8 Native App-Start Bridge planned
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 7
-  total_plans: 19
+  total_plans: 22
   completed_plans: 19
-  percent: 100
+  percent: 86
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Run a real Android app directly on Linux through Linuxoid's own compatibility/runtime path, with honest execution and honest blockers instead of emulator fallback.
-**Current focus:** Roadmap complete - next milestone should split native entry bridging from managed ActivityThread work
+**Current focus:** Phase 8 planned - Native App-Start Bridge
 
 ## Current Position
 
-Phase: 7 of 7 (Native libc Compatibility and Entry Bridge)
-Plan: complete
-Status: Phase 7 complete - Linuxoid now gets `libjni_latinime.so` loaded, calls `JNI_OnLoad`, and stops at the narrower missing-entrypoint seam on the real keyboard APK path
-Last activity: 2026-05-19 -- Phase 7 executed around the real native entry seam and clean blocked-report exit path
+Phase: 8 of 8 (Native App-Start Bridge)
+Plan: planned
+Status: Phase 8 planned - Linuxoid now needs a Linuxoid-owned app-start strategy for the JNI-shaped `libjni_latinime.so` boundary on the real keyboard APK path
+Last activity: 2026-05-19 -- Phase 8 planning created around the post-`JNI_OnLoad` app-start seam
 
-Progress: [██████████] 100%
+Progress: [████████░░] 86%
 
 ## Performance Metrics
 
@@ -64,6 +64,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-19 23:58
-Stopped at: Phase 7 complete; next work is to bridge the JNI-shaped `libjni_latinime.so` boundary into a real app-start strategy and then bridge the managed `Activity.onCreate(Bundle)` seam
+Last session: 2026-05-20 00:05
+Stopped at: Phase 8 planned; next work is to bridge the JNI-shaped `libjni_latinime.so` boundary into a Linuxoid-owned app-start strategy and then bridge the managed `Activity.onCreate(Bundle)` seam
 Resume file: .planning/ROADMAP.md
