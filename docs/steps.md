@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Managed App-Start Dispatch Checkpoint GREEN
+  Action: Extended the direct native execute path so Linuxoid now inspects the staged entry library's exported symbols after `JNI_OnLoad`, selects a Linuxoid-owned post-bridge dispatch seam, and surfaces deterministic `post_jni_dispatch_symbol_*` facts instead of stopping at a generic managed bridge requirement. Added focused regression coverage for the narrowed launch seam and first-app-start blocker propagation.
+  Result: The real keyboard APK path now reports `native_loading_state: jni_registration_dispatch_required`, `native_app_start_bridge_state: linuxoid_managed_app_start_bridge_selected`, `native_post_jni_startup_state: jni_registration_dispatch_required`, and `next_blocker: dispatch_jni_registration_for_libjni_latinime_so`, while the deeper managed seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+  Timestamp: 2026-05-19T02:22:00+05:30
+
 - Step: Native App-Start Bridge Checkpoint GREEN
   Action: Extended the direct native execute path so a JNI-shaped primary library that loads and reaches `JNI_OnLoad` is now reported as a Linuxoid-owned managed app-start bridge seam instead of collapsing back to a generic missing `ANativeActivity_onCreate` story. Added focused regressions for the narrowed launch seam and first-app-start blocker propagation.
   Result: The real keyboard APK path now reports `native_loading_state: linuxoid_managed_app_start_bridge_required`, `native_app_start_bridge_state: linuxoid_managed_app_start_bridge_required`, `native_post_jni_startup_state: managed_activity_dispatch_required`, and `next_blocker: implement_linuxoid_managed_app_start_bridge_for_libjni_latinime_so`, while the deeper managed seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.

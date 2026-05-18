@@ -33,6 +33,13 @@ struct LoadedLibraryHandle {
   void* handle = nullptr;
 };
 
+struct PostJniDispatchBoundary {
+  std::string state = "managed_activity_dispatch_required";
+  std::string symbol_kind = "none";
+  std::string symbol_name;
+  std::string reason = "no_post_jni_dispatch_symbols_detected";
+};
+
 #ifndef SHT_GNU_versym
 #define SHT_GNU_versym 0x6fffffff
 #endif
@@ -268,6 +275,133 @@ std::vector<std::string> ReadElfNeededSharedLibraries(
     needed_libraries.emplace_back(string_table + offset);
   }
   return needed_libraries;
+}
+
+std::vector<std::string> ReadElfDynamicSymbolNames(
+    const std::string& library_path) {
+  std::ifstream input(library_path, std::ios::binary);
+  if (!input) {
+    return {};
+  }
+
+  std::vector<char> payload((std::istreambuf_iterator<char>(input)),
+                            std::istreambuf_iterator<char>());
+  if (payload.size() < sizeof(Elf64_Ehdr)) {
+    return {};
+  }
+
+  const auto* header = reinterpret_cast<const Elf64_Ehdr*>(payload.data());
+  if (!(header->e_ident[EI_MAG0] == ELFMAG0 &&
+        header->e_ident[EI_MAG1] == ELFMAG1 &&
+        header->e_ident[EI_MAG2] == ELFMAG2 &&
+        header->e_ident[EI_MAG3] == ELFMAG3) ||
+      header->e_ident[EI_CLASS] != ELFCLASS64 ||
+      header->e_ident[EI_DATA] != ELFDATA2LSB ||
+      header->e_shoff == 0 || header->e_shentsize < sizeof(Elf64_Shdr) ||
+      header->e_shnum == 0) {
+    return {};
+  }
+
+  const std::size_t section_table_end =
+      static_cast<std::size_t>(header->e_shoff) +
+      static_cast<std::size_t>(header->e_shentsize) *
+          static_cast<std::size_t>(header->e_shnum);
+  if (section_table_end > payload.size()) {
+    return {};
+  }
+
+  const auto* sections = reinterpret_cast<const Elf64_Shdr*>(
+      payload.data() + header->e_shoff);
+  const Elf64_Shdr* dynsym_section = nullptr;
+  const Elf64_Shdr* string_section = nullptr;
+  for (int index = 0; index < header->e_shnum; ++index) {
+    if (sections[index].sh_type != SHT_DYNSYM) {
+      continue;
+    }
+    dynsym_section = &sections[index];
+    if (sections[index].sh_link < static_cast<Elf64_Word>(header->e_shnum)) {
+      string_section = &sections[sections[index].sh_link];
+    }
+    break;
+  }
+
+  if (dynsym_section == nullptr || string_section == nullptr ||
+      dynsym_section->sh_entsize < sizeof(Elf64_Sym)) {
+    return {};
+  }
+
+  const std::size_t dynsym_end =
+      static_cast<std::size_t>(dynsym_section->sh_offset) +
+      static_cast<std::size_t>(dynsym_section->sh_size);
+  const std::size_t string_end =
+      static_cast<std::size_t>(string_section->sh_offset) +
+      static_cast<std::size_t>(string_section->sh_size);
+  if (dynsym_end > payload.size() || string_end > payload.size()) {
+    return {};
+  }
+
+  const auto* symbols = reinterpret_cast<const Elf64_Sym*>(
+      payload.data() + dynsym_section->sh_offset);
+  const std::size_t symbol_count =
+      dynsym_section->sh_size / sizeof(Elf64_Sym);
+  const char* string_table = payload.data() + string_section->sh_offset;
+
+  std::vector<std::string> symbols_out;
+  for (std::size_t index = 0; index < symbol_count; ++index) {
+    const auto& symbol = symbols[index];
+    if (symbol.st_name == 0 || symbol.st_shndx == SHN_UNDEF) {
+      continue;
+    }
+    const auto binding = ELF64_ST_BIND(symbol.st_info);
+    const auto type = ELF64_ST_TYPE(symbol.st_info);
+    if (binding != STB_GLOBAL && binding != STB_WEAK) {
+      continue;
+    }
+    if (type != STT_FUNC && type != STT_OBJECT && type != STT_NOTYPE) {
+      continue;
+    }
+    const auto name_offset = static_cast<std::size_t>(symbol.st_name);
+    if (name_offset >= string_section->sh_size) {
+      continue;
+    }
+    std::string name = string_table + name_offset;
+    if (!name.empty()) {
+      symbols_out.push_back(std::move(name));
+    }
+  }
+  return symbols_out;
+}
+
+PostJniDispatchBoundary DiscoverPostJniDispatchBoundary(
+    const std::string& library_path) {
+  const auto exported_symbols = ReadElfDynamicSymbolNames(library_path);
+  for (const auto& symbol_name : exported_symbols) {
+    if (symbol_name == "registerNativeMethods" ||
+        symbol_name.find("registerNativeMethods") != std::string::npos) {
+      return {.state = "jni_registration_dispatch_required",
+              .symbol_kind = "registration_helper",
+              .symbol_name = symbol_name,
+              .reason = "jni_registration_helper_symbol_detected"};
+    }
+  }
+  for (const auto& symbol_name : exported_symbols) {
+    if (symbol_name.rfind("Java_", 0) == 0) {
+      return {.state = "jni_direct_method_dispatch_required",
+              .symbol_kind = "jni_method_export",
+              .symbol_name = symbol_name,
+              .reason = "jni_direct_method_export_detected"};
+    }
+  }
+  for (const auto& symbol_name : exported_symbols) {
+    if (symbol_name.find("register_") != std::string::npos ||
+        symbol_name.find("Register") != std::string::npos) {
+      return {.state = "jni_registration_dispatch_required",
+              .symbol_kind = "registration_callback",
+              .symbol_name = symbol_name,
+              .reason = "jni_registration_callback_symbol_detected"};
+    }
+  }
+  return {};
 }
 
 bool RequiresAndroidCompatibilityShims(const std::string& library_path) {
@@ -801,27 +935,50 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
       report.post_jni_startup_state = "jni_onload_crashed";
       report.app_start_bridge_reason = "jni_onload_crashed";
     } else if (selected_jni_library != nullptr && any_jni_onload_success) {
-      report.app_start_bridge_state =
-          "linuxoid_managed_app_start_bridge_required";
-      report.app_start_bridge_reason =
-          "jni_onload_succeeded_without_native_activity_entrypoint";
-      report.post_jni_startup_state = "managed_activity_dispatch_required";
-      report.exit_reason = "linuxoid_managed_app_start_bridge_required";
+      const PostJniDispatchBoundary boundary =
+          DiscoverPostJniDispatchBoundary(selected_jni_library->path);
+      report.post_jni_dispatch_symbol_kind = boundary.symbol_kind;
+      report.post_jni_dispatch_symbol = boundary.symbol_name;
+      report.post_jni_dispatch_reason = boundary.reason;
+      if (boundary.state == "jni_registration_dispatch_required" ||
+          boundary.state == "jni_direct_method_dispatch_required") {
+        report.app_start_bridge_state =
+            "linuxoid_managed_app_start_bridge_selected";
+        report.app_start_bridge_reason =
+            "jni_onload_succeeded_without_native_activity_entrypoint";
+        report.post_jni_startup_state = boundary.state;
+        report.exit_reason = boundary.state;
+      } else {
+        report.app_start_bridge_state =
+            "linuxoid_managed_app_start_bridge_required";
+        report.app_start_bridge_reason =
+            "jni_onload_succeeded_without_native_activity_entrypoint";
+        report.post_jni_startup_state = "managed_activity_dispatch_required";
+        report.exit_reason = "linuxoid_managed_app_start_bridge_required";
+      }
       const std::size_t attempt_index = FindLibraryLoadAttemptIndex(
           report.library_load_attempts, selected_jni_library->path);
       if (attempt_index < report.library_load_attempts.size()) {
         report.library_load_attempts[attempt_index].failure_reason =
-            "linuxoid_managed_app_start_bridge_required";
+            report.exit_reason;
         if (report.library_load_attempts[attempt_index].error_detail.empty()) {
           report.library_load_attempts[attempt_index].error_detail =
-              "jni_onload_succeeded_without_native_activity_entrypoint";
+              !report.post_jni_dispatch_symbol.empty()
+                  ? (report.post_jni_dispatch_symbol_kind + ":" +
+                     report.post_jni_dispatch_symbol)
+                  : "jni_onload_succeeded_without_native_activity_entrypoint";
         }
       }
       output << "[p1] JNI-shaped primary library selected for Linuxoid-managed "
                 "app-start bridge: "
              << selected_jni_library->path << "\n";
-      output << "[p1] next seam: managed activity dispatch is still required "
-                "after JNI_OnLoad\n";
+      if (!report.post_jni_dispatch_symbol.empty()) {
+        output << "[p1] post-JNI dispatch symbol: "
+               << report.post_jni_dispatch_symbol_kind << " "
+               << report.post_jni_dispatch_symbol << "\n";
+      }
+      output << "[p1] next seam: " << report.post_jni_startup_state
+             << " after JNI_OnLoad\n";
     } else {
       output << "[p1] entrypoint not found in loaded libraries\n";
       report.exit_reason = "native_activity_entrypoint_missing";
@@ -927,6 +1084,12 @@ std::string RenderNativeExecuteReportJson(const NativeExecuteReport& report) {
          << EscapeJson(report.app_start_bridge_reason) << "\",\n"
          << "  \"post_jni_startup_state\": \""
          << EscapeJson(report.post_jni_startup_state) << "\",\n"
+         << "  \"post_jni_dispatch_symbol_kind\": \""
+         << EscapeJson(report.post_jni_dispatch_symbol_kind) << "\",\n"
+         << "  \"post_jni_dispatch_symbol\": \""
+         << EscapeJson(report.post_jni_dispatch_symbol) << "\",\n"
+         << "  \"post_jni_dispatch_reason\": \""
+         << EscapeJson(report.post_jni_dispatch_reason) << "\",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
          << "\",\n"
          << "  \"working_directory\": \""

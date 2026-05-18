@@ -122,6 +122,9 @@ set_target_properties(linuxoid_p1_sidecar_jni_fixture PROPERTIES PREFIX "lib")
 add_library(linuxoid_p1_jni_only_fixture SHARED tests/p1_fixture_jni_only.cpp)
 set_target_properties(linuxoid_p1_jni_only_fixture PROPERTIES PREFIX "lib")
 
+add_library(linuxoid_p1_jni_registration_fixture SHARED tests/p1_fixture_jni_registration.cpp)
+set_target_properties(linuxoid_p1_jni_registration_fixture PROPERTIES PREFIX "lib")
+
 add_library(linuxoid_android_compat_fixture SHARED tests/p1_fixture_android_compat.cpp)
 target_link_libraries(linuxoid_android_compat_fixture
   PRIVATE

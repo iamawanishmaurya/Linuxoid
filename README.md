@@ -212,15 +212,17 @@ Linuxoid still does **not** launch `/home/astra/Downloads/keyboard-0.1.28.apk` a
 
 - `native_execute.android_compat_state: preloaded_and_version_normalized`
 - `native_execute.execution_engine_ready: true`
-- `native_loading_state: linuxoid_managed_app_start_bridge_required`
+- `native_loading_state: jni_registration_dispatch_required`
 - `native_jni_state: called`
-- `native_app_start_bridge_state: linuxoid_managed_app_start_bridge_required`
-- `native_post_jni_startup_state: managed_activity_dispatch_required`
+- `native_app_start_bridge_state: linuxoid_managed_app_start_bridge_selected`
+- `native_post_jni_startup_state: jni_registration_dispatch_required`
+- `native_post_jni_dispatch_symbol_kind: registration_helper`
+- `native_post_jni_dispatch_symbol: _ZN8latinime21registerNativeMethodsEP7_JNIEnvPKcPK15JNINativeMethodi`
 - `native_loading_library_name: libjni_latinime.so`
 - `native_execute.jni_onload_results[0].return_code: 11`
-- `native_loading_detail: jni_onload_succeeded_without_native_activity_entrypoint`
+- `native_loading_detail: registration_helper:_ZN8latinime21registerNativeMethodsEP7_JNIEnvPKcPK15JNINativeMethodi`
 
-That is progress, but it is still not a working launch. Linuxoid now gets the real entry library loaded, calls `JNI_OnLoad`, writes the blocked report cleanly, and stops at the honest next native seam: `libjni_latinime.so` is JNI-shaped, Linuxoid recognizes it as a managed app-start bridge candidate, and Linuxoid still needs to turn that into a real managed activity start path. The managed checkpoint remains honest too: `launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity ...` now gets far enough to keep staged DEX/class lookup truth and reports the next exact blocker as `implement_linuxoid_managed_app_start_bridge_for_libjni_latinime_so`, while the deeper framework-owned boundary after that remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+That is progress, but it is still not a working launch. Linuxoid now gets the real entry library loaded, calls `JNI_OnLoad`, writes the blocked report cleanly, and stops at the honest next native seam: `libjni_latinime.so` now reaches a real JNI registration-dispatch boundary. The managed checkpoint remains honest too: `launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity ...` now gets far enough to keep staged DEX/class lookup truth and reports the next exact blocker as `dispatch_jni_registration_for_libjni_latinime_so`, while the deeper framework-owned boundary after that remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
 
 ## Direct APK Proof Modes
 
@@ -322,7 +324,7 @@ Linuxoid now narrows the real keyboard APK visible-launch seam instead of collap
   - `interaction_target_component`
   - `interaction_target_window_id`
   - keeps the real upstream blocker explicit through:
-    - `blocking_reason: "linuxoid_managed_app_start_bridge_required:libjni_latinime.so"`
+    - `blocking_reason: "jni_registration_dispatch_required:libjni_latinime.so"`
     - `recommended_recovery_action: "inspect_native_launch_diagnostics"`
   - still records best-effort live-host truth when available through:
     - `backing_mode`
@@ -339,7 +341,7 @@ What it still does **not** prove:
 
 - this is still not a visibly rendered, usable keyboard app on Linux
 - this is still not full Android framework window dispatch or input ownership
-- the next real blocker on the keyboard APK path is still bridging the JNI-shaped `libjni_latinime.so` boundary into a real app-start entry strategy
+- the next real blocker on the keyboard APK path is now dispatching the JNI registration boundary surfaced from `libjni_latinime.so`
 
 ## Recovery and Runtime Hardening Checkpoint
 
@@ -353,9 +355,9 @@ Linuxoid now makes the real keyboard verification path repeatable and quieter wi
   - `continuity_state`
   - `continuity_diagnostics`
 - on the real keyboard APK path, `launch-apk --self-heal-proof --window-proof --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity ...` now keeps the earliest native blocker authoritative through:
-  - `primary_blocker_reason: "linuxoid_managed_app_start_bridge_required:libjni_latinime.so"`
+  - `primary_blocker_reason: "jni_registration_dispatch_required:libjni_latinime.so"`
   - `recovery_gating_state: "upstream_native_blocker_gated"`
-  - `recovery_gating_reason: "linuxoid_managed_app_start_bridge_required:libjni_latinime.so"`
+  - `recovery_gating_reason: "jni_registration_dispatch_required:libjni_latinime.so"`
   - `recommended_next_action: "inspect_native_launch_diagnostics"`
 - downstream launch-dependent repairs are now journaled as `skipped_upstream_blocker` instead of being noisily attempted behind a known native `dlopen` failure
 
@@ -370,7 +372,7 @@ What it still does **not** prove:
 - this is still not a successful native-library fix for the keyboard APK
 - this is still not full ART-owned ActivityThread or framework dispatch
 - the next exact blockers are still:
-  - `resolve_dlopen_failure_for_libandroidx_graphics_path_so`
+  - `dispatch_jni_registration_for_libjni_latinime_so`
   - `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
 
 `--dex-proof` now stages `classes.dex`, `classes2.dex`, and similar entries into the deterministic APK session root, parses safe DEX header plus string/type/proto/method/class metadata, can locate a deterministic entrypoint code item, and emits structured `dex` plus `art_bootstrap` JSON without claiming full Java/Kotlin ART execution yet.
@@ -496,8 +498,8 @@ So this is a truthful managed-activity start checkpoint for the Self-Healing And
 
 Immediate next blocker:
 
-- real keyboard APK end-to-end launch still blocks earlier at `libraries_failed_to_load`
-- Linuxoid now reports that upstream blocker as an exact native-load seam through `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, and `native_execute.library_load_attempts`
+- real keyboard APK end-to-end launch still blocks earlier at `jni_registration_dispatch_required`
+- Linuxoid now reports that upstream blocker as an exact post-`JNI_OnLoad` seam through `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, `native_post_jni_dispatch_symbol`, and `native_execute.library_load_attempts`
 - the next managed-runtime interpreter seam after lookup is now the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` bundle boundary
 - the next larger runtime-context blocker is `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
 

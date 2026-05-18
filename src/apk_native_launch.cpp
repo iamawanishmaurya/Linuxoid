@@ -580,7 +580,9 @@ std::string DetermineRecommendedRecoveryAction(
   }
   if (report.launch_status == "libraries_failed_to_load" ||
       report.launch_status == "jni_onload_missing_or_failed" ||
-      report.launch_status == "native_activity_entrypoint_missing") {
+      report.launch_status == "native_activity_entrypoint_missing" ||
+      report.launch_status == "jni_registration_dispatch_required" ||
+      report.launch_status == "jni_direct_method_dispatch_required") {
     return "inspect_native_launch_diagnostics";
   }
   if (report.asset_proof_requested && !report.asset_bridge.ready) {
@@ -1705,6 +1707,12 @@ std::string DetermineNativeLoadingState(const NativeApkLaunchReport& report) {
   if (report.launch_status == "native_activity_entrypoint_missing") {
     return "native_activity_entrypoint_missing";
   }
+  if (report.launch_status == "jni_registration_dispatch_required") {
+    return "jni_registration_dispatch_required";
+  }
+  if (report.launch_status == "jni_direct_method_dispatch_required") {
+    return "jni_direct_method_dispatch_required";
+  }
   if (report.launch_status == "linuxoid_managed_app_start_bridge_required") {
     return "linuxoid_managed_app_start_bridge_required";
   }
@@ -1783,6 +1791,12 @@ void RefreshNativeLoadingDetails(NativeApkLaunchReport* report) {
       DetermineNativeAppStartBridgeReason(*report);
   report->native_post_jni_startup_state =
       DetermineNativePostJniStartupState(*report);
+  report->native_post_jni_dispatch_symbol_kind =
+      report->native_execute.post_jni_dispatch_symbol_kind;
+  report->native_post_jni_dispatch_symbol =
+      report->native_execute.post_jni_dispatch_symbol;
+  report->native_post_jni_dispatch_reason =
+      report->native_execute.post_jni_dispatch_reason;
   report->native_loading_library_name.clear();
   report->native_loading_library_path.clear();
   report->native_loading_detail.clear();
@@ -1835,6 +1849,16 @@ std::string DetermineFirstAppStartNativeBlockingReason(
   if (report.launch_status == "native_activity_entrypoint_missing" &&
       attempt != nullptr) {
     return "native_activity_entrypoint_missing_for_first_app_start:" +
+           attempt->library_name;
+  }
+  if (report.launch_status == "jni_registration_dispatch_required" &&
+      attempt != nullptr) {
+    return "jni_registration_dispatch_required_for_first_app_start:" +
+           attempt->library_name;
+  }
+  if (report.launch_status == "jni_direct_method_dispatch_required" &&
+      attempt != nullptr) {
+    return "jni_direct_method_dispatch_required_for_first_app_start:" +
            attempt->library_name;
   }
   if (report.launch_status == "linuxoid_managed_app_start_bridge_required" &&
@@ -1975,6 +1999,10 @@ std::string DetermineFirstAppStartRecoveryAction(
       blocking_reason.rfind("native_activity_entrypoint_missing_for_first_app_start:",
                             0) == 0 ||
       blocking_reason.rfind(
+          "jni_registration_dispatch_required_for_first_app_start:", 0) == 0 ||
+      blocking_reason.rfind(
+          "jni_direct_method_dispatch_required_for_first_app_start:", 0) == 0 ||
+      blocking_reason.rfind(
           "linuxoid_managed_app_start_bridge_required_for_first_app_start:",
           0) == 0 ||
       blocking_reason.rfind("native_launch_blocked_for_first_app_start:", 0) ==
@@ -2090,6 +2118,22 @@ std::string DetermineFirstAppStartNextBlocker(
                                           .size()));
   }
   if (blocking_reason.rfind(
+          "jni_registration_dispatch_required_for_first_app_start:", 0) == 0) {
+    return "dispatch_jni_registration_for_" +
+           SanitizeExecutionToken(
+               blocking_reason.substr(std::string(
+                                          "jni_registration_dispatch_required_for_first_app_start:")
+                                          .size()));
+  }
+  if (blocking_reason.rfind(
+          "jni_direct_method_dispatch_required_for_first_app_start:", 0) == 0) {
+    return "dispatch_jni_direct_methods_for_" +
+           SanitizeExecutionToken(
+               blocking_reason.substr(std::string(
+                                          "jni_direct_method_dispatch_required_for_first_app_start:")
+                                          .size()));
+  }
+  if (blocking_reason.rfind(
           "linuxoid_managed_app_start_bridge_required_for_first_app_start:",
           0) == 0) {
     return "implement_linuxoid_managed_app_start_bridge_for_" +
@@ -2197,6 +2241,27 @@ std::string RenderFirstAppStartJson(
          << "  \"dex_state\": \"" << EscapeJson(proof.dex_state) << "\",\n"
          << "  \"dex_parse_state\": \""
          << EscapeJson(proof.dex_parse_state) << "\",\n"
+         << "  \"native_loading_state\": \""
+         << EscapeJson(proof.native_loading_state) << "\",\n"
+         << "  \"native_jni_state\": \""
+         << EscapeJson(proof.native_jni_state) << "\",\n"
+         << "  \"native_app_start_bridge_state\": \""
+         << EscapeJson(proof.native_app_start_bridge_state) << "\",\n"
+         << "  \"native_app_start_bridge_reason\": \""
+         << EscapeJson(proof.native_app_start_bridge_reason) << "\",\n"
+         << "  \"native_post_jni_startup_state\": \""
+         << EscapeJson(proof.native_post_jni_startup_state) << "\",\n"
+         << "  \"native_post_jni_dispatch_symbol_kind\": \""
+         << EscapeJson(proof.native_post_jni_dispatch_symbol_kind)
+         << "\",\n"
+         << "  \"native_post_jni_dispatch_symbol\": \""
+         << EscapeJson(proof.native_post_jni_dispatch_symbol) << "\",\n"
+         << "  \"native_post_jni_dispatch_reason\": \""
+         << EscapeJson(proof.native_post_jni_dispatch_reason) << "\",\n"
+         << "  \"native_loading_library_name\": \""
+         << EscapeJson(proof.native_loading_library_name) << "\",\n"
+         << "  \"native_loading_detail\": \""
+         << EscapeJson(proof.native_loading_detail) << "\",\n"
          << "  \"bytecode_execution_state\": \""
          << EscapeJson(proof.bytecode_execution_state) << "\",\n"
          << "  \"bytecode_execution_backend\": \""
@@ -2370,6 +2435,12 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.native_app_start_bridge_state = report.native_app_start_bridge_state;
   proof.native_app_start_bridge_reason = report.native_app_start_bridge_reason;
   proof.native_post_jni_startup_state = report.native_post_jni_startup_state;
+  proof.native_post_jni_dispatch_symbol_kind =
+      report.native_post_jni_dispatch_symbol_kind;
+  proof.native_post_jni_dispatch_symbol =
+      report.native_post_jni_dispatch_symbol;
+  proof.native_post_jni_dispatch_reason =
+      report.native_post_jni_dispatch_reason;
   proof.native_loading_library_name = report.native_loading_library_name;
   proof.native_loading_detail = report.native_loading_detail;
   proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
@@ -2505,6 +2576,16 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
     proof.diagnostics.push_back(
         "Self-Healing Android Device first app start checkpoint is blocked because the staged native library load succeeded but no native activity entrypoint was available");
   } else if (proof.blocking_reason.rfind(
+                 "jni_registration_dispatch_required_for_first_app_start:", 0) ==
+             0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint is blocked because Linuxoid reached JNI_OnLoad and now needs to dispatch JNI registration for the staged primary library");
+  } else if (proof.blocking_reason.rfind(
+                 "jni_direct_method_dispatch_required_for_first_app_start:", 0) ==
+             0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint is blocked because Linuxoid reached JNI_OnLoad and now needs to dispatch direct JNI-owned methods for the staged primary library");
+  } else if (proof.blocking_reason.rfind(
                  "linuxoid_managed_app_start_bridge_required_for_first_app_start:",
                  0) == 0) {
     proof.diagnostics.push_back(
@@ -2539,6 +2620,10 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
                                   0) == 0 ||
       proof.blocking_reason.rfind(
           "native_activity_entrypoint_missing_for_first_app_start:", 0) == 0 ||
+      proof.blocking_reason.rfind(
+          "jni_registration_dispatch_required_for_first_app_start:", 0) == 0 ||
+      proof.blocking_reason.rfind(
+          "jni_direct_method_dispatch_required_for_first_app_start:", 0) == 0 ||
       proof.blocking_reason.rfind(
           "linuxoid_managed_app_start_bridge_required_for_first_app_start:",
           0) == 0 ||
@@ -3371,6 +3456,18 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
                     "native_activity_entrypoint_missing:" +
                         attempt->library_name);
       } else if (report.native_execute.exit_reason ==
+                     "jni_registration_dispatch_required" &&
+                 attempt != nullptr && !attempt->library_name.empty()) {
+        AppendError(&report.errors,
+                    "jni_registration_dispatch_required:" +
+                        attempt->library_name);
+      } else if (report.native_execute.exit_reason ==
+                     "jni_direct_method_dispatch_required" &&
+                 attempt != nullptr && !attempt->library_name.empty()) {
+        AppendError(&report.errors,
+                    "jni_direct_method_dispatch_required:" +
+                        attempt->library_name);
+      } else if (report.native_execute.exit_reason ==
                      "linuxoid_managed_app_start_bridge_required" &&
                  attempt != nullptr && !attempt->library_name.empty()) {
         AppendError(&report.errors,
@@ -3639,6 +3736,13 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << EscapeJson(report.native_app_start_bridge_reason) << "\",\n"
          << "  \"native_post_jni_startup_state\": \""
          << EscapeJson(report.native_post_jni_startup_state) << "\",\n"
+         << "  \"native_post_jni_dispatch_symbol_kind\": \""
+         << EscapeJson(report.native_post_jni_dispatch_symbol_kind)
+         << "\",\n"
+         << "  \"native_post_jni_dispatch_symbol\": \""
+         << EscapeJson(report.native_post_jni_dispatch_symbol) << "\",\n"
+         << "  \"native_post_jni_dispatch_reason\": \""
+         << EscapeJson(report.native_post_jni_dispatch_reason) << "\",\n"
          << "  \"native_loading_library_name\": \""
          << EscapeJson(report.native_loading_library_name) << "\",\n"
          << "  \"native_loading_library_path\": \""
@@ -4774,6 +4878,18 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"native_post_jni_startup_state\": \""
          << EscapeJson(
                 report.first_android_app_start.native_post_jni_startup_state)
+         << "\",\n"
+         << "    \"native_post_jni_dispatch_symbol_kind\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_post_jni_dispatch_symbol_kind)
+         << "\",\n"
+         << "    \"native_post_jni_dispatch_symbol\": \""
+         << EscapeJson(
+                report.first_android_app_start.native_post_jni_dispatch_symbol)
+         << "\",\n"
+         << "    \"native_post_jni_dispatch_reason\": \""
+         << EscapeJson(
+                report.first_android_app_start.native_post_jni_dispatch_reason)
          << "\",\n"
          << "    \"native_loading_library_name\": \""
          << EscapeJson(report.first_android_app_start.native_loading_library_name)

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.127 - 2026-05-19
+
+- Close **Phase 9: Managed App-Start Dispatch** around the real keyboard APK's first post-bridge JNI seam instead of widening into a broad framework rewrite.
+- Extend the direct native execute path so once `libjni_latinime.so` loads and `JNI_OnLoad` succeeds, Linuxoid inspects the entry library's exported symbols, selects a Linuxoid-owned post-`JNI_OnLoad` dispatch boundary, and surfaces `app_start_bridge_state: linuxoid_managed_app_start_bridge_selected`, `post_jni_startup_state: jni_registration_dispatch_required`, plus deterministic `post_jni_dispatch_symbol_*` facts instead of stopping at `linuxoid_managed_app_start_bridge_required`.
+- Tighten `launch-apk --first-app-start-proof`, watchdog gating, and the new JNI-registration regression fixture so the current live blocker stays stable and honest: `blocking_reason: jni_registration_dispatch_required_for_first_app_start:libjni_latinime.so`, `next_blocker: dispatch_jni_registration_for_libjni_latinime_so`, and the later managed seam still remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+
 ## v0.1.126 - 2026-05-19
 
 - Close **Phase 8: Native App-Start Bridge** around the real keyboard APK's JNI-shaped entry library instead of widening the runtime sideways again.

@@ -64,6 +64,9 @@ struct NativeExecuteReport {
   std::string app_start_bridge_state = "not_applicable";
   std::string app_start_bridge_reason = "none";
   std::string post_jni_startup_state = "not_applicable";
+  std::string post_jni_dispatch_symbol_kind = "none";
+  std::string post_jni_dispatch_symbol;
+  std::string post_jni_dispatch_reason = "none";
   std::string android_compat_state;
   int elf_undefined_versions_normalized = 0;
   std::vector<std::string> android_compat_preloaded_paths;
