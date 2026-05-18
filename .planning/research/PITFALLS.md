@@ -1,78 +1,73 @@
-# Pitfalls Research: First Real App Execution
+# Pitfalls Research: Linuxoid v1.1 Visible App Launch
 
-## Pitfall 1: Binary manifest and compiled resource gaps
+## Pitfall 1: Treating dispatch as if visible launch is already solved
 
-The target APK is a real production-style package, not a plain-XML fixture.
-Linuxoid may still fail before app logic if binary manifest or compiled resource handling is incomplete.
-
-Warning signs:
-- package or launcher activity cannot be resolved from the real APK
-- permissions and resources disappear in reports that work for fixtures
-
-Prevention:
-- treat real APK metadata decode as an early milestone requirement
-- keep any binary-manifest/resource blocker explicit in reports
-
-## Pitfall 2: Mistaking launcher activity success for full IME success
-
-`keyboard-0.1.28.apk` includes both a launcher settings activity and an `InputMethodService`.
-Getting the settings activity to open is a valid milestone, but it is not the same as enabling the keyboard system-wide.
+Moving past `activity_oncreate_bundle_dispatch_required` matters, but it is not the same as having a visible settings window.
 
 Warning signs:
-- the app window opens, but there is no path toward actual IME behavior
-- milestone claims drift from "app starts" into "keyboard fully works"
+- `onCreate(Bundle)` dispatch succeeds, but resource or surface readiness is still missing
+- milestone claims jump from dispatch success to "the app runs"
 
 Prevention:
-- define the first milestone around launcher activity start and interaction
-- treat IME registration/enablement as a later milestone
+- keep post-dispatch blocker reporting exact
+- treat visible surface readiness as a separate milestone phase
 
-## Pitfall 3: JNI and native library underestimation
+## Pitfall 2: Hidden resource or initialization gaps
 
-The APK ships substantial native libraries, including x86_64 variants.
-Real execution may fail only after managed code reaches JNI-backed paths.
+The settings activity may fail after dispatch because compiled resources, assets, or app-state initialization are still incomplete.
 
 Warning signs:
-- settings activity launch reaches deeper code paths and then crashes or blocks
-- ABI or `.so` loading diagnostics are present but ignored
+- managed dispatch moves forward, then startup drops into generic window failure
+- launch reports stop naming assets, resources, or app-state inputs
 
 Prevention:
-- keep native library staging and loading in the critical path
-- track JNI boundaries as first-class blockers in reports
+- keep resource and app-state readiness in the same launch proof
+- expose the first exact missing resource or initialization seam
 
-## Pitfall 4: Framework-boundary optimism
+## Pitfall 3: Visible surface truth drift
 
-Minimal DEX interpretation is useful, but a real app quickly hits framework-owned assumptions around context, lifecycle dispatch, resources, and services.
+A best-effort Wayland or EGL target must stay honest. Linuxoid should not overclaim visibility when the host display is absent or blocked upstream.
 
 Warning signs:
-- too many `framework-stubbed` boundaries accumulate
-- reports say "returned" while the real app still cannot reach visible useful behavior
+- `visible_target_state` looks successful while launch is still blocked
+- host availability fields stop matching the actual launch status
 
 Prevention:
-- keep `needs-real-activitythread-context` or similar blockers explicit
-- prefer one real framework seam over many additional local proofs
+- keep `wayland_surface_available`, `egl_surface_available`, and `visible_target_state` tied to the same launch session
+- preserve upstream blocker authority when visibility cannot proceed
 
-## Pitfall 5: Window/input success without meaningful interaction
+## Pitfall 4: IME scope creep
 
-A visible Wayland window alone is not enough for the keyboard target.
-Usability depends on focus, input, and settings interaction.
+The keyboard app contains both a settings activity and an `InputMethodService`. Visible settings launch is still not the same as keyboard enablement.
 
 Warning signs:
-- app launches visibly but cannot be navigated or used
-- window proof passes while real app interaction stalls
+- planning drifts from visible launch into system-wide input-method behavior
+- milestone scope grows without reducing the current blocker
 
 Prevention:
-- define success as "launch and interact", not merely "launch"
-- keep input behavior in the same verification loop as runtime execution
+- keep the milestone anchored to `SettingsActivity`
+- defer IME behavior until after visible launch and interaction are stable
+
+## Pitfall 5: Recovery noise
+
+The watchdog can become misleading if it starts proposing downstream repairs while a more important upstream launch blocker is still active.
+
+Warning signs:
+- recovery actions mention surface or focus repairs before dispatch truly moves
+- repeated runs produce changing primary blocker language for the same seam
+
+Prevention:
+- keep the earliest blocker authoritative
+- require repeated launch truth to stay comparable across runs
 
 ## Pitfall 6: Sideways expansion
 
-The repo already contains many broad runtime slices.
-The easiest mistake is expanding compatibility or architecture again instead of finishing the first real app path.
+The repo already contains enough broad runtime contracts. The main risk is adding more architecture instead of finishing the visible launch path.
 
 Warning signs:
-- new work adds reports, matrices, or abstractions without reducing the real app blocker
-- milestone effort goes into generality before `keyboard-0.1.28.apk` starts
+- milestone effort goes into new abstraction layers without reducing the keyboard app blocker
+- reports grow richer while the real app still does not visibly start
 
 Prevention:
-- measure progress by whether the verification APK moves forward
-- reject work that does not help one real app run
+- measure every phase by whether `/home/astra/Downloads/keyboard-0.1.28.apk` moves forward
+- reject work that does not help one real app visibly launch

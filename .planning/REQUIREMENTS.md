@@ -1,67 +1,34 @@
 # Requirements: Linuxoid
 
-**Defined:** 2026-05-18
+**Defined:** 2026-05-19
 **Core Value:** Run a real Android app directly on Linux through Linuxoid's own compatibility/runtime path, with honest execution and honest blockers instead of emulator fallback.
 
 ## v1 Requirements
 
-Requirements for the first real Android app execution milestone centered on `keyboard-0.1.28.apk`.
+Requirements for milestone `v1.1 Visible App Launch`, centered on pushing the real keyboard APK from the current `activity_oncreate_bundle_dispatch_required` seam into a visible and interactive Linux launch.
 
-### APK Intake
+### Managed Dispatch
 
-- [ ] **APK-01**: User can point Linuxoid at a local APK path and Linuxoid extracts the package name, launcher component, native ABI inventory, permissions, and staged artifact roots for the app
-- [ ] **APK-02**: User can stage `keyboard-0.1.28.apk` into a Linuxoid-owned sandbox/session root without emulator or Waydroid dependencies
-- [ ] **APK-03**: User can launch the verification APK through `compatctl launch-apk --first-app-start-proof` and receive a structured first-app-start report
+- [ ] **JNI-15**: Linuxoid can dispatch `org.futo.inputmethod.latin.uix.settings.SettingsActivity->onCreate(Landroid/os/Bundle;)V` inside the already bound Linuxoid runtime context for the real keyboard APK path
+- [ ] **JNI-16**: Linuxoid keeps runtime-context binding, `Activity.onCreate(Bundle)` dispatch, and any later framework/resource blocker distinct in `launch-apk`, `--first-app-start-proof`, and watchdog reporting
 
-### Managed Execution
+### Visible Launch
 
-- [ ] **DEX-01**: Linuxoid can decode the verification APK's real `classes.dex` well enough to resolve the launcher activity class and its startup lifecycle method
-- [ ] **DEX-02**: Linuxoid can execute enough real app bytecode to move beyond minimal helper proofs and advance the launcher activity startup path through method invocation, object/register/field handling, and lifecycle receiver state
-- [ ] **DEX-03**: Linuxoid reports the exact bytecode backend, invoked lifecycle method, execution state, and first unsupported opcode or framework boundary whenever startup is not complete
+- [ ] **WIN-03**: User can drive the real keyboard settings activity path into a visible Wayland-backed or equivalent surfaced window state when the host display is available
+- [ ] **WIN-04**: User can focus the launched settings activity and Linuxoid reports meaningful interaction ownership tied to the real package/activity/process/window session
 
-### Native and JNI
+### Runtime Resources
 
-- [ ] **JNI-01**: Linuxoid stages the verification APK's `x86_64` native libraries into the launch session and selects the correct host ABI path
-- [ ] **JNI-02**: Linuxoid reports exact native load or JNI blockers instead of silently falling back or claiming success
-- [ ] **JNI-03**: Linuxoid satisfies enough Android-libc compatibility for the verification APK's primary native entry library to load through the host loader instead of stopping at unresolved symbols such as `__strchr_chk`
-- [ ] **JNI-04**: Linuxoid reaches and reports the first true native entry boundary for the verification APK's primary library, including `JNI_OnLoad`, registration, or a specific missing entrypoint or symbol seam
-- [ ] **JNI-05**: Linuxoid can bridge a JNI-shaped primary library into a Linuxoid-owned app-start strategy when the library loads and `JNI_OnLoad` succeeds but no `ANativeActivity_onCreate` entrypoint exists
-- [ ] **JNI-06**: Linuxoid reports exact JNI registration, native app-start, or managed bootstrap blockers after `JNI_OnLoad` instead of collapsing back to generic missing-entrypoint failure
-- [ ] **JNI-07**: Linuxoid can move the real keyboard APK past the `linuxoid_managed_app_start_bridge_required` seam into a deterministic managed app-start dispatch or JNI registration boundary
-- [ ] **JNI-08**: Linuxoid keeps JNI registration, managed app-start dispatch, and later framework bootstrap seams distinct in launch and first-app-start reporting
-- [ ] **JNI-09**: Linuxoid can execute or precisely attempt the `libjni_latinime.so` JNI registration-helper boundary and report the exact registration outcome
-- [ ] **JNI-10**: Linuxoid keeps JNI registration dispatch, registration outcome, and later managed bootstrap seams distinct in launch and first-app-start reporting
-- [ ] **JNI-11**: Linuxoid can bridge the post-registration `managed_activity_dispatch_required` seam into a Linuxoid-owned managed activity dispatch attempt for the verification APK
-- [ ] **JNI-12**: Linuxoid keeps managed activity dispatch, runtime-context binding, and later framework bootstrap seams distinct in launch and first-app-start reporting
-- [x] **JNI-13**: Linuxoid can bind a Linuxoid-owned managed runtime context to the selected launcher activity lifecycle target after JNI registration and managed dispatch target selection
-- [x] **JNI-14**: Linuxoid keeps managed runtime-context binding, lifecycle invocation attempt, and later framework bootstrap seams distinct in launch and first-app-start reporting
-
-### Window and Input
-
-- [ ] **WIN-01**: User can launch the verification APK's settings activity into a visible Wayland-backed Linux window or a deterministic surface path with equivalent state reporting
-- [ ] **WIN-02**: User can focus the launched app window and perform meaningful interaction on the first milestone path
-
-### App Runtime State
-
-- [ ] **APP-01**: Linuxoid creates and preserves app data, files, cache, and runtime state for the verification APK inside its sandbox contract
-- [ ] **APP-02**: Linuxoid exposes the verification APK's requested permissions, granted or denied state, and AppOps decisions through the same launch/runtime path
-- [ ] **APP-03**: Linuxoid makes the verification APK's required assets and resource metadata available to the app startup path
+- [ ] **APP-04**: Linuxoid makes the settings activity's required resource, asset, and app-state inputs available deeply enough that visible launch no longer fails at a hidden setup gap
 
 ### Verification Target
 
-- [ ] **VER-01**: User can reach `org.futo.inputmethod.latin.uix.settings.SettingsActivity` on Linux through Linuxoid's direct runtime path
-- [ ] **VER-02**: Linuxoid's first-app-start report states clearly whether real Java/Kotlin bytecode executed, whether startup reached a return boundary, and what exact blocker remains if the full activity path still does not run
-- [ ] **VER-03**: The Self-Healing Android Device runtime harness emits actionable recovery diagnostics for verification APK launch failures or degraded startup
-- [ ] **VER-04**: User can push the real verification APK one step past generic native-library load failure and see the next exact native or managed startup blocker on the same direct Linuxoid path
-- [ ] **VER-05**: User can push the real verification APK one step past the current `native_activity_entrypoint_missing` seam and see the next exact native, JNI registration, or managed startup blocker on the same direct Linuxoid path
-- [ ] **VER-06**: User can push the real verification APK one step past the current `linuxoid_managed_app_start_bridge_required` seam and see the first exact post-bridge dispatch, registration, or managed bootstrap blocker
-- [ ] **VER-07**: User can push the real verification APK one step past the current `jni_registration_dispatch_required` seam and see the first exact post-registration managed or framework startup blocker
-- [ ] **VER-08**: User can push the real verification APK one step past the current `managed_activity_dispatch_required` seam and see the first exact managed activity-dispatch or runtime/framework bootstrap blocker
-- [x] **VER-09**: User can push the real verification APK one step past the current `managed_runtime_context_required` seam and see the first exact managed runtime-context, lifecycle dispatch, or framework bootstrap blocker
+- [ ] **VER-10**: User can push `/home/astra/Downloads/keyboard-0.1.28.apk` one step past `activity_oncreate_bundle_dispatch_required` on the same direct Linuxoid path and either see a visible settings launch or the next exact blocker
+- [ ] **VER-11**: The Self-Healing Android Device runtime harness keeps the earliest visible-launch blocker authoritative and actionable across repeated launch attempts
 
 ## v2 Requirements
 
-Deferred to future milestones after the first real app execution path works.
+Deferred until after one visible settings launch works through Linuxoid's direct runtime path.
 
 ### IME Integration
 
@@ -71,20 +38,20 @@ Deferred to future milestones after the first real app execution path works.
 
 ### Broader Compatibility
 
-- **COMP-01**: Additional third-party Android apps can be run through the same direct Linux runtime path
-- **COMP-02**: Linuxoid supports deeper Android framework services beyond the first launcher/settings activity milestone
+- **COMP-01**: Additional third-party Android apps can run through the same direct Linux runtime path
+- **COMP-02**: Linuxoid supports deeper Android framework services beyond the first visible settings launch milestone
 
 ## Out of Scope
 
-Explicitly excluded from this milestone to keep the first real app path tight.
+Explicitly excluded to keep the visible-launch milestone tight.
 
 | Feature | Reason |
 |---------|--------|
-| Emulator or full Android VM fallback | Conflicts with the core goal of direct Android-on-Linux execution |
+| Emulator or full Android VM fallback | Conflicts with the direct Android-on-Linux goal |
 | Waydroid-dependent validation path | The milestone must prove Linuxoid's own runtime path |
-| Broad compatibility matrix growth before one app works | Pulls effort away from the first real app checkpoint |
-| Full system-wide IME enablement in the same milestone | The first milestone should prove app start and interaction before full keyboard service parity |
-| General-user polish and desktop packaging | This milestone is a developer prototype checkpoint first |
+| Full system-wide IME enablement | Settings launch and visible interaction come first |
+| Broad compatibility-matrix growth | Pulls effort away from the real keyboard launch seam |
+| Desktop packaging and end-user polish | This milestone is still a runtime engineering checkpoint |
 
 ## Traceability
 
@@ -92,46 +59,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| APK-01 | Phase 1 | Pending |
-| APK-02 | Phase 1 | Pending |
-| APK-03 | Phase 2 | Pending |
-| DEX-01 | Phase 2 | Pending |
-| DEX-02 | Phase 3 | Pending |
-| DEX-03 | Phase 2 | Pending |
-| JNI-01 | Phase 4 | Pending |
-| JNI-02 | Phase 4 | Pending |
-| JNI-03 | Phase 7 | Pending |
-| JNI-04 | Phase 7 | Pending |
-| JNI-05 | Phase 8 | Pending |
-| JNI-06 | Phase 8 | Pending |
-| JNI-07 | Phase 9 | Pending |
-| JNI-08 | Phase 9 | Pending |
-| JNI-09 | Phase 10 | Pending |
-| JNI-10 | Phase 10 | Pending |
-| JNI-11 | Phase 11 | Pending |
-| JNI-12 | Phase 11 | Pending |
-| JNI-13 | Phase 12 | Complete |
-| JNI-14 | Phase 12 | Complete |
-| WIN-01 | Phase 5 | Pending |
-| WIN-02 | Phase 5 | Pending |
-| APP-01 | Phase 6 | Pending |
-| APP-02 | Phase 6 | Pending |
-| APP-03 | Phase 1 | Pending |
-| VER-01 | Phase 5 | Pending |
-| VER-02 | Phase 3 | Pending |
-| VER-03 | Phase 6 | Pending |
-| VER-04 | Phase 7 | Pending |
-| VER-05 | Phase 8 | Pending |
-| VER-06 | Phase 9 | Pending |
-| VER-07 | Phase 10 | Pending |
-| VER-08 | Phase 11 | Pending |
-| VER-09 | Phase 12 | Complete |
+| JNI-15 | Phase 13 | Pending |
+| JNI-16 | Phase 13 | Pending |
+| WIN-03 | Phase 14 | Pending |
+| APP-04 | Phase 14 | Pending |
+| WIN-04 | Phase 15 | Pending |
+| VER-10 | Phase 13 | Pending |
+| VER-11 | Phase 15 | Pending |
 
 **Coverage:**
-- v1 requirements: 34 total
-- Mapped to phases: 34
+- v1 requirements: 7 total
+- Mapped to phases: 7
 - Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-05-18*
-*Last updated: 2026-05-20 after adding the managed app-start dispatch follow-on phase*
+*Requirements defined: 2026-05-19*
+*Last updated: 2026-05-19 after starting milestone v1.1 Visible App Launch*

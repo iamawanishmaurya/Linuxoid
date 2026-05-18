@@ -2,232 +2,44 @@
 
 ## Overview
 
-This roadmap turns Linuxoid's existing proof-oriented runtime into a first real Android app execution path on Linux. The journey starts with real-world APK intake for `keyboard-0.1.28.apk`, then pushes managed execution, native/JNI loading, and Wayland interaction far enough that the verification app can start and be meaningfully used on a Linux desktop, while keeping every missing Android-runtime seam explicit. The newest live seam is now narrower again: `libjni_latinime.so` now loads, runs `JNI_OnLoad`, dispatches a real JNI registration callback, selects the real `SettingsActivity->onCreate(Landroid/os/Bundle;)V` lifecycle target, and binds a deterministic Linuxoid managed runtime-context placeholder. Linuxoid still needs to bridge that bound context into real `Activity.onCreate(Bundle)` dispatch before the later ActivityThread/framework boundary can move.
+Milestone `v1.1 Visible App Launch` starts from the exact live seam after Phase 12. The real keyboard APK now gets `libjni_latinime.so` loaded, calls `JNI_OnLoad`, completes JNI registration, selects `org.futo.inputmethod.latin.uix.settings.SettingsActivity->onCreate(Landroid/os/Bundle;)V`, and records `linuxoid_runtime_context_bound`, but the launch still stops at `activity_oncreate_bundle_dispatch_required`. This roadmap keeps working straight down that seam until the keyboard settings activity can surface visibly and accept meaningful interaction on a Wayland Linux desktop without pretending the rest of Android already exists.
+
+## Milestone
+
+- **Current Milestone:** `v1.1 Visible App Launch`
+- **Previous Milestone:** `v1.0` completed through Phase 12
+- **Numbering Mode:** Continue phase numbering from the previous milestone
 
 ## Phases
 
-**Phase Numbering:**
-
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
-
-- [x] **Phase 1: Keyboard APK Intake** - Make the real verification APK parse, stage, and surface trustworthy runtime metadata
-- [x] **Phase 2: Managed Activity Start** - Resolve and drive the launcher settings activity through a deeper managed startup path
-- [x] **Phase 3: Runtime Context Bridge** - Reduce the gap between the minimal interpreter path and a real ART-owned activity context
-- [x] **Phase 4: JNI and Native Loading** - Bring x86_64 native libraries and JNI boundaries into the verification path
-- [x] **Phase 5: Visible Wayland Interaction** - Make the verification app visibly launch and accept meaningful interaction on Linux
-- [x] **Phase 6: Recovery and Runtime Hardening** - Stabilize app state, permissions, and recovery diagnostics around the first real app path
-- [x] **Phase 7: Native libc Compatibility and Entry Bridge** - Get the real keyboard APK past the current `libjni_latinime.so` Android-libc/native-entry blocker and into the first true native startup boundary
-- [x] **Phase 8: Native App-Start Bridge** - Turn the JNI-shaped `libjni_latinime.so` boundary into a Linuxoid-owned app-start strategy and expose the next exact startup seam
-- [x] **Phase 9: Managed App-Start Dispatch** - Turn the Linuxoid-managed app-start bridge candidate into the first real post-bridge dispatch seam for the keyboard APK path
-- [x] **Phase 10: JNI Registration Dispatch** - Execute the registration-helper boundary for `libjni_latinime.so` and expose the first post-registration managed bootstrap seam
-- [x] **Phase 11: Managed Activity Dispatch Bridge** - Bridge the post-registration `managed_activity_dispatch_required` seam into a Linuxoid-owned managed activity dispatch attempt for the real keyboard APK path
-- [x] **Phase 12: Managed Runtime Context Binding** - Bridge the post-dispatch `managed_runtime_context_required` seam into a Linuxoid-owned managed runtime context binding attempt for the real keyboard APK path
-
-## Phase Details
-
-### Phase 1: Keyboard APK Intake
-
-**Goal**: Linuxoid can ingest `keyboard-0.1.28.apk` as a real APK, not just a synthetic fixture, and stage its package, component, permissions, resources, and libraries into a trustworthy session root.
-**Mode:** mvp
-**Depends on**: Nothing (first phase)
-**Requirements**: APK-01, APK-02, APP-03
-**Success Criteria** (what must be TRUE):
-
-  1. User can point Linuxoid at `/home/astra/Downloads/keyboard-0.1.28.apk` and receive the correct package name, launcher activity, permission list, and ABI inventory
-  2. Linuxoid stages the real APK into its sandbox/session root without emulator or Waydroid dependencies
-  3. Assets and resource metadata required by the verification path are visible through Linuxoid reports instead of fixture-only assumptions
-
-**Plans**: 3 plans
-
-Plans:
-
-- [x] 01-01: Harden real-world APK manifest and metadata intake for the keyboard target
-- [x] 01-02: Validate staging, assets, permissions, and native library inventory for the target APK
-- [x] 01-03: Turn the real APK intake into a stable launch precondition and regression proof
-
-### Phase 2: Managed Activity Start
-
-**Goal**: Linuxoid resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity` and drives its startup path deeper than the current minimal DEX checkpoints.
-**Mode:** mvp
-**Depends on**: Phase 1
-**Requirements**: APK-03, DEX-01, DEX-03
-**Success Criteria** (what must be TRUE):
-
-  1. Linuxoid resolves the launcher settings activity class and startup lifecycle method from the real `classes.dex`
-  2. First-app-start reporting names the real activity and managed execution seam instead of only synthetic fixture methods
-  3. Any unsupported opcode, class, or framework boundary is reported precisely and reproducibly
-
-**Plans**: 3 plans
-
-Plans:
-**Wave 1**
-
-- [x] 02-01: Bind real launcher activity resolution to the first-app-start proof
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 02-02: Extend managed execution reporting around the activity startup path
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 02-03: Add hard regression coverage for real activity-start boundaries
-
-### Phase 3: Runtime Context Bridge
-
-**Goal**: Linuxoid crosses the next runtime boundary beyond the current minimal interpreter so the activity startup path depends less on placeholder context and more on real managed runtime behavior.
-**Mode:** mvp
-**Depends on**: Phase 2
-**Requirements**: DEX-02, VER-02
-**Success Criteria** (what must be TRUE):
-
-  1. Linuxoid executes more of the real app startup path than the current helper and placeholder seams
-  2. Reports distinguish clearly between Linuxoid interpreter behavior, framework stubs, and any real ART-owned context
-  3. The remaining blocker toward full launcher activity startup is narrower and more actionable than `needs-real-activitythread-context`
-
-**Plans**: 3 plans
-
-Plans:
-
-- [x] 03-01: Extend method invocation, receiver, and lifecycle context handling for the real activity path
-- [x] 03-02: Tighten bytecode/runtime diagnostics around the next framework boundary
-- [x] 03-03: Convert the next remaining blocker into a smaller managed-runtime seam
-
-### Phase 4: JNI and Native Loading
-
-**Goal**: Linuxoid stages and loads the verification APK's x86_64 native libraries through the same real app launch path and exposes exact JNI blockers when they appear.
-**Mode:** mvp
-**Depends on**: Phase 3
-**Requirements**: JNI-01, JNI-02
-**Success Criteria** (what must be TRUE):
-
-  1. Linuxoid selects and stages the `x86_64` native libraries from `keyboard-0.1.28.apk`
-  2. The launch path records successful native-library readiness or an exact JNI/native blocker
-  3. No false success is reported when managed execution reaches a JNI-backed path that Linuxoid still cannot satisfy
-
-**Plans**: 2 plans
-
-Plans:
-
-**Wave 1**
-
-- [x] 04-01: Bring x86_64 native library staging/loading into the real APK path
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 04-02: Add exact JNI/native failure reporting for the verification app
-
-### Phase 5: Visible Wayland Interaction
-
-**Goal**: The verification app's launcher settings activity opens visibly on a Wayland Linux desktop and supports meaningful interaction.
-**Mode:** mvp
-**Depends on**: Phase 4
-**Requirements**: WIN-01, WIN-02, VER-01
-**Success Criteria** (what must be TRUE):
-
-  1. User can launch the verification app and see a visible Linux window or equivalent surfaced state for the settings activity
-  2. The launched app can receive focus and meaningful user interaction on the first milestone path
-  3. Window, input, and activity/process/session state stay tied together in Linuxoid reports
-
-**Plans**: 3 plans
-
-Plans:
-
-**Wave 1**
-
-- [x] 05-01: Bind the real settings activity launch to the Wayland window/surface path
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 05-02: Make focus and interaction meaningful for the verification app
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 05-03: Add visible-launch regression coverage around the target APK
-
-### Phase 6: Recovery and Runtime Hardening
-
-**Goal**: Linuxoid preserves app runtime state, permissions, and recovery diagnostics strongly enough that the first real app path is repeatable and debuggable.
-**Mode:** mvp
-**Depends on**: Phase 5
-**Requirements**: APP-01, APP-02, VER-03
-**Success Criteria** (what must be TRUE):
-
-  1. App storage, permissions, and AppOps are preserved and reported accurately for repeated verification APK launches
-  2. The Self-Healing Android Device runtime harness emits actionable diagnostics and recovery actions for degraded or failed app starts
-  3. Re-running the verification flow produces stable, comparable artifacts instead of one-off success
-
-**Plans**: 2 plans
-
-Plans:
-
-**Wave 1**
-
-- [x] 06-01: Harden app state, permissions, and sandbox continuity for the verification APK
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 06-02: Tighten Self-Healing Android Device recovery reporting for the first real app path
-
-### Phase 7: Native libc Compatibility and Entry Bridge
-
-**Goal**: Linuxoid gets `keyboard-0.1.28.apk` past the current `libjni_latinime.so` Android-libc/native-entry seam and exposes the first true native startup boundary on the same direct Linux path.
-**Mode:** mvp
-**Depends on**: Phase 6
-**Requirements**: JNI-03, JNI-04, VER-04
-**Success Criteria** (what must be TRUE):
-
-  1. Linuxoid narrows the real keyboard APK blocker from a generic native-entry failure to a specific Android-libc symbol or first native entry boundary that is either satisfied or reported exactly
-  2. `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>` reaches a smaller post-load native seam than `undefined symbol: __strchr_chk`
-  3. The downstream managed blocker `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context` stays visible and distinct once the upstream native seam moves
-
-**Plans**: 3 plans
-
-Plans:
-
-**Wave 1**
-
-- [x] 07-01: Close the first Android-libc symbol gap for `libjni_latinime.so`
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 07-02: Expose the first true native entry boundary for the keyboard APK
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 07-03: Lock the native-entry seam into first-app-start, recovery, and regression truth
+- [ ] **Phase 13: Activity onCreate Dispatch Bridge** - Bridge the bound Linuxoid runtime context into real `Activity.onCreate(Bundle)` dispatch for the keyboard settings activity
+- [ ] **Phase 14: Visible Settings Surface** - Carry successful managed startup into a visible settings surface with truthful resource and window state
+- [ ] **Phase 15: Interactive Visible Launch** - Make the surfaced settings launch focusable, usable, and stable under Self-Healing diagnostics
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 13 -> 14 -> 15
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Keyboard APK Intake | 3/3 | Complete | 2026-05-18 |
-| 2. Managed Activity Start | 3/3 | Complete | 2026-05-18 |
-| 3. Runtime Context Bridge | 3/3 | Complete | 2026-05-18 |
-| 4. JNI and Native Loading | 2/2 | Complete | Exact native load/JNI blockers now propagate through `launch-apk` and `--first-app-start-proof` |
-| 5. Visible Wayland Interaction | 3/3 | Complete | Real keyboard `SettingsActivity` now owns a concrete window/focus target while preserving the exact native `dlopen` blocker |
-| 6. Recovery and Runtime Hardening | 2/2 | Complete | Repeated keyboard-state continuity is validated and watchdog recovery now stays gated on the earliest native blocker |
-| 7. Native libc Compatibility and Entry Bridge | 3/3 | Complete | `libjni_latinime.so` now loads, `JNI_OnLoad` runs, and the remaining blocker is the missing native activity entrypoint plus later managed `Activity.onCreate(Bundle)` dispatch |
-| 8. Native App-Start Bridge | 3/3 | Complete | `libjni_latinime.so` now loads, runs `JNI_OnLoad`, and is reported as `linuxoid_managed_app_start_bridge_required`, while the next blockers are the Linuxoid-managed app-start bridge implementation and the later managed `Activity.onCreate(Bundle)` seam |
-| 9. Managed App-Start Dispatch | 3/3 | Complete | `libjni_latinime.so` now reaches `jni_registration_dispatch_required`, exposes the registration-helper symbol boundary, and keeps the later managed `Activity.onCreate(Bundle)` seam distinct |
-| 10. JNI Registration Dispatch | 3/3 | Complete | `libjni_latinime.so` now dispatches a real JNI registration callback, observes `RegisterNatives`, and the remaining blocker is managed activity dispatch plus the later `Activity.onCreate(Bundle)` seam |
-| 11. Managed Activity Dispatch Bridge | 3/3 | Complete | `libjni_latinime.so` now selects the real `SettingsActivity->onCreate(Landroid/os/Bundle;)V` lifecycle target and the remaining blocker is the managed runtime-context seam before later framework dispatch |
-| 12. Managed Runtime Context Binding | 3/3 | Complete | `libjni_latinime.so` now binds `linuxoid_runtime_context_bound` for `SettingsActivity->onCreate(Landroid/os/Bundle;)V`; the next exact blocker is `activity_oncreate_bundle_dispatch_required` |
+| 13. Activity onCreate Dispatch Bridge | 0/3 | Planned | Current exact blocker: `activity_oncreate_bundle_dispatch_required` |
+| 14. Visible Settings Surface | 0/3 | Planned | Depends on real post-dispatch startup and resource readiness |
+| 15. Interactive Visible Launch | 0/3 | Planned | Depends on visible surface availability and focusable interaction |
 
-### Phase 8: Native App-Start Bridge
+## Phase Details
 
-**Goal**: Linuxoid turns the JNI-shaped `libjni_latinime.so` boundary into a Linuxoid-owned app-start strategy and exposes the next exact native or managed startup seam for the real keyboard APK path.
+### Phase 13: Activity onCreate Dispatch Bridge
+
+**Goal**: Linuxoid dispatches the real keyboard `SettingsActivity->onCreate(Landroid/os/Bundle;)V` lifecycle method inside the already bound runtime context and exposes the first exact post-dispatch blocker without widening into broad framework recreation.
 **Mode:** mvp
-**Depends on**: Phase 7
-**Requirements**: JNI-05, JNI-06, VER-05
+**Depends on**: Phase 12
+**Requirements**: JNI-15, JNI-16, VER-10
 **Success Criteria** (what must be TRUE):
 
-  1. Linuxoid no longer stops at a generic missing `ANativeActivity_onCreate` boundary for `libjni_latinime.so`; it either bridges that JNI-shaped library into a Linuxoid-owned app-start path or reports the next exact registration/bootstrap seam
-  2. `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>` reaches a smaller seam than `native_activity_entrypoint_missing`
-  3. The downstream managed blocker `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context` stays visible and distinct once the upstream native app-start seam moves
+  1. `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>` no longer stops at `activity_oncreate_bundle_dispatch_required`
+  2. Launch JSON keeps runtime-context binding, `Activity.onCreate(Bundle)` dispatch, and any later framework/resource boundary distinct instead of collapsing them into one generic managed failure
+  3. The next blocker after successful dispatch is narrower and explicit, whether it is resource, surface, or another framework-owned seam
 
 **Plans**: 3 plans
 
@@ -235,27 +47,27 @@ Plans:
 
 **Wave 1**
 
-- [x] 08-01: Research and bind a Linuxoid-owned app-start strategy for JNI-shaped primary libraries
+- [ ] 13-01: Dispatch `Activity.onCreate(Bundle)` inside the bound Linuxoid runtime context for the real keyboard path
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [x] 08-02: Expose the first post-`JNI_OnLoad` registration or app-start boundary exactly
+- [ ] 13-02: Expose the first exact post-dispatch framework, resource, or window-readiness boundary
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [x] 08-03: Lock the new app-start seam into first-app-start, recovery, and regression truth
+- [ ] 13-03: Lock the post-dispatch seam into first-app-start, watchdog, and regression truth
 
-### Phase 9: Managed App-Start Dispatch
+### Phase 14: Visible Settings Surface
 
-**Goal**: Linuxoid turns the `linuxoid_managed_app_start_bridge_required` seam into the first real post-bridge dispatch boundary for the real keyboard APK path, while keeping later managed `Activity.onCreate(Bundle)` bootstrap truth explicit.
+**Goal**: Linuxoid carries the real keyboard settings launch from successful managed dispatch into a visible Wayland-backed or equivalent surfaced window while keeping host availability and resource gaps honest.
 **Mode:** mvp
-**Depends on**: Phase 8
-**Requirements**: JNI-07, JNI-08, VER-06
+**Depends on**: Phase 13
+**Requirements**: WIN-03, APP-04
 **Success Criteria** (what must be TRUE):
 
-  1. `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>` no longer stops at `linuxoid_managed_app_start_bridge_required`; it reaches the first exact post-bridge dispatch, JNI registration, or managed bootstrap seam
-  2. Launch JSON keeps `JNI_OnLoad`, Linuxoid-managed bridge ownership, post-bridge dispatch, and later framework bootstrap seams distinct instead of collapsing them into one generic native failure
-  3. The later managed blocker `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context` stays visible as the next seam once the post-bridge dispatch boundary moves
+  1. The real keyboard settings activity reaches a visible surface state when the host display is available, or Linuxoid reports the exact remaining blocker
+  2. Resource, asset, and app-state readiness for the settings launch are tied to the same launch session instead of disappearing behind generic window failure
+  3. `launch-apk --window-proof` and the top-level launch JSON agree on the visible-launch truth
 
 **Plans**: 3 plans
 
@@ -263,27 +75,27 @@ Plans:
 
 **Wave 1**
 
-- [x] 09-01: Research and bind the first Linuxoid-managed app-start dispatch strategy for `libjni_latinime.so`
+- [ ] 14-01: Make post-dispatch resource and session state sufficient for settings UI startup
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [x] 09-02: Expose the first post-bridge dispatch or JNI registration boundary exactly
+- [ ] 14-02: Carry successful startup into visible Wayland or EGL-backed surface readiness
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [x] 09-03: Lock the post-bridge dispatch seam into first-app-start, recovery, and regression truth
+- [ ] 14-03: Lock visible-launch truth into window-proof, docs, and regressions
 
-### Phase 10: JNI Registration Dispatch
+### Phase 15: Interactive Visible Launch
 
-**Goal**: Linuxoid executes the `libjni_latinime.so` registration-helper boundary and exposes the first post-registration managed bootstrap seam for the real keyboard APK path, while keeping the later `Activity.onCreate(Bundle)` bootstrap truth explicit.
+**Goal**: Linuxoid makes the visible keyboard settings launch focusable, meaningfully interactive, and stable under repeated Self-Healing Android Device launch attempts.
 **Mode:** mvp
-**Depends on**: Phase 9
-**Requirements**: JNI-09, JNI-10, VER-07
+**Depends on**: Phase 14
+**Requirements**: WIN-04, VER-11
 **Success Criteria** (what must be TRUE):
 
-  1. `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>` no longer stops at `jni_registration_dispatch_required`; it executes a real registration callback boundary and reaches the first exact post-registration managed bootstrap seam
-  2. Launch JSON keeps `JNI_OnLoad`, registration-helper selection, registration dispatch, registration outcome, and later framework bootstrap seams distinct instead of collapsing them into one generic native failure
-  3. The later managed blocker `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context` stays visible as the next seam once registration dispatch advances
+  1. The visible settings activity can own focus and Linuxoid reports real interaction state tied to the same app session
+  2. The earliest blocker remains authoritative across repeated visible-launch attempts and watchdog recovery does not drift into noisy downstream guesses
+  3. Visible-launch verification is repeatable enough that the next milestone can move toward IME behavior without re-opening the same launch seam
 
 **Plans**: 3 plans
 
@@ -291,68 +103,12 @@ Plans:
 
 **Wave 1**
 
-- [x] 10-01: Research and bind a Linuxoid-owned JNI registration dispatch strategy for `libjni_latinime.so`
+- [ ] 15-01: Bind focus and interaction ownership to the real settings session
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [x] 10-02: Expose the first post-registration managed bootstrap boundary exactly
+- [ ] 15-02: Tighten Self-Healing recovery gating around visible-launch failures
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [x] 10-03: Lock the post-registration seam into first-app-start, recovery, and regression truth
-
-### Phase 11: Managed Activity Dispatch Bridge
-
-**Goal**: Linuxoid bridges the post-registration `managed_activity_dispatch_required` seam into a Linuxoid-owned managed activity dispatch attempt for the real keyboard APK path, while keeping later `Activity.onCreate(Bundle)` and runtime-context bootstrap truth explicit.
-**Mode:** mvp
-**Depends on**: Phase 10
-**Requirements**: JNI-11, JNI-12, VER-08
-**Success Criteria** (what must be TRUE):
-
-  1. `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>` no longer stops at `managed_activity_dispatch_required`; it executes or precisely attempts a Linuxoid-owned managed activity dispatch path for the real keyboard activity
-  2. Launch JSON keeps JNI registration outcome, managed activity dispatch state, runtime-context binding, and later framework bootstrap seams distinct instead of collapsing them into one generic native or managed failure
-  3. The next blocker after this dispatch attempt is narrower and still explicit, with `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context` preserved unless Linuxoid truly moves beyond it
-
-**Plans**: 3 plans
-
-Plans:
-
-**Wave 1**
-
-- [x] 11-01: Research and bind a Linuxoid-owned managed activity dispatch bridge for the keyboard startup path
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 11-02: Expose the first exact post-dispatch runtime-context or framework boundary
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 11-03: Lock the managed-dispatch seam into first-app-start, recovery, and regression truth
-
-### Phase 12: Managed Runtime Context Binding
-
-**Goal**: Linuxoid bridges the post-dispatch `managed_runtime_context_required` seam into a Linuxoid-owned managed runtime context binding attempt for the real keyboard APK path, while keeping later `Activity.onCreate(Bundle)` and framework bootstrap truth explicit.
-**Mode:** mvp
-**Depends on**: Phase 11
-**Requirements**: JNI-13, JNI-14, VER-09
-**Success Criteria** (what must be TRUE):
-
-  1. `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>` no longer stops at `managed_runtime_context_required`; it executes or precisely attempts a Linuxoid-owned managed runtime-context binding path for the real keyboard activity
-  2. Launch JSON keeps JNI registration outcome, managed activity target selection, managed runtime-context binding, and later framework bootstrap seams distinct instead of collapsing them into one generic managed failure
-  3. The next blocker after this runtime-context attempt is narrower and still explicit, with `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context` preserved unless Linuxoid truly moves beyond it
-
-**Plans**: 3 plans
-
-Plans:
-
-**Wave 1**
-
-- [x] 12-01: Research and bind a Linuxoid-owned managed runtime-context strategy for the keyboard startup path
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 12-02: Expose the first exact post-binding lifecycle or framework boundary
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 12-03: Lock the runtime-context seam into first-app-start, recovery, and regression truth
+- [ ] 15-03: Add live and regression verification for a usable visible launch
