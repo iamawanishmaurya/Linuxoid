@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.113 - 2026-05-18
+
+- Advance the execution-first checkpoint into a **First Android Framework Boundary Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, still scoped to one deterministic app lifecycle seam instead of adding broad framework architecture.
+- Extend the minimal DEX interpreter and first-app-start report so Linuxoid resolves a real `invoke-super` boundary from `com.example.launchapk.MainActivity.onCreate()I` into `Landroid/app/Activity;->onCreate()V`, records the invoked class plus method plus signature, and marks that boundary explicitly as `framework-stubbed`.
+- Keep the result honest: Linuxoid now supports a tiny method-resolution plus `invoke-super` slice and still returns from the lifecycle method, but the report continues to say that full ART-owned ActivityThread or Android framework execution has not happened yet and the next blocker remains `bridge_activity_oncreate_into_real_art_runtime_context`.
+
 ## v0.1.112 - 2026-05-18
 
 - Advance the execution-first checkpoint from a standalone DEX helper method into a **First MainActivity Bytecode Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, keeping the change tightly scoped to one deterministic lifecycle entrypoint instead of adding new broad compatibility layers.

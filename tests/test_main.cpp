@@ -245,7 +245,8 @@ std::uint32_t Align4(std::uint32_t value) {
   return (value + 3u) & ~3u;
 }
 
-std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions) {
+std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions,
+                             std::uint16_t registers_size) {
   std::string code_item;
   auto append_le16 = [&](std::uint16_t value) {
     code_item.push_back(static_cast<char>(value & 0xFFu));
@@ -258,7 +259,7 @@ std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions) {
     code_item.push_back(static_cast<char>((value >> 24) & 0xFFu));
   };
 
-  append_le16(0u);  // registers_size
+  append_le16(registers_size);  // registers_size
   append_le16(0u);  // ins_size
   append_le16(0u);  // outs_size
   append_le16(0u);  // tries_size
@@ -270,12 +271,24 @@ std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions) {
   return code_item;
 }
 
+std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions) {
+  return BuildDexCodeItem(instructions, 0u);
+}
+
+struct DexReferencedMethodFixture {
+  std::string class_descriptor;
+  std::string method_name;
+  std::string return_type_descriptor = "V";
+};
+
 std::string BuildDexPayloadWithEntrypoint(
     const std::vector<std::string>& class_descriptors,
     const std::string& requested_entrypoint_class_descriptor,
     const std::string& entrypoint_method_name,
     const std::vector<std::uint16_t>& entrypoint_instructions,
-    const std::string& return_type_descriptor = "V") {
+    const std::string& return_type_descriptor = "V",
+    std::uint16_t registers_size = 0u,
+    const std::vector<DexReferencedMethodFixture>& extra_method_references = {}) {
   std::vector<std::string> classes = class_descriptors;
   std::sort(classes.begin(), classes.end());
   classes.erase(std::unique(classes.begin(), classes.end()), classes.end());
@@ -294,16 +307,41 @@ std::string BuildDexPayloadWithEntrypoint(
   };
   append_unique(return_type_descriptor);
   append_unique(entrypoint_method_name);
+  for (const auto& method_reference : extra_method_references) {
+    append_unique(method_reference.class_descriptor);
+    append_unique(method_reference.method_name);
+    append_unique(method_reference.return_type_descriptor);
+  }
 
   std::vector<std::string> type_descriptors = classes;
-  type_descriptors.push_back(return_type_descriptor);
+  auto append_unique_type = [&](const std::string& value) {
+    if (std::find(type_descriptors.begin(), type_descriptors.end(), value) ==
+        type_descriptors.end()) {
+      type_descriptors.push_back(value);
+    }
+  };
+  append_unique_type(return_type_descriptor);
+  for (const auto& method_reference : extra_method_references) {
+    append_unique_type(method_reference.class_descriptor);
+    append_unique_type(method_reference.return_type_descriptor);
+  }
 
   const std::uint32_t string_ids_size =
       static_cast<std::uint32_t>(strings.size());
   const std::uint32_t type_ids_size =
       static_cast<std::uint32_t>(type_descriptors.size());
-  const std::uint32_t proto_ids_size = 1u;
-  const std::uint32_t method_ids_size = 1u;
+  std::vector<std::string> proto_return_types = {return_type_descriptor};
+  for (const auto& method_reference : extra_method_references) {
+    if (std::find(proto_return_types.begin(), proto_return_types.end(),
+                  method_reference.return_type_descriptor) ==
+        proto_return_types.end()) {
+      proto_return_types.push_back(method_reference.return_type_descriptor);
+    }
+  }
+  const std::uint32_t proto_ids_size =
+      static_cast<std::uint32_t>(proto_return_types.size());
+  const std::uint32_t method_ids_size =
+      static_cast<std::uint32_t>(1u + extra_method_references.size());
   const std::uint32_t class_defs_size =
       static_cast<std::uint32_t>(classes.size());
 
@@ -345,6 +383,11 @@ std::string BuildDexPayloadWithEntrypoint(
   for (std::size_t index = 0; index < type_descriptors.size(); ++index) {
     type_indices[type_descriptors[index]] = static_cast<std::uint32_t>(index);
   }
+  std::map<std::string, std::uint32_t> proto_indices;
+  for (std::size_t index = 0; index < proto_return_types.size(); ++index) {
+    proto_indices[proto_return_types[index]] =
+        static_cast<std::uint32_t>(index);
+  }
 
   std::uint32_t cursor = data_off;
   for (std::size_t index = 0; index < strings.size(); ++index) {
@@ -360,17 +403,35 @@ std::string BuildDexPayloadWithEntrypoint(
                string_indices.at(type_descriptors[index]));
   }
 
-  write_le32(proto_ids_off + 0u, string_indices.at(return_type_descriptor));
-  write_le32(proto_ids_off + 4u, type_indices.at(return_type_descriptor));
-  write_le32(proto_ids_off + 8u, 0u);
+  for (std::size_t index = 0; index < proto_return_types.size(); ++index) {
+    const std::size_t offset = proto_ids_off + index * 12u;
+    write_le32(offset + 0u, string_indices.at(proto_return_types[index]));
+    write_le32(offset + 4u, type_indices.at(proto_return_types[index]));
+    write_le32(offset + 8u, 0u);
+  }
 
   write_le16(method_ids_off + 0u,
              static_cast<std::uint16_t>(
                  type_indices.at(entrypoint_class_descriptor)));
-  write_le16(method_ids_off + 2u, 0u);
+  write_le16(method_ids_off + 2u,
+             static_cast<std::uint16_t>(proto_indices.at(return_type_descriptor)));
   write_le32(method_ids_off + 4u, string_indices.at(entrypoint_method_name));
 
-  const std::string code_item = BuildDexCodeItem(entrypoint_instructions);
+  for (std::size_t index = 0; index < extra_method_references.size(); ++index) {
+    const auto& method_reference = extra_method_references[index];
+    const std::size_t offset = method_ids_off + (index + 1u) * 8u;
+    write_le16(offset + 0u,
+               static_cast<std::uint16_t>(
+                   type_indices.at(method_reference.class_descriptor)));
+    write_le16(
+        offset + 2u,
+        static_cast<std::uint16_t>(
+            proto_indices.at(method_reference.return_type_descriptor)));
+    write_le32(offset + 4u, string_indices.at(method_reference.method_name));
+  }
+
+  const std::string code_item =
+      BuildDexCodeItem(entrypoint_instructions, registers_size);
   std::vector<std::uint32_t> class_data_offsets(classes.size(), 0u);
   for (std::size_t index = 0; index < classes.size(); ++index) {
     if (classes[index] != entrypoint_class_descriptor) {
@@ -451,6 +512,18 @@ std::string BuildResolvableLifecycleOnCreateDexPayload(
   return BuildDexPayloadWithEntrypoint(class_descriptors,
                                        requested_entrypoint_class_descriptor,
                                        "onCreate", {0x1012u, 0x000fu}, "I");
+}
+
+std::string BuildFrameworkBoundaryLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0012u, 0x106fu, 0x0001u, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Landroid/app/Activity;",
+          .method_name = "onCreate",
+          .return_type_descriptor = "V"}});
 }
 
 std::string BuildUnsupportedOpcodeDexPayload(
@@ -8857,7 +8930,7 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
   const auto fixture = CreateJavaKotlinApkProofFixture(
       "linuxoid-first-app-start-checkpoint-ready", true,
       {{"classes.dex",
-        BuildResolvableLifecycleOnCreateDexPayload(
+        BuildFrameworkBoundaryLifecycleOnCreateDexPayload(
             {"Lcom/example/launchapk/App;",
              "Lcom/example/launchapk/MainActivity;"},
             "Lcom/example/launchapk/MainActivity;")}});
@@ -8905,6 +8978,19 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
              "\"bytecode_execution_backend\": "
              "\"linuxoid_minimal_dex_interpreter\"") != std::string::npos,
          "expected minimal interpreter backend in first app start json");
+  Expect(output.find("\"framework_boundary_state\": \"framework-stubbed\"") !=
+             std::string::npos,
+         "expected stubbed framework boundary state in first app start json");
+  Expect(output.find(
+             "\"invoked_method_class_descriptor\": \"Landroid/app/Activity;\"") !=
+             std::string::npos,
+         "expected invoked framework class descriptor in first app start json");
+  Expect(output.find("\"invoked_method_name\": \"onCreate\"") !=
+             std::string::npos,
+         "expected invoked framework method name in first app start json");
+  Expect(output.find("\"invoked_method_signature\": \"()V\"") !=
+             std::string::npos,
+         "expected invoked framework method signature in first app start json");
   Expect(output.find("\"lifecycle_method_name\": \"onCreate\"") !=
              std::string::npos,
          "expected lifecycle method name in first app start json");
@@ -8926,12 +9012,12 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
   Expect(output.find("\"java_art_bytecode_executed\": true") !=
              std::string::npos,
          "expected real decoded instruction execution in first app start json");
-  Expect(output.find("\"decoded_instruction_count\": 2") !=
+  Expect(output.find("\"decoded_instruction_count\": 4") !=
              std::string::npos,
-         "expected two decoded instructions in first app start json");
-  Expect(output.find("\"executed_instruction_count\": 2") !=
+         "expected four decoded instructions in first app start json");
+  Expect(output.find("\"executed_instruction_count\": 4") !=
              std::string::npos,
-         "expected two executed instructions in first app start json");
+         "expected four executed instructions in first app start json");
   Expect(output.find("\"first_executed_opcode\": \"const/4\"") !=
              std::string::npos,
          "expected first executed opcode in first app start json");

@@ -239,6 +239,39 @@ std::string BuildMethodSignature(const ParsedDexTables& tables,
   return "()" + tables.strings[return_string_index];
 }
 
+bool ResolveMethodReference(const ParsedDexTables& tables,
+                            std::uint32_t method_index,
+                            DexExecutionCandidate* candidate,
+                            std::vector<std::string>* errors) {
+  if (candidate == nullptr || errors == nullptr) {
+    return false;
+  }
+  if (method_index >= tables.methods.size()) {
+    AppendUnique(errors, "dex_invoke_method_index_invalid");
+    return false;
+  }
+  const auto& method = tables.methods[method_index];
+  if (method.class_idx >= tables.type_descriptor_string_indices.size()) {
+    AppendUnique(errors, "dex_invoke_method_class_index_invalid");
+    return false;
+  }
+  const std::uint32_t class_string_index =
+      tables.type_descriptor_string_indices[method.class_idx];
+  if (class_string_index >= tables.strings.size()) {
+    AppendUnique(errors, "dex_invoke_method_class_string_invalid");
+    return false;
+  }
+  if (method.name_idx >= tables.strings.size()) {
+    AppendUnique(errors, "dex_invoke_method_name_invalid");
+    return false;
+  }
+  *candidate = {.class_descriptor = tables.strings[class_string_index],
+                .method_name = tables.strings[method.name_idx],
+                .method_signature = BuildMethodSignature(tables, method),
+                .code_off = 0};
+  return true;
+}
+
 bool ParseDexTables(const std::string& bytes, NativeApkDexFileReport* file,
                     ParsedDexTables* tables) {
   if (file == nullptr || tables == nullptr) {
@@ -450,6 +483,12 @@ std::string DescribeOpcode(std::uint16_t opcode) {
       return "return-object";
     case 0x12:
       return "const/4";
+    case 0x6e:
+      return "invoke-virtual";
+    case 0x6f:
+      return "invoke-super";
+    case 0x70:
+      return "invoke-direct";
     default:
       break;
   }
@@ -576,6 +615,79 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
         ++pc;
         continue;
       }
+      case 0x6f: {  // invoke-super
+        if (pc + 2u >= insns_size) {
+          probe.framework_boundary_state = "blocked";
+          probe.framework_boundary_reason = "invoke_instruction_truncated";
+          probe.execution_state = "invoke_truncated";
+          probe.exact_blocker = "dex_invoke_instruction_truncated";
+          probe.errors.push_back("dex_invoke_instruction_truncated");
+          return probe;
+        }
+        const std::uint16_t method_index =
+            ReadLe16(bytes, insns_off + (pc + 1u) * 2u);
+        const std::uint16_t register_word =
+            ReadLe16(bytes, insns_off + (pc + 2u) * 2u);
+        const std::uint32_t register_count =
+            static_cast<std::uint32_t>((code_unit >> 12u) & 0x0fu);
+        const std::uint32_t registers_used[5] = {
+            static_cast<std::uint32_t>(register_word & 0x0fu),
+            static_cast<std::uint32_t>((register_word >> 4u) & 0x0fu),
+            static_cast<std::uint32_t>((register_word >> 8u) & 0x0fu),
+            static_cast<std::uint32_t>((register_word >> 12u) & 0x0fu),
+            static_cast<std::uint32_t>((code_unit >> 8u) & 0x0fu),
+        };
+        for (std::uint32_t index = 0; index < register_count && index < 5u;
+             ++index) {
+          if (registers_used[index] >= registers.size()) {
+            probe.framework_boundary_state = "blocked";
+            probe.framework_boundary_reason = "invoke_register_out_of_range";
+            probe.execution_state = "register_out_of_range";
+            probe.exact_blocker = "dex_invoke_register_out_of_range";
+            probe.errors.push_back("dex_invoke_register_out_of_range");
+            return probe;
+          }
+        }
+
+        DexExecutionCandidate invoked_method;
+        if (!ResolveMethodReference(tables, method_index, &invoked_method,
+                                    &probe.errors)) {
+          probe.framework_boundary_state = "blocked";
+          probe.framework_boundary_reason = "invoke_method_resolution_failed";
+          probe.execution_state = "invoke_unresolved";
+          probe.exact_blocker = probe.errors.empty()
+                                    ? "dex_invoke_method_resolution_failed"
+                                    : probe.errors.front();
+          return probe;
+        }
+        probe.invoked_method_class_descriptor = invoked_method.class_descriptor;
+        probe.invoked_method_name = invoked_method.method_name;
+        probe.invoked_method_signature = invoked_method.method_signature;
+
+        if (invoked_method.class_descriptor == "Landroid/app/Activity;" &&
+            invoked_method.method_name == "onCreate" &&
+            invoked_method.method_signature == "()V") {
+          probe.framework_boundary_state = "framework-stubbed";
+          probe.framework_boundary_reason =
+              "android_activity_oncreate_stubbed_for_minimal_checkpoint";
+          probe.diagnostics.push_back(
+              "Self-Healing Android Device DEX probe crossed a stubbed Android framework lifecycle boundary");
+          pc += 3u;
+          continue;
+        }
+
+        probe.framework_boundary_state = "blocked";
+        probe.framework_boundary_reason =
+            "framework_or_invoke_target_unimplemented";
+        probe.execution_state = "framework_boundary_blocked";
+        probe.exact_blocker =
+            "framework-boundary-unimplemented:" +
+            invoked_method.class_descriptor + "->" +
+            invoked_method.method_name + invoked_method.method_signature;
+        probe.diagnostics.push_back(
+            "Self-Healing Android Device DEX probe reached a framework or invoke target boundary that Linuxoid has not implemented yet");
+        return probe;
+      }
       case 0x0e:  // return-void
         probe.returned_value_type = "V";
         probe.reached_return = true;
@@ -654,6 +766,16 @@ std::string RenderDexExecutionProbeJson(
          << "\",\n"
          << "    \"execution_state\": \"" << EscapeJson(probe.execution_state)
          << "\",\n"
+         << "    \"invoked_method_class_descriptor\": \""
+         << EscapeJson(probe.invoked_method_class_descriptor) << "\",\n"
+         << "    \"invoked_method_name\": \""
+         << EscapeJson(probe.invoked_method_name) << "\",\n"
+         << "    \"invoked_method_signature\": \""
+         << EscapeJson(probe.invoked_method_signature) << "\",\n"
+         << "    \"framework_boundary_state\": \""
+         << EscapeJson(probe.framework_boundary_state) << "\",\n"
+         << "    \"framework_boundary_reason\": \""
+         << EscapeJson(probe.framework_boundary_reason) << "\",\n"
          << "    \"code_item_offset\": " << probe.code_item_offset << ",\n"
          << "    \"instruction_offset\": " << probe.instruction_offset
          << ",\n"

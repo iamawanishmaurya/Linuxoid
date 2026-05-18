@@ -41,6 +41,11 @@ struct NativeApkDexExecutionProbeReport {
   std::string execution_backend = "linuxoid_minimal_dex_interpreter";
   std::string parse_state = "not_requested";
   std::string execution_state = "not_attempted";
+  std::string invoked_method_class_descriptor;
+  std::string invoked_method_name;
+  std::string invoked_method_signature;
+  std::string framework_boundary_state = "not_reached";
+  std::string framework_boundary_reason = "none";
   std::uint32_t code_item_offset = 0;
   std::uint32_t instruction_offset = 0;
   std::uint16_t opcode_value = 0;

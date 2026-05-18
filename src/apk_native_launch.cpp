@@ -1818,6 +1818,16 @@ std::string RenderFirstAppStartJson(
          << EscapeJson(proof.bytecode_execution_state) << "\",\n"
          << "  \"bytecode_execution_backend\": \""
          << EscapeJson(proof.bytecode_execution_backend) << "\",\n"
+         << "  \"invoked_method_class_descriptor\": \""
+         << EscapeJson(proof.invoked_method_class_descriptor) << "\",\n"
+         << "  \"invoked_method_name\": \""
+         << EscapeJson(proof.invoked_method_name) << "\",\n"
+         << "  \"invoked_method_signature\": \""
+         << EscapeJson(proof.invoked_method_signature) << "\",\n"
+         << "  \"framework_boundary_state\": \""
+         << EscapeJson(proof.framework_boundary_state) << "\",\n"
+         << "  \"framework_boundary_reason\": \""
+         << EscapeJson(proof.framework_boundary_reason) << "\",\n"
          << "  \"lifecycle_method_name\": \""
          << EscapeJson(proof.lifecycle_method_name) << "\",\n"
          << "  \"lifecycle_method_signature\": \""
@@ -1929,6 +1939,15 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.dex_parse_state = report.dex.parse_state;
   proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
   proof.bytecode_execution_backend = report.dex.execution_probe.execution_backend;
+  proof.invoked_method_class_descriptor =
+      report.dex.execution_probe.invoked_method_class_descriptor;
+  proof.invoked_method_name = report.dex.execution_probe.invoked_method_name;
+  proof.invoked_method_signature =
+      report.dex.execution_probe.invoked_method_signature;
+  proof.framework_boundary_state =
+      report.dex.execution_probe.framework_boundary_state;
+  proof.framework_boundary_reason =
+      report.dex.execution_probe.framework_boundary_reason;
   proof.lifecycle_method_name = report.dex.execution_probe.target_method_name;
   proof.lifecycle_method_signature =
       report.dex.execution_probe.target_method_signature;
@@ -4161,6 +4180,25 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"bytecode_execution_backend\": \""
          << EscapeJson(
                 report.first_android_app_start.bytecode_execution_backend)
+         << "\",\n"
+         << "    \"invoked_method_class_descriptor\": \""
+         << EscapeJson(
+                report.first_android_app_start.invoked_method_class_descriptor)
+         << "\",\n"
+         << "    \"invoked_method_name\": \""
+         << EscapeJson(report.first_android_app_start.invoked_method_name)
+         << "\",\n"
+         << "    \"invoked_method_signature\": \""
+         << EscapeJson(
+                report.first_android_app_start.invoked_method_signature)
+         << "\",\n"
+         << "    \"framework_boundary_state\": \""
+         << EscapeJson(
+                report.first_android_app_start.framework_boundary_state)
+         << "\",\n"
+         << "    \"framework_boundary_reason\": \""
+         << EscapeJson(
+                report.first_android_app_start.framework_boundary_reason)
          << "\",\n"
          << "    \"lifecycle_method_name\": \""
          << EscapeJson(report.first_android_app_start.lifecycle_method_name)

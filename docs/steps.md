@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: First Android Framework Boundary Checkpoint GREEN
+  Action: Extended the deterministic `MainActivity.onCreate()I` fixture method to cross a real `invoke-super` boundary into `Landroid/app/Activity;->onCreate()V`, added the smallest method-resolution plus `invoke-super` interpreter support needed to identify that boundary, stub it honestly, and continue to a real `return`, and threaded the invoked class/method/signature plus `framework_boundary_state` through the persisted first-app-start report.
+  Result: Linuxoid can now prove that one minimal app launch path reaches and reports its first Android framework-style method boundary through the actual Linuxoid execution path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending full Android framework execution already exists.
+  Timestamp: 2026-05-19T00:25:00+05:30
+
 - Step: First MainActivity Bytecode Checkpoint GREEN
   Action: Retargeted `launch-apk --first-app-start-proof` from the standalone checkpoint helper method to a deterministic `MainActivity.onCreate()I`-style fixture method, kept the DEX interpreter subset minimal, and threaded lifecycle method name/signature plus returned-value proof through the persisted first-app-start report.
   Result: Linuxoid can now prove that one minimal app launch path attempts and completes a real MainActivity lifecycle DEX method through the actual Linuxoid execution path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending ART-owned framework dispatch already exists.
