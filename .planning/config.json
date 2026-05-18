@@ -6,11 +6,13 @@
   "granularity": "standard",
   "parallelization": true,
   "commit_docs": true,
-  "model_profile": "quality",
+  "model_profile": "inherit",
   "workflow": {
     "research": true,
     "plan_check": true,
     "verifier": true,
-    "nyquist_validation": true
-  }
+    "nyquist_validation": true,
+    "auto_advance": true
+  },
+  "runtime": "codex"
 }
