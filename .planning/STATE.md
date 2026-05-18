@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: planned
+stopped_at: Phase 2 planned; next action is to execute 02-01 and bind the real keyboard settings activity into first-app-start proof
+last_updated: "2026-05-18T14:10:00.000Z"
+last_activity: 2026-05-18 -- Phase 2 planning complete
+progress:
+  total_phases: 6
+  completed_phases: 1
+  total_plans: 6
+  completed_plans: 3
+  percent: 17
+---
+
 # Project State
 
 ## Project Reference
@@ -5,20 +21,21 @@
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Run a real Android app directly on Linux through Linuxoid's own compatibility/runtime path, with honest execution and honest blockers instead of emulator fallback.
-**Current focus:** Transition from Phase 1 into Phase 2 - Managed Activity Start
+**Current focus:** Phase 2 - Managed Activity Start
 
 ## Current Position
 
-Phase: 1 of 6 complete (Keyboard APK Intake)
-Plan: None - phase close-out complete
-Status: Ready for planning - real keyboard APK intake is stable and the next seam is managed activity start with native-library loading kept explicit
-Last activity: 2026-05-18 - keyboard-0.1.28.apk now clears real APK intake, staging, permission/resource inventory, and stable proof surfaces; plain launch now blocks later at libraries_failed_to_load
+Phase: 2 of 6 (Managed Activity Start)
+Plan: 3 plans across 3 waves
+Status: Ready to execute - Phase 2 plans now target the real `org.futo.inputmethod.latin.uix.settings.SettingsActivity` managed-start seam
+Last activity: 2026-05-18 -- Phase 2 planned around real activity resolution, lifecycle entrypoint reporting, and regression proof
 
-Progress: [██░░░░░░░░] 19%
+Progress: [██░░░░░░░░] 17%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 3
 - Average duration: -
 - Total execution time: 0.0 hours
@@ -35,16 +52,16 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Plan Phase 2: Managed Activity Start around the real launcher/settings activity path
-- Narrow the staged `x86_64` native-library loading blocker that now follows successful APK intake
+- Execute Phase 2 plan 02-01 to bind the real launcher/settings activity into the first-app-start proof
+- Narrow the staged `x86_64` native-library loading blocker while keeping the managed activity-start seam explicit
 
 ### Blockers/Concerns
 
-- Current project blocker: the real keyboard APK now clears intake, but staged `x86_64` native libraries still fail to load through the direct launch path
-- Likely next implementation seam: planned Phase 2 activity-start work plus narrow native-library/runtime compatibility debugging inside `src/apk_native_launch.cpp` and the native execute runner
+- Current project blocker: the real keyboard APK now clears intake and resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, but the direct launch path still stops at `libraries_failed_to_load` before the managed proof reaches real class loading
+- Likely next implementation seam: Phase 2 plan 02-01 in `src/apk_native_launch.cpp`, `src/apk_dex_bridge.cpp`, and `tests/test_main.cpp`
 
 ## Session Continuity
 
-Last session: 2026-05-18 18:45
-Stopped at: Phase 1 complete; next action is to plan Phase 2 managed activity start from the stable keyboard APK intake checkpoint
-Resume file: .planning/ROADMAP.md
+Last session: 2026-05-18 19:35
+Stopped at: Phase 2 planned; next action is to execute 02-01 and bind the real keyboard settings activity into first-app-start proof
+Resume file: .planning/phases/02-managed-activity-start/02-01-PLAN.md
