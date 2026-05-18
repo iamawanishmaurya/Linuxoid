@@ -111,6 +111,30 @@ std::string RenderIntentFilterArray(
   return output.str();
 }
 
+std::string RenderJniOnLoadResultArray(
+    const std::vector<JniOnLoadResult>& results) {
+  std::ostringstream output;
+  output << "[";
+  for (std::size_t index = 0; index < results.size(); ++index) {
+    if (index != 0) {
+      output << ", ";
+    }
+    const auto& result = results[index];
+    output << "{"
+           << "\"library_path\": \"" << EscapeJson(result.library_path)
+           << "\", "
+           << "\"symbol_present\": "
+           << (result.symbol_present ? "true" : "false") << ", "
+           << "\"call_succeeded\": "
+           << (result.call_succeeded ? "true" : "false") << ", "
+           << "\"return_code\": " << result.return_code << ", "
+           << "\"status\": \"" << EscapeJson(result.status) << "\""
+           << "}";
+  }
+  output << "]";
+  return output.str();
+}
+
 std::string RenderActivityComponentArray(
     const std::vector<NativeApkActivityComponentRecord>& activities) {
   std::ostringstream output;
@@ -550,6 +574,14 @@ std::string DetermineRecommendedRecoveryAction(
   }
   if (report.launch_status == "unsupported_host_abi") {
     return "provide_host_abi_compatible_library";
+  }
+  if (report.launch_status == "native_library_staging_failed") {
+    return "stage_abi_matching_native_library";
+  }
+  if (report.launch_status == "libraries_failed_to_load" ||
+      report.launch_status == "jni_onload_missing_or_failed" ||
+      report.launch_status == "native_activity_entrypoint_missing") {
+    return "inspect_native_launch_diagnostics";
   }
   if (report.asset_proof_requested && !report.asset_bridge.ready) {
     return "restage_or_repair_assets";
@@ -1615,6 +1647,130 @@ std::string SanitizeExecutionToken(std::string value) {
   return value;
 }
 
+const NativeLibraryLoadAttempt* FindPrimaryNativeLoadAttempt(
+    const NativeExecuteReport& report) {
+  for (const auto& attempt : report.library_load_attempts) {
+    if (attempt.load_state == "dlopen_failed") {
+      return &attempt;
+    }
+  }
+  for (const auto& attempt : report.library_load_attempts) {
+    if (attempt.jni_state == "missing") {
+      return &attempt;
+    }
+  }
+  for (const auto& attempt : report.library_load_attempts) {
+    if (attempt.entrypoint_state == "missing" &&
+        attempt.load_state == "loaded") {
+      return &attempt;
+    }
+  }
+  return report.library_load_attempts.empty() ? nullptr
+                                              : &report.library_load_attempts.front();
+}
+
+std::string DetermineNativeLoadingState(const NativeApkLaunchReport& report) {
+  if (!report.native_libraries_present) {
+    return "no_native_libraries_found";
+  }
+  if (!report.host_abi_supported) {
+    return "unsupported_host_abi";
+  }
+  if (!report.launch_ready && report.launch_status == "native_library_staging_failed") {
+    return "native_library_staging_failed";
+  }
+  if (report.launch_status == "libraries_failed_to_load") {
+    return "dlopen_failed";
+  }
+  if (report.launch_status == "jni_onload_missing_or_failed") {
+    return "jni_onload_missing_or_failed";
+  }
+  if (report.launch_status == "native_activity_entrypoint_missing") {
+    return "native_activity_entrypoint_missing";
+  }
+  if (report.launch_ready) {
+    return "ready";
+  }
+  return report.native_execute.exit_reason.empty() ? "not_attempted"
+                                                   : report.native_execute.exit_reason;
+}
+
+std::string DetermineNativeJniState(const NativeApkLaunchReport& report) {
+  if (!report.native_libraries_present || report.native_execute.library_load_attempts.empty()) {
+    return "not_attempted";
+  }
+  if (report.jni_onload_called) {
+    return "called";
+  }
+  for (const auto& attempt : report.native_execute.library_load_attempts) {
+    if (attempt.jni_state == "missing") {
+      return "missing";
+    }
+  }
+  return "not_attempted";
+}
+
+void RefreshNativeLoadingDetails(NativeApkLaunchReport* report) {
+  report->native_loading_state = DetermineNativeLoadingState(*report);
+  report->native_jni_state = DetermineNativeJniState(*report);
+  report->native_loading_library_name.clear();
+  report->native_loading_library_path.clear();
+  report->native_loading_detail.clear();
+
+  const auto* attempt = FindPrimaryNativeLoadAttempt(report->native_execute);
+  if (attempt != nullptr) {
+    report->native_loading_library_name = attempt->library_name;
+    report->native_loading_library_path = attempt->library_path;
+    report->native_loading_detail = !attempt->error_detail.empty()
+                                        ? attempt->error_detail
+                                        : attempt->failure_reason;
+    return;
+  }
+
+  if (!report->native_execute.selected_library_path.empty()) {
+    report->native_loading_library_path = report->native_execute.selected_library_path;
+    report->native_loading_library_name =
+        fs::path(report->native_execute.selected_library_path).filename().string();
+  }
+  if (!report->launch_ready && !report->native_execute.exit_reason.empty()) {
+    report->native_loading_detail = report->native_execute.exit_reason;
+  }
+}
+
+std::string DetermineFirstAppStartNativeBlockingReason(
+    const NativeApkLaunchReport& report) {
+  if (report.launch_ready) {
+    return "";
+  }
+  if (report.launch_status == "no_native_libraries_found") {
+    return "no_native_libraries_found_for_first_app_start";
+  }
+  if (report.launch_status == "unsupported_host_abi") {
+    return "unsupported_host_abi_for_first_app_start";
+  }
+  if (report.launch_status == "native_library_staging_failed") {
+    return "native_library_staging_failed_for_first_app_start";
+  }
+  const auto* attempt = FindPrimaryNativeLoadAttempt(report.native_execute);
+  if (report.launch_status == "libraries_failed_to_load" && attempt != nullptr) {
+    return "native_dlopen_failed_for_first_app_start:" + attempt->library_name;
+  }
+  if (report.launch_status == "jni_onload_missing_or_failed" &&
+      attempt != nullptr) {
+    return "jni_onload_missing_for_first_app_start:" + attempt->library_name;
+  }
+  if (report.launch_status == "native_activity_entrypoint_missing" &&
+      attempt != nullptr) {
+    return "native_activity_entrypoint_missing_for_first_app_start:" +
+           attempt->library_name;
+  }
+  if (!report.launch_status.empty() &&
+      report.launch_status != "native_apk_launch_succeeded") {
+    return "native_launch_blocked_for_first_app_start:" + report.launch_status;
+  }
+  return "";
+}
+
 std::string DetermineFirstAppStartBlockingReason(
     const NativeApkLaunchReport& report) {
   if (!report.manifest_metadata_ready) {
@@ -1636,6 +1792,11 @@ std::string DetermineFirstAppStartBlockingReason(
   }
   if (!report.permissions.ready || !report.app_ops.ready) {
     return "permissions_not_ready_for_first_app_start";
+  }
+  const std::string native_blocking_reason =
+      DetermineFirstAppStartNativeBlockingReason(report);
+  if (!native_blocking_reason.empty()) {
+    return native_blocking_reason;
   }
   if (!report.surface_proof_ready) {
     return "surface_not_ready_for_first_app_start";
@@ -1722,6 +1883,23 @@ std::string DetermineFirstAppStartRecoveryAction(
   if (blocking_reason == "permissions_not_ready_for_first_app_start") {
     return "rebuild_permission_state";
   }
+  if (blocking_reason == "no_native_libraries_found_for_first_app_start") {
+    return "stage_abi_matching_native_library";
+  }
+  if (blocking_reason == "unsupported_host_abi_for_first_app_start") {
+    return "provide_host_abi_compatible_library";
+  }
+  if (blocking_reason == "native_library_staging_failed_for_first_app_start") {
+    return "stage_abi_matching_native_library";
+  }
+  if (blocking_reason.rfind("native_dlopen_failed_for_first_app_start:", 0) == 0 ||
+      blocking_reason.rfind("jni_onload_missing_for_first_app_start:", 0) == 0 ||
+      blocking_reason.rfind("native_activity_entrypoint_missing_for_first_app_start:",
+                            0) == 0 ||
+      blocking_reason.rfind("native_launch_blocked_for_first_app_start:", 0) ==
+          0) {
+    return "inspect_native_launch_diagnostics";
+  }
   if (blocking_reason == "process_manager_not_ready_for_first_app_start") {
     return "rebuild_process_manager_state";
   }
@@ -1790,6 +1968,42 @@ std::string DetermineFirstAppStartNextBlocker(
   }
   if (blocking_reason == "permissions_not_ready_for_first_app_start") {
     return "repair_permission_and_appops_contract";
+  }
+  if (blocking_reason == "no_native_libraries_found_for_first_app_start") {
+    return "stage_host_abi_native_library_payload";
+  }
+  if (blocking_reason == "unsupported_host_abi_for_first_app_start") {
+    return "provide_host_abi_compatible_native_library";
+  }
+  if (blocking_reason == "native_library_staging_failed_for_first_app_start") {
+    return "repair_staged_native_library_payload";
+  }
+  if (blocking_reason.rfind("native_dlopen_failed_for_first_app_start:", 0) ==
+      0) {
+    return "resolve_dlopen_failure_for_" +
+           SanitizeExecutionToken(
+               blocking_reason.substr(std::string(
+                                          "native_dlopen_failed_for_first_app_start:")
+                                          .size()));
+  }
+  if (blocking_reason.rfind("jni_onload_missing_for_first_app_start:", 0) == 0) {
+    return "provide_jni_onload_for_" +
+           SanitizeExecutionToken(
+               blocking_reason.substr(std::string(
+                                          "jni_onload_missing_for_first_app_start:")
+                                          .size()));
+  }
+  if (blocking_reason.rfind(
+          "native_activity_entrypoint_missing_for_first_app_start:", 0) == 0) {
+    return "provide_native_activity_entrypoint_for_" +
+           SanitizeExecutionToken(
+               blocking_reason.substr(std::string(
+                                          "native_activity_entrypoint_missing_for_first_app_start:")
+                                          .size()));
+  }
+  if (blocking_reason.rfind("native_launch_blocked_for_first_app_start:", 0) ==
+      0) {
+    return "inspect_native_launch_diagnostics";
   }
   if (blocking_reason == "process_manager_not_ready_for_first_app_start") {
     return "repair_process_manager_contract";
@@ -2054,6 +2268,10 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.runtime_root = report.runtime_bridge.runtime_root;
   proof.dex_state = DetermineFirstAppStartDexState(report);
   proof.dex_parse_state = report.dex.parse_state;
+  proof.native_loading_state = report.native_loading_state;
+  proof.native_jni_state = report.native_jni_state;
+  proof.native_loading_library_name = report.native_loading_library_name;
+  proof.native_loading_detail = report.native_loading_detail;
   proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
   proof.bytecode_execution_backend = report.dex.execution_probe.execution_backend;
   proof.class_loading_state = report.dex.execution_probe.class_loading_state;
@@ -2169,6 +2387,19 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
         "Self-Healing Android Device first app start checkpoint executed real DEX bytecode through Linuxoid's minimal interpreter");
     proof.diagnostics.push_back(
         "Linuxoid has not crossed into real ART-owned ActivityThread context or managed Android framework dispatch yet");
+  } else if (proof.blocking_reason.rfind("native_dlopen_failed_for_first_app_start:",
+                                         0) == 0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint is blocked by an upstream staged native-library load failure before managed activity startup can continue");
+  } else if (proof.blocking_reason.rfind(
+                 "jni_onload_missing_for_first_app_start:", 0) == 0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint is blocked because Linuxoid loaded a staged native library but did not reach a usable JNI_OnLoad seam");
+  } else if (proof.blocking_reason.rfind(
+                 "native_activity_entrypoint_missing_for_first_app_start:", 0) ==
+             0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint is blocked because the staged native library load succeeded but no native activity entrypoint was available");
   } else if (proof.blocking_reason ==
                  "art_runtime_unavailable_for_first_app_start" &&
              proof.java_art_bytecode_executed) {
@@ -2190,9 +2421,23 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
         "Self-Healing Android Device first app start checkpoint blocked before managed bytecode execution");
   }
 
+  const bool native_blocked =
+      proof.blocking_reason.rfind("native_dlopen_failed_for_first_app_start:",
+                                  0) == 0 ||
+      proof.blocking_reason.rfind("jni_onload_missing_for_first_app_start:",
+                                  0) == 0 ||
+      proof.blocking_reason.rfind(
+          "native_activity_entrypoint_missing_for_first_app_start:", 0) == 0 ||
+      proof.blocking_reason == "no_native_libraries_found_for_first_app_start" ||
+      proof.blocking_reason == "unsupported_host_abi_for_first_app_start" ||
+      proof.blocking_reason ==
+          "native_library_staging_failed_for_first_app_start";
   if (!report.self_healing_android_device.recommended_next_action.empty() &&
       report.self_healing_android_device.recommended_next_action != "none" &&
-      proof.blocking_reason != "needs-real-art-execution") {
+      proof.blocking_reason != "needs-real-art-execution" &&
+      (!native_blocked ||
+       report.self_healing_android_device.recommended_next_action ==
+           "inspect_native_launch_diagnostics")) {
     proof.diagnostics.push_back(
         "Self-Healing Android Device recommends " +
         report.self_healing_android_device.recommended_next_action +
@@ -2991,8 +3236,26 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
     if (!report.launch_ready) {
       AppendError(&report.errors,
                   "native_launch_failed:" + report.native_execute.exit_reason);
+      const auto* attempt = FindPrimaryNativeLoadAttempt(report.native_execute);
+      if (report.native_execute.exit_reason == "libraries_failed_to_load" &&
+          attempt != nullptr && !attempt->library_name.empty()) {
+        AppendError(&report.errors, "native_dlopen_failed:" + attempt->library_name);
+      } else if (report.native_execute.exit_reason ==
+                     "jni_onload_missing_or_failed" &&
+                 attempt != nullptr && !attempt->library_name.empty()) {
+        AppendError(&report.errors,
+                    "native_jni_onload_missing:" + attempt->library_name);
+      } else if (report.native_execute.exit_reason ==
+                     "native_activity_entrypoint_missing" &&
+                 attempt != nullptr && !attempt->library_name.empty()) {
+        AppendError(&report.errors,
+                    "native_activity_entrypoint_missing:" +
+                        attempt->library_name);
+      }
     }
   }
+
+  RefreshNativeLoadingDetails(&report);
 
   if (report.surface_proof_requested) {
     report.surface = RunNativeApkSurfaceProof(report, options);
@@ -3241,6 +3504,16 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "  \"jni_onload_called\": "
          << (report.jni_onload_called ? "true" : "false") << ",\n"
          << "  \"jni_onload_result\": " << report.jni_onload_result << ",\n"
+         << "  \"native_loading_state\": \""
+         << EscapeJson(report.native_loading_state) << "\",\n"
+         << "  \"native_jni_state\": \"" << EscapeJson(report.native_jni_state)
+         << "\",\n"
+         << "  \"native_loading_library_name\": \""
+         << EscapeJson(report.native_loading_library_name) << "\",\n"
+         << "  \"native_loading_library_path\": \""
+         << EscapeJson(report.native_loading_library_path) << "\",\n"
+         << "  \"native_loading_detail\": \""
+         << EscapeJson(report.native_loading_detail) << "\",\n"
          << "  \"launch_status\": \"" << EscapeJson(report.launch_status)
          << "\",\n"
          << "  \"launch_ready\": "
@@ -4332,6 +4605,18 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"dex_parse_state\": \""
          << EscapeJson(report.first_android_app_start.dex_parse_state)
          << "\",\n"
+         << "    \"native_loading_state\": \""
+         << EscapeJson(report.first_android_app_start.native_loading_state)
+         << "\",\n"
+         << "    \"native_jni_state\": \""
+         << EscapeJson(report.first_android_app_start.native_jni_state)
+         << "\",\n"
+         << "    \"native_loading_library_name\": \""
+         << EscapeJson(report.first_android_app_start.native_loading_library_name)
+         << "\",\n"
+         << "    \"native_loading_detail\": \""
+         << EscapeJson(report.first_android_app_start.native_loading_detail)
+         << "\",\n"
          << "    \"bytecode_execution_state\": \""
          << EscapeJson(report.first_android_app_start.bytecode_execution_state)
          << "\",\n"
@@ -4783,6 +5068,18 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << ",\n"
          << "    \"execution_engine_ready\": "
          << (report.native_execute.execution_engine_ready ? "true" : "false")
+         << ",\n"
+         << "    \"candidate_library_paths\": "
+         << RenderJsonArray(report.native_execute.candidate_library_paths)
+         << ",\n"
+         << "    \"libraries_loaded\": "
+         << RenderJsonArray(report.native_execute.libraries_loaded) << ",\n"
+         << "    \"library_load_attempts\": "
+         << RenderNativeLibraryLoadAttemptsJson(
+                report.native_execute.library_load_attempts)
+         << ",\n"
+         << "    \"jni_onload_results\": "
+         << RenderJniOnLoadResultArray(report.native_execute.jni_onload_results)
          << ",\n"
          << "    \"exit_reason\": \""
          << EscapeJson(report.native_execute.exit_reason) << "\",\n"

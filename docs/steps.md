@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: JNI and Native Loading Checkpoint GREEN
+  Action: Extended the real keyboard APK native path so Linuxoid now records deterministic per-library `dlopen`, `JNI_OnLoad`, and entrypoint attempt facts, surfaces exact `native_loading_*` fields through `launch-apk`, and preserves that same upstream blocker through `launch-apk --first-app-start-proof` instead of letting downstream surface/runtime placeholders blur it.
+  Result: Linuxoid now names the real keyboard APK native seam as an exact upstream blocker with machine-readable recovery guidance, while the downstream managed seam remains the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` boundary for the execution-first checkpoint path.
+  Timestamp: 2026-05-19T03:25:00+05:30
+
 - Step: Runtime Context Bridge Checkpoint GREEN
   Action: Extended the keyboard-identity `SettingsActivity.onCreate(Landroid/os/Bundle;)V` fixture seam so Linuxoid now places the lifecycle receiver into the parameter-register window, materializes a deterministic `Landroid/os/Bundle;` placeholder, and stops at the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` framework boundary with exact blocker reporting instead of collapsing at `invoke_receiver_missing`.
   Result: Linuxoid now hands the next phase a smaller runtime-context blocker, `framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V`, while the real keyboard APK still honestly blocks earlier at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start`.

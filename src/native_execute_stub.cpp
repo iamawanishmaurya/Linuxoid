@@ -122,6 +122,17 @@ std::string BuildJniOnLoadResultsJson(
   return output.str();
 }
 
+std::size_t FindLibraryLoadAttemptIndex(
+    const std::vector<NativeLibraryLoadAttempt>& attempts,
+    const std::string& library_path) {
+  for (std::size_t index = 0; index < attempts.size(); ++index) {
+    if (attempts[index].library_path == library_path) {
+      return index;
+    }
+  }
+  return attempts.size();
+}
+
 std::string ResolveWorkingDirectory() {
   std::error_code error;
   const fs::path working_directory = fs::current_path(error);
@@ -132,6 +143,38 @@ std::string ResolveWorkingDirectory() {
 }
 
 }  // namespace
+
+std::string RenderNativeLibraryLoadAttemptsJson(
+    const std::vector<NativeLibraryLoadAttempt>& attempts) {
+  std::ostringstream output;
+  output << "[";
+  for (std::size_t index = 0; index < attempts.size(); ++index) {
+    if (index != 0) {
+      output << ", ";
+    }
+    const auto& attempt = attempts[index];
+    output << "{"
+           << "\"library_path\": \"" << EscapeJson(attempt.library_path)
+           << "\", "
+           << "\"library_name\": \"" << EscapeJson(attempt.library_name)
+           << "\", "
+           << "\"candidate_index\": " << attempt.candidate_index << ", "
+           << "\"load_state\": \"" << EscapeJson(attempt.load_state)
+           << "\", "
+           << "\"jni_state\": \"" << EscapeJson(attempt.jni_state)
+           << "\", "
+           << "\"entrypoint_state\": \""
+           << EscapeJson(attempt.entrypoint_state) << "\", "
+           << "\"jni_return_code\": " << attempt.jni_return_code << ", "
+           << "\"failure_reason\": \""
+           << EscapeJson(attempt.failure_reason) << "\", "
+           << "\"error_detail\": \"" << EscapeJson(attempt.error_detail)
+           << "\""
+           << "}";
+  }
+  output << "]";
+  return output.str();
+}
 
 std::vector<std::string> BuildNativeLibraryCandidates(
     const std::string& library_root) {
@@ -215,13 +258,25 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
   std::vector<LoadedLibraryHandle> loaded_libraries;
   loaded_libraries.reserve(report.candidate_library_paths.size());
   bool any_jni_onload_success = false;
-  for (const auto& candidate : report.candidate_library_paths) {
+  for (std::size_t candidate_index = 0;
+       candidate_index < report.candidate_library_paths.size();
+       ++candidate_index) {
+    const auto& candidate = report.candidate_library_paths[candidate_index];
+    NativeLibraryLoadAttempt attempt;
+    attempt.library_path = candidate;
+    attempt.library_name = fs::path(candidate).filename().string();
+    attempt.candidate_index = static_cast<int>(candidate_index);
     output << "[p1] trying: " << candidate << "\n";
     void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (handle == nullptr) {
       const char* error = dlerror();
+      attempt.load_state = "dlopen_failed";
+      attempt.failure_reason = "dlopen_failed";
+      attempt.error_detail =
+          error == nullptr ? "unknown_dlopen_error" : std::string(error);
       output << "[p1] dlopen failed: "
              << (error == nullptr ? "unknown error" : error) << "\n";
+      report.library_load_attempts.push_back(attempt);
       continue;
     }
 
@@ -229,6 +284,7 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
     report.dlopen_ok = true;
     report.libraries_loaded.push_back(candidate);
     loaded_libraries.push_back({candidate, handle});
+    attempt.load_state = "loaded";
     output << "[p1] dlopen OK: " << candidate << "\n";
 
     JniOnLoadResult jni_result;
@@ -238,9 +294,12 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
         reinterpret_cast<JniOnLoadFn>(dlsym(handle, "JNI_OnLoad"));
     const char* symbol_error = dlerror();
     if (jni_onload == nullptr || symbol_error != nullptr) {
+      attempt.jni_state = "missing";
+      attempt.failure_reason = "jni_onload_missing";
       jni_result.status = "missing";
       output << "[p1] JNI_OnLoad missing: " << candidate << "\n";
       report.jni_onload_results.push_back(jni_result);
+      report.library_load_attempts.push_back(attempt);
       continue;
     }
 
@@ -250,9 +309,12 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
     jni_result.call_succeeded = true;
     jni_result.status = "called";
     any_jni_onload_success = true;
+    attempt.jni_state = "called";
+    attempt.jni_return_code = jni_result.return_code;
     output << "[p1] JNI_OnLoad OK: " << candidate
            << " returned " << jni_result.return_code << "\n";
     report.jni_onload_results.push_back(jni_result);
+    report.library_load_attempts.push_back(attempt);
   }
 
   if (report.libraries_loaded.empty()) {
@@ -276,12 +338,24 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
     auto* candidate = reinterpret_cast<ANativeActivityCreateFn>(
         dlsym(library.handle, "ANativeActivity_onCreate"));
     const char* symbol_error = dlerror();
+    const std::size_t attempt_index =
+        FindLibraryLoadAttemptIndex(report.library_load_attempts, library.path);
     if (candidate == nullptr || symbol_error != nullptr) {
+      if (attempt_index < report.library_load_attempts.size()) {
+        report.library_load_attempts[attempt_index].entrypoint_state = "missing";
+        if (report.library_load_attempts[attempt_index].failure_reason.empty()) {
+          report.library_load_attempts[attempt_index].failure_reason =
+              "native_activity_entrypoint_missing";
+        }
+      }
       continue;
     }
     entrypoint = candidate;
     report.entrypoint_found = true;
     report.selected_library_path = library.path;
+    if (attempt_index < report.library_load_attempts.size()) {
+      report.library_load_attempts[attempt_index].entrypoint_state = "found";
+    }
     output << "[p1] entrypoint found: ANativeActivity_onCreate in "
            << library.path << "\n";
     if (IsEntrypointLibraryName(fs::path(library.path).filename().string())) {
@@ -367,6 +441,9 @@ std::string RenderNativeExecuteReportJson(const NativeExecuteReport& report) {
          << (report.execution_engine_ready ? "true" : "false") << ",\n"
          << "  \"libraries_loaded\": "
          << BuildJsonStringArray(report.libraries_loaded) << ",\n"
+         << "  \"library_load_attempts\": "
+         << RenderNativeLibraryLoadAttemptsJson(report.library_load_attempts)
+         << ",\n"
          << "  \"jni_onload_results\": "
          << BuildJniOnLoadResultsJson(report.jni_onload_results) << ",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)

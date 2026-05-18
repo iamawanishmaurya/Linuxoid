@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Phase 4 planned; next action is to execute 04-01 around the real keyboard x86_64 native-library load seam
-last_updated: "2026-05-18T14:24:50.000Z"
-last_activity: 2026-05-18 -- Phase 4 JNI and Native Loading planned
+stopped_at: Phase 4 complete; next action is to plan Phase 5 around visible Wayland interaction while preserving the narrowed native blocker truth
+last_updated: "2026-05-18T22:05:00.000Z"
+last_activity: 2026-05-18 -- Phase 4 JNI and Native Loading executed and closed
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 9
-  percent: 50
+  completed_plans: 11
+  percent: 67
 ---
 
 # Project State
@@ -21,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Run a real Android app directly on Linux through Linuxoid's own compatibility/runtime path, with honest execution and honest blockers instead of emulator fallback.
-**Current focus:** Phase 4 - JNI and Native Loading
+**Current focus:** Phase 5 - Visible Wayland Interaction
 
 ## Current Position
 
-Phase: 4 of 6 (JNI and Native Loading)
-Plan: 04-01 planned
-Status: Phase 4 planned - the real keyboard APK already stages `x86_64` libraries and now needs exact native-load/JNI seam work before managed start can move forward end to end
-Last activity: 2026-05-18 -- Phase 4 planned around per-library load attempts, JNI seams, and exact blocker propagation
+Phase: 5 of 6 (Visible Wayland Interaction)
+Plan: Planning not started
+Status: Phase 4 complete - Linuxoid now reports exact upstream native-load/JNI blockers for the real keyboard APK and preserves the downstream managed Bundle-boundary seam honestly
+Last activity: 2026-05-18 -- Phase 4 completed with per-library native load attempts and first-app-start blocker propagation
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 9
+- Total plans completed: 11
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -52,17 +52,17 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Execute 04-01 to turn `libraries_failed_to_load` into a smaller exact native-load seam for `/home/astra/Downloads/keyboard-0.1.28.apk`
-- Preserve the narrowed managed `SettingsActivity.onCreate(Landroid/os/Bundle;)V` blocker while Phase 4 tackles the upstream native/JNI launch blocker
+- Plan Phase 5 around the real keyboard APK's visible Wayland interaction path
+- Preserve the exact upstream native-load blocker and the downstream managed `SettingsActivity.onCreate(Landroid/os/Bundle;)V` seam while Linuxoid tackles visible app interaction
 
 ### Blockers/Concerns
 
-- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, stages six `x86_64` native libraries, and resolves `onCreate(Landroid/os/Bundle;)V` from staged DEX metadata, but the direct launch path still stops at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start` before end-to-end managed start can continue
+- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, stages six `x86_64` native libraries, and reports an exact upstream native blocker through `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, and `native_execute.library_load_attempts`, but the direct launch path still stops before visible app startup can continue
 - Next managed-runtime seam after lookup: `framework_boundary_reason: android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint` with `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
-- Phase 4 target outcome: narrow or remove the upstream native/JNI blocker while preserving the managed Bundle-boundary seam honestly
+- Phase 5 target outcome: move the real keyboard verification path from exact native/JNI truth toward visible surface interaction without losing the narrowed blocker story
 
 ## Session Continuity
 
 Last session: 2026-05-18 19:54
-Stopped at: Phase 4 planned; next action is to execute 04-01 around the real keyboard x86_64 native-library load seam
+Stopped at: Phase 4 complete; next action is to plan Phase 5 around the visible Wayland interaction seam
 Resume file: .planning/ROADMAP.md

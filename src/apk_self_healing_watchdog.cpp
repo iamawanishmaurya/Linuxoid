@@ -235,6 +235,13 @@ std::string DetermineRecommendedNextAction(
   if (AllContractsReady(report, state)) {
     return "none";
   }
+  if (!state.launch_ready &&
+      (report.launch_status == "native_library_staging_failed" ||
+       report.launch_status == "libraries_failed_to_load" ||
+       report.launch_status == "jni_onload_missing_or_failed" ||
+       report.launch_status == "native_activity_entrypoint_missing")) {
+    return "inspect_native_launch_diagnostics";
+  }
   if (!state.asset_ready) {
     return "restage_assets";
   }

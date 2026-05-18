@@ -6,6 +6,18 @@
 
 namespace wfa {
 
+struct NativeLibraryLoadAttempt {
+  std::string library_path;
+  std::string library_name;
+  int candidate_index = -1;
+  std::string load_state = "not_attempted";
+  std::string jni_state = "not_attempted";
+  std::string entrypoint_state = "not_checked";
+  int jni_return_code = 0;
+  std::string failure_reason;
+  std::string error_detail;
+};
+
 struct JniOnLoadResult {
   std::string library_path;
   bool symbol_present = false;
@@ -46,6 +58,7 @@ struct NativeExecuteReport {
   std::string selected_library_path;
   std::vector<std::string> candidate_library_paths;
   std::vector<std::string> libraries_loaded;
+  std::vector<NativeLibraryLoadAttempt> library_load_attempts;
   std::vector<JniOnLoadResult> jni_onload_results;
   std::string working_directory;
   std::string exit_reason;
@@ -54,6 +67,8 @@ struct NativeExecuteReport {
 
 std::vector<std::string> BuildNativeLibraryCandidates(
     const std::string& library_root);
+std::string RenderNativeLibraryLoadAttemptsJson(
+    const std::vector<NativeLibraryLoadAttempt>& attempts);
 NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request);
 std::string RenderNativeExecuteReportJson(const NativeExecuteReport& report);
 

@@ -69,10 +69,10 @@ std::string RenderProjectStatusReport() {
   output << "Scaffold Readiness: " << RenderLoadingBar(phase_progress) << "\n";
   output << "Native Execution Readiness: " << RenderLoadingBar(98) << "\n";
   output << "Execution Focus: P0 Freeze & Triage -> P1 NDK Execution Core -> P2 Window + Graphics\n";
-  output << "Current Direct Runtime Phase: Runtime Context Bridge Checkpoint\n";
-  output << "Next Phase: Phase 4 JNI and Native Loading (while the next managed-runtime seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`)\n";
+  output << "Current Direct Runtime Phase: JNI and Native Loading Checkpoint\n";
+  output << "Next Phase: Phase 5 Visible Wayland Interaction (while the next managed-runtime seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`)\n";
   output << "First App Start Checkpoint: `launch-apk --first-app-start-proof` still executes the deterministic fixture `MainActivity.onCreate()I` through Linuxoid's minimal interpreter, but it now also resolves the real `org.futo.inputmethod.latin/.uix.settings.SettingsActivity` class and `onCreate(Landroid/os/Bundle;)V` seam from staged DEX metadata, reports `class_loading_state: resolved-from-staged-dex`, `target_class_lookup_state: class_resolved`, `target_method_lookup_state: method_resolved`, and `code_item_lookup_state: code_item_resolved`, and on the keyboard-identity managed seam now materializes the lifecycle receiver plus Bundle placeholder and stops honestly at `framework_boundary_reason: android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint`.\n";
-  output << "Keyboard APK Intake Checkpoint: `inspect-apk-resources`, `inspect-apk-permissions`, and plain `launch-apk` now clear the real `keyboard-0.1.28.apk` manifest/asset/permission seam through `archive_binary_xml_decoded` metadata and deflated ZIP reads; the end-to-end real launch still blocks at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start`, not manifest decoding.\n";
+  output << "Keyboard APK Native Checkpoint: `inspect-apk-resources`, `inspect-apk-permissions`, and plain `launch-apk` now clear the real `keyboard-0.1.28.apk` manifest/asset/permission seam through `archive_binary_xml_decoded` metadata and deflated ZIP reads; the end-to-end real launch still blocks at `libraries_failed_to_load`, but Linuxoid now reports exact `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, and deterministic `native_execute.library_load_attempts` evidence instead of a generic native failure.\n";
   output << "Legacy Scaffold Phases:\n";
 
   for (const auto& phase : phases) {

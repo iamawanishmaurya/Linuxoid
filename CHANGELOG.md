@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.121 - 2026-05-18
+
+- Close **Phase 4: JNI and Native Loading** around the real keyboard APK native seam instead of widening the runtime sideways.
+- Extend the direct `launch-apk` native execute report so Linuxoid now records deterministic per-library `dlopen`, `JNI_OnLoad`, and entrypoint attempt facts through `native_execute.library_load_attempts[]`, and surface exact top-level fields like `native_loading_state`, `native_jni_state`, `native_loading_library_name`, and `native_loading_detail`.
+- Thread that upstream native blocker through `launch-apk --first-app-start-proof` so the managed checkpoint now stays honest about native load failures with `blocking_reason: native_dlopen_failed_for_first_app_start:<library>`, `recommended_recovery_action: inspect_native_launch_diagnostics`, and an exact next blocker instead of drifting into later surface/runtime placeholder guidance.
+
 ## v0.1.120 - 2026-05-18
 
 - Close **Phase 3: Runtime Context Bridge** around the first post-receiver managed-runtime seam instead of widening the interpreter sideways.

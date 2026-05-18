@@ -259,6 +259,38 @@ What it does **not** prove yet:
 - this is still not a real Android framework lifecycle or `ActivityThread`
 - the current real-app blocker after intake is native library loading for the staged `x86_64` keyboard libraries, not manifest decoding
 
+## JNI and Native Loading Checkpoint
+
+Linuxoid now narrows that real keyboard APK native seam instead of collapsing it into only `libraries_failed_to_load`.
+
+- `compatctl launch-apk /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>`
+  - still stops honestly at `launch_status: "libraries_failed_to_load"`
+  - now also reports:
+    - `native_loading_state`
+    - `native_jni_state`
+    - `native_loading_library_name`
+    - `native_loading_library_path`
+    - `native_loading_detail`
+  - and exposes deterministic `native_execute.library_load_attempts[]` facts for each staged host-ABI candidate
+- `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>`
+  - now preserves that upstream native blocker through the managed-start proof instead of letting later surface or framework placeholders blur it
+  - reports exact fields such as:
+    - `blocking_reason: "native_dlopen_failed_for_first_app_start:<library>"`
+    - `recommended_recovery_action: "inspect_native_launch_diagnostics"`
+    - `next_blocker: "resolve_dlopen_failure_for_<library>"`
+
+What this checkpoint actually proves:
+
+- Linuxoid stages the real keyboard APK `x86_64` libraries through the same direct app-start path.
+- Linuxoid records exact per-library `dlopen`, `JNI_OnLoad`, and entrypoint-attempt state.
+- The Self-Healing Android Device path now keeps native/JNI blockers upstream and explicit when they prevent managed start.
+
+What it still does **not** prove:
+
+- this is still not a successful JNI-backed app launch
+- this is still not full ART-owned framework dispatch
+- the next downstream managed seam remains the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` boundary once native loading is solved
+
 `--dex-proof` now stages `classes.dex`, `classes2.dex`, and similar entries into the deterministic APK session root, parses safe DEX header plus string/type/proto/method/class metadata, can locate a deterministic entrypoint code item, and emits structured `dex` plus `art_bootstrap` JSON without claiming full Java/Kotlin ART execution yet.
 
 `--storage-proof` now implements **P9 Android App Storage + Sandbox Contract** for the direct APK session path. It materializes deterministic `sandbox/data/data/<package>`-style directories, exposes `files` plus `cache` plus native-lib plus asset/resource roots, validates app-relative paths through a Linuxoid safe resolver, writes a session marker file, rejects escape attempts explicitly, and emits nested `storage` JSON plus `storage_health` and `sandbox_health` fields for the Self-Healing Android Device loop while keeping `isolation_level: path_sandbox_only` honest.
@@ -382,7 +414,8 @@ So this is a truthful managed-activity start checkpoint for the Self-Healing And
 
 Immediate next blocker:
 
-- real keyboard APK end-to-end launch still blocks earlier at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start`
+- real keyboard APK end-to-end launch still blocks earlier at `libraries_failed_to_load`
+- Linuxoid now reports that upstream blocker as an exact native-load seam through `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, and `native_execute.library_load_attempts`
 - the next managed-runtime interpreter seam after lookup is now the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` bundle boundary
 - the next larger runtime-context blocker is `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
 

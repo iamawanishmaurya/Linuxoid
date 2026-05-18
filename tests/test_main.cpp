@@ -6449,10 +6449,15 @@ void TestNativeExecuteStubRunsFixtureNativeActivity() {
          "expected execution readiness for fixture run");
   Expect(output.find("\"libraries_loaded\": [") != std::string::npos,
          "expected loaded libraries in fixture json");
+  Expect(output.find("\"library_load_attempts\": [") != std::string::npos,
+         "expected per-library load attempts in fixture json");
   Expect(output.find("libcalculator.so") != std::string::npos,
          "expected calculator fixture library in output json");
   Expect(output.find("\"status\": \"called\"") != std::string::npos,
          "expected called jni onload result");
+  Expect(output.find("\"entrypoint_state\": \"found\"") !=
+             std::string::npos,
+         "expected entrypoint state to be found for the fixture library");
   Expect(output.find("\"entrypoint_found\": true") !=
              std::string::npos,
          "expected entrypoint flag in fixture json");
@@ -6555,6 +6560,45 @@ void TestLaunchApkReportsMissingNativeLibraryHonestly() {
   Expect(report.native_libraries.empty(),
          "expected no staged native libraries");
   Expect(report.assets_count == 1, "expected asset staging even without native libs");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkReportsExactNativeLoadFailureDetails() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-broken-native-lib", false, true,
+      {{"lib/x86_64/libbroken.so", "not a real shared object\n"}});
+
+  const auto report =
+      wfa::LaunchNativeApk(fixture.apk_path.string(),
+                           {.staging_root = fixture.staging_root.string(),
+                            .watchdog_seconds = 1});
+
+  Expect(!report.launch_ready,
+         "expected broken native library fixture to stay blocked");
+  Expect(report.launch_status == "libraries_failed_to_load",
+         "expected library load failure launch status");
+  Expect(report.native_loading_state == "dlopen_failed",
+         "expected precise native loading state for broken library fixture");
+  Expect(report.native_jni_state == "not_attempted",
+         "expected JNI to stay unattempted when dlopen never succeeds");
+  Expect(report.native_loading_library_name == "libbroken.so",
+         "expected broken library name in launch report");
+  Expect(!report.native_loading_detail.empty(),
+         "expected exact loader detail for broken library fixture");
+  Expect(!report.native_execute.library_load_attempts.empty(),
+         "expected per-library native load attempts");
+  Expect(report.native_execute.library_load_attempts.front().library_name ==
+             "libbroken.so",
+         "expected first native load attempt to reference the broken library");
+  Expect(report.native_execute.library_load_attempts.front().load_state ==
+             "dlopen_failed",
+         "expected dlopen_failed state in native load attempt");
+  Expect(std::find(report.errors.begin(), report.errors.end(),
+                   "native_dlopen_failed:libbroken.so") !=
+             report.errors.end(),
+         "expected exact broken-library error in launch report");
 
   fs::remove_all(fixture.root);
 }
@@ -10180,6 +10224,54 @@ void TestLaunchApkFirstAppStartCheckpointBlocksWithoutRuntimeRoot() {
          "expected retry runtime bootstrap recommendation in first app start json");
 
   fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointReportsUpstreamNativeLoadBlocker() {
+  namespace fs = std::filesystem;
+  const auto launch = CreateNativeApkLaunchFixture(
+      "linuxoid-first-app-start-native-load-blocker", false, true,
+      {{"lib/x86_64/libbroken.so", "not a real shared object\n"},
+       {"classes.dex",
+        BuildFrameworkBoundaryLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const auto runtime_root = CreateArtRuntimeRootFixture(launch.root / "art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          launch.apk_path.string() + " " + launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected broken-native first app start checkpoint to stay blocked");
+  Expect(output.find("\"first_app_start_health\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked first app start health for broken native library");
+  Expect(output.find("\"native_loading_state\": \"dlopen_failed\"") !=
+             std::string::npos,
+         "expected precise native loading state in first app start json");
+  Expect(output.find("\"native_loading_library_name\": \"libbroken.so\"") !=
+             std::string::npos,
+         "expected broken library name in first app start json");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"native_dlopen_failed_for_first_app_start:libbroken.so\"") !=
+             std::string::npos,
+         "expected exact upstream native load blocker in first app start json");
+  Expect(output.find("\"recommended_recovery_action\": "
+                     "\"inspect_native_launch_diagnostics\"") !=
+             std::string::npos,
+         "expected native diagnostics recommendation in first app start json");
+  Expect(output.find("\"next_blocker\": "
+                     "\"resolve_dlopen_failure_for_libbroken_so\"") !=
+             std::string::npos,
+         "expected actionable next blocker for broken library first app start");
+
+  fs::remove_all(launch.root);
 }
 
 void TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid() {
@@ -14872,6 +14964,7 @@ int main() {
     TestLaunchApkCommandRunsNativeOnlyFixture();
     TestLaunchApkRejectsPathTraversalEntries();
     TestLaunchApkReportsMissingNativeLibraryHonestly();
+    TestLaunchApkReportsExactNativeLoadFailureDetails();
     TestLaunchApkRejectsInvalidArchive();
     TestLaunchApkRejectsMissingManifestMetadata();
     TestLaunchApkRejectsUnsupportedHostAbiHonestly();
@@ -14956,6 +15049,7 @@ int main() {
     TestLaunchApkFirstAppStartCheckpointReportsUnsupportedConstructorBoundary();
     TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary();
     TestLaunchApkFirstAppStartCheckpointBlocksWithoutRuntimeRoot();
+    TestLaunchApkFirstAppStartCheckpointReportsUpstreamNativeLoadBlocker();
     TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid();
     TestLaunchApkFirstAppStartProofTargetsKeyboardSettingsActivityFixture();
     TestInspectApkCompatibilityCommandReportsNeedsRealArtForJavaFixture();
