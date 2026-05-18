@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 1 of 6 (Keyboard APK Intake)
-Plan: -
-Status: Ready to plan
-Last activity: 2026-05-18 - Project initialized and first real app execution roadmap created
+Plan: 01-01
+Status: Planned - ready to execute
+Last activity: 2026-05-18 - Phase 1 context, research, and execution plans created for the real keyboard APK intake checkpoint
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -35,15 +35,17 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- 01-01: Harden real-world APK manifest and metadata intake for the keyboard target
+- 01-02: Validate staging, assets, permissions, and native library inventory for the target APK
+- 01-03: Turn the real APK intake into a stable launch precondition and regression proof
 
 ### Blockers/Concerns
 
-- Current major runtime blocker: bridging the real app lifecycle path into a more complete ART-owned context
-- Real APK manifest/resource decoding may become the next hard blocker for the verification APK
+- Current phase blocker: the real keyboard APK does not yet have a trustworthy intake path through Linuxoid's direct session flow
+- Likely next implementation seam: binary AndroidManifest decoding and/or large real-APK intake behavior inside `src/apk_native_launch.cpp`
 
 ## Session Continuity
 
-Last session: 2026-05-18 17:20
-Stopped at: Roadmap drafted for the first real app execution milestone
-Resume file: None
+Last session: 2026-05-18 20:10
+Stopped at: Phase 1 planned and ready for execution under the inline Codex-driven GSD flow
+Resume file: .planning/phases/01-keyboard-apk-intake/01-01-PLAN.md
