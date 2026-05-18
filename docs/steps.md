@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: JNI Registration Dispatch Checkpoint GREEN
+  Action: Extended the direct native execute path so Linuxoid now builds a richer JNI stub environment, dispatches a real registration callback after `JNI_OnLoad`, observes `RegisterNatives`, and threads registration dispatch plus registration outcome facts through `launch-apk`, `--first-app-start-proof`, and the watchdog instead of stopping at a generic registration-required seam.
+  Result: The real keyboard APK path now reports `native_loading_state: managed_activity_dispatch_required`, `native_registration_dispatch_state: called`, `native_registration_outcome_state: register_natives_completed`, `native_registration_class_name: org/futo/inputmethod/latin/xlm/LanguageModel`, `native_registration_method_count: 4`, and `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`, while the deeper managed seam remains explicit instead of being blurred back into native startup.
+  Timestamp: 2026-05-19T03:20:00+05:30
+
 - Step: Managed App-Start Dispatch Checkpoint GREEN
   Action: Extended the direct native execute path so Linuxoid now inspects the staged entry library's exported symbols after `JNI_OnLoad`, selects a Linuxoid-owned post-bridge dispatch seam, and surfaces deterministic `post_jni_dispatch_symbol_*` facts instead of stopping at a generic managed bridge requirement. Added focused regression coverage for the narrowed launch seam and first-app-start blocker propagation.
   Result: The real keyboard APK path now reports `native_loading_state: jni_registration_dispatch_required`, `native_app_start_bridge_state: linuxoid_managed_app_start_bridge_selected`, `native_post_jni_startup_state: jni_registration_dispatch_required`, and `next_blocker: dispatch_jni_registration_for_libjni_latinime_so`, while the deeper managed seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.

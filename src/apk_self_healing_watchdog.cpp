@@ -241,6 +241,8 @@ std::string DetermineRecommendedNextAction(
        report.launch_status == "jni_onload_missing_or_failed" ||
        report.launch_status == "native_activity_entrypoint_missing" ||
        report.launch_status == "jni_registration_dispatch_required" ||
+       report.launch_status == "jni_registration_callback_crashed" ||
+       report.launch_status == "managed_activity_dispatch_required" ||
        report.launch_status == "jni_direct_method_dispatch_required" ||
        report.launch_status == "linuxoid_managed_app_start_bridge_required")) {
     return "inspect_native_launch_diagnostics";
@@ -309,6 +311,8 @@ bool HasUpstreamNativeLaunchBlocker(const NativeApkLaunchReport& report) {
       report.launch_status == "jni_onload_missing_or_failed" ||
       report.launch_status == "native_activity_entrypoint_missing" ||
       report.launch_status == "jni_registration_dispatch_required" ||
+      report.launch_status == "jni_registration_callback_crashed" ||
+      report.launch_status == "managed_activity_dispatch_required" ||
       report.launch_status == "jni_direct_method_dispatch_required" ||
       report.launch_status == "linuxoid_managed_app_start_bridge_required") {
     return true;
@@ -316,6 +320,8 @@ bool HasUpstreamNativeLaunchBlocker(const NativeApkLaunchReport& report) {
   return report.native_loading_state == "dlopen_failed" ||
          report.native_loading_state == "staging_failed" ||
          report.native_loading_state == "jni_registration_dispatch_required" ||
+         report.native_loading_state == "jni_registration_callback_crashed" ||
+         report.native_loading_state == "managed_activity_dispatch_required" ||
          report.native_loading_state == "jni_direct_method_dispatch_required" ||
          report.native_loading_state ==
              "linuxoid_managed_app_start_bridge_required" ||
@@ -349,6 +355,18 @@ std::string DescribeUpstreamNativeLaunchBlocker(
           "jni_registration_dispatch_required" &&
       !report.native_loading_library_name.empty()) {
     return "jni_registration_dispatch_required:" +
+           report.native_loading_library_name;
+  }
+  if (report.native_loading_state ==
+          "jni_registration_callback_crashed" &&
+      !report.native_loading_library_name.empty()) {
+    return "jni_registration_callback_crashed:" +
+           report.native_loading_library_name;
+  }
+  if (report.native_loading_state ==
+          "managed_activity_dispatch_required" &&
+      !report.native_loading_library_name.empty()) {
+    return "managed_activity_dispatch_required:" +
            report.native_loading_library_name;
   }
   if (report.native_loading_state ==

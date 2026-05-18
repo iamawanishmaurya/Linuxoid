@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: active
-stopped_at: Phase 10 planned; next work is to dispatch JNI registration for `libjni_latinime.so` before the later managed `Activity.onCreate(Bundle)` seam
-last_updated: "2026-05-19T02:31:00.000Z"
-last_activity: 2026-05-19 -- Phase 10 JNI Registration Dispatch planned
+stopped_at: Phase 10 complete; next work is to bridge managed activity dispatch for `libjni_latinime.so` before the later managed `Activity.onCreate(Bundle)` seam
+last_updated: "2026-05-19T04:10:00.000Z"
+last_activity: 2026-05-19 -- Phase 10 JNI Registration Dispatch completed
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 28
-  completed_plans: 25
-  percent: 89
+  completed_plans: 28
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Run a real Android app directly on Linux through Linuxoid's own compatibility/runtime path, with honest execution and honest blockers instead of emulator fallback.
-**Current focus:** Phase 10 planned - JNI Registration Dispatch
+**Current focus:** Phase 10 complete - JNI Registration Dispatch
 
 ## Current Position
 
 Phase: 10 of 10 (JNI Registration Dispatch)
-Plan: planned
-Status: Phase 10 planned - Linuxoid now needs to execute the `libjni_latinime.so` registration-helper boundary and expose the first post-registration managed bootstrap seam
-Last activity: 2026-05-19 -- Phase 10 planning created around the JNI registration dispatch seam
+Plan: complete
+Status: Phase 10 complete - Linuxoid now dispatches a real JNI registration callback for `libjni_latinime.so` and the next blocker is managed activity dispatch into the runtime context
+Last activity: 2026-05-19 -- Phase 10 execution completed around the JNI registration seam
 
-Progress: [█████████░] 89%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -52,19 +52,18 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Dispatch JNI registration for the JNI-shaped `libjni_latinime.so`
 - Bridge the downstream managed seam `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
-- Start the next milestone for JNI registration execution, framework bootstrap, and managed app ownership
+- Start the next milestone for managed activity dispatch, framework bootstrap, and managed app ownership
 
 ### Blockers/Concerns
 
-- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, stages six `x86_64` native libraries, preserves repeated sandbox/permission/AppOps continuity, preloads the current Android-compat shim set, gets `libjni_latinime.so` loaded, calls `JNI_OnLoad`, discovers a registration-helper export, and now reports the sharpened upstream blocker through `native_loading_state`, `native_app_start_bridge_state`, `native_post_jni_startup_state`, `native_post_jni_dispatch_symbol`, `native_loading_library_name`, and nested `native_execute.*` fields
-- Current exact live blocker: `native_loading_state: jni_registration_dispatch_required`, `native_jni_state: called`, `native_loading_library_name: libjni_latinime.so`, `next_blocker: dispatch_jni_registration_for_libjni_latinime_so`
-- Current planning target: once that JNI registration dispatch executes, the next exact seam must become managed bootstrap or framework dispatch instead of collapsing back into generic native launch wording
+- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, stages six `x86_64` native libraries, preserves repeated sandbox/permission/AppOps continuity, preloads the current Android-compat shim set, gets `libjni_latinime.so` loaded, calls `JNI_OnLoad`, dispatches a real JNI registration callback, observes `RegisterNatives` for `org/futo/inputmethod/latin/xlm/LanguageModel`, and now reports the sharpened upstream blocker through `native_loading_state`, `native_registration_dispatch_state`, `native_registration_outcome_state`, `native_registration_class_name`, `native_loading_library_name`, and nested `native_execute.*` fields
+- Current exact live blocker: `native_loading_state: managed_activity_dispatch_required`, `native_jni_state: called`, `native_loading_library_name: libjni_latinime.so`, `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
+- Current planning target: once that JNI registration dispatch completes, the next exact seam must stay managed bootstrap or framework dispatch instead of collapsing back into generic native launch wording
 - Next managed-runtime seam after the native load moves: `framework_boundary_reason: android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint` with `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
 
 ## Session Continuity
 
 Last session: 2026-05-19 00:05
-Stopped at: Phase 10 planned; next work is to dispatch JNI registration for `libjni_latinime.so`, then bridge the managed `Activity.onCreate(Bundle)` seam
+Stopped at: Phase 10 complete; next work is to bridge managed activity dispatch for `libjni_latinime.so`, then bridge the managed `Activity.onCreate(Bundle)` seam
 Resume file: .planning/ROADMAP.md

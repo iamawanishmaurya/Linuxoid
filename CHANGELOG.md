@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.128 - 2026-05-19
+
+- Close **Phase 10: JNI Registration Dispatch** around the real keyboard APK's post-`JNI_OnLoad` seam instead of widening into a broad framework rewrite.
+- Extend the direct native execute path so once `libjni_latinime.so` loads and `JNI_OnLoad` succeeds, Linuxoid dispatches a real JNI registration callback, observes `RegisterNatives`, and surfaces `native_registration_dispatch_*` plus `native_registration_outcome_*` facts instead of stopping at `jni_registration_dispatch_required`.
+- Tighten `launch-apk --first-app-start-proof`, watchdog gating, and the JNI registration regression fixtures so the current live blocker stays stable and honest: `blocking_reason: managed_activity_dispatch_required_for_first_app_start:libjni_latinime.so`, `primary_blocker_reason: managed_activity_dispatch_required:libjni_latinime.so`, and the next exact seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+
 ## v0.1.127 - 2026-05-19
 
 - Close **Phase 9: Managed App-Start Dispatch** around the real keyboard APK's first post-bridge JNI seam instead of widening into a broad framework rewrite.

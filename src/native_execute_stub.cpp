@@ -24,9 +24,12 @@ namespace wfa {
 
 namespace fs = std::filesystem;
 
+std::string BuildSignalTrapDetail(const NativeSignalTrapInfo& trap);
+
 namespace {
 
 using JniOnLoadFn = int (*)(JavaVM*, void*);
+using JniRegistrationCallbackFn = void (*)(JNIEnv*);
 
 struct LoadedLibraryHandle {
   std::string path;
@@ -38,6 +41,17 @@ struct PostJniDispatchBoundary {
   std::string symbol_kind = "none";
   std::string symbol_name;
   std::string reason = "no_post_jni_dispatch_symbols_detected";
+};
+
+struct RegistrationDispatchOutcome {
+  std::string dispatch_state = "not_attempted";
+  std::string dispatch_symbol_kind = "none";
+  std::string dispatch_symbol;
+  std::string outcome_state = "not_applicable";
+  std::string outcome_reason = "none";
+  std::string class_name;
+  int method_count = 0;
+  std::string error_detail;
 };
 
 #ifndef SHT_GNU_versym
@@ -376,6 +390,16 @@ PostJniDispatchBoundary DiscoverPostJniDispatchBoundary(
     const std::string& library_path) {
   const auto exported_symbols = ReadElfDynamicSymbolNames(library_path);
   for (const auto& symbol_name : exported_symbols) {
+    if ((symbol_name.find("register_") != std::string::npos ||
+         symbol_name.find("Register") != std::string::npos) &&
+        symbol_name.find("registerNativeMethods") == std::string::npos) {
+      return {.state = "jni_registration_dispatch_required",
+              .symbol_kind = "registration_callback",
+              .symbol_name = symbol_name,
+              .reason = "jni_registration_callback_symbol_detected"};
+    }
+  }
+  for (const auto& symbol_name : exported_symbols) {
     if (symbol_name == "registerNativeMethods" ||
         symbol_name.find("registerNativeMethods") != std::string::npos) {
       return {.state = "jni_registration_dispatch_required",
@@ -392,16 +416,114 @@ PostJniDispatchBoundary DiscoverPostJniDispatchBoundary(
               .reason = "jni_direct_method_export_detected"};
     }
   }
+  return {};
+}
+
+int RankRegistrationCallbackSymbol(const std::string& symbol_name) {
+  if (symbol_name.find("latinime") != std::string::npos) {
+    return 0;
+  }
+  if (symbol_name.find("voiceinput") != std::string::npos) {
+    return 1;
+  }
+  return 2;
+}
+
+std::vector<std::string> CollectRegistrationCallbackSymbols(
+    const std::string& library_path) {
+  auto exported_symbols = ReadElfDynamicSymbolNames(library_path);
+  std::vector<std::string> callbacks;
   for (const auto& symbol_name : exported_symbols) {
-    if (symbol_name.find("register_") != std::string::npos ||
-        symbol_name.find("Register") != std::string::npos) {
-      return {.state = "jni_registration_dispatch_required",
-              .symbol_kind = "registration_callback",
-              .symbol_name = symbol_name,
-              .reason = "jni_registration_callback_symbol_detected"};
+    if ((symbol_name.find("register_") != std::string::npos ||
+         symbol_name.find("Register") != std::string::npos) &&
+        symbol_name.find("registerNativeMethods") == std::string::npos) {
+      callbacks.push_back(symbol_name);
     }
   }
-  return {};
+  std::sort(callbacks.begin(), callbacks.end(),
+            [](const std::string& left, const std::string& right) {
+              const int left_rank = RankRegistrationCallbackSymbol(left);
+              const int right_rank = RankRegistrationCallbackSymbol(right);
+              if (left_rank != right_rank) {
+                return left_rank < right_rank;
+              }
+              return left < right;
+            });
+  return callbacks;
+}
+
+RegistrationDispatchOutcome AttemptRegistrationCallbackDispatch(
+    const LoadedLibraryHandle& library, const std::string& symbol_name,
+    std::ostringstream& output) {
+  RegistrationDispatchOutcome outcome;
+  outcome.dispatch_state = "symbol_resolved";
+  outcome.dispatch_symbol_kind = "registration_callback";
+  outcome.dispatch_symbol = symbol_name;
+
+  dlerror();
+  auto callback = reinterpret_cast<JniRegistrationCallbackFn>(
+      dlsym(library.handle, symbol_name.c_str()));
+  const char* symbol_error = dlerror();
+  if (callback == nullptr || symbol_error != nullptr) {
+    outcome.dispatch_state = "symbol_missing";
+    outcome.outcome_state = "registration_callback_symbol_missing";
+    outcome.outcome_reason = "registration_callback_symbol_missing";
+    outcome.error_detail =
+        symbol_error == nullptr ? "unknown_dlsym_error" : std::string(symbol_error);
+    return outcome;
+  }
+
+  ResetStubJniEnvironmentState();
+  output << "[p1] dispatching JNI registration callback: " << symbol_name
+         << "\n";
+  sigjmp_buf signal_environment;
+  const int trapped_signal = BeginSignalTrap(&signal_environment);
+  if (trapped_signal != 0) {
+    const NativeSignalTrapInfo trap = GetLastSignalTrapInfo();
+    EndSignalTrap();
+    outcome.dispatch_state = "crashed";
+    outcome.outcome_state = "registration_callback_crashed";
+    outcome.outcome_reason = "registration_callback_crashed";
+    outcome.error_detail = BuildSignalTrapDetail(trap);
+    output << "[p1] registration callback crashed: " << symbol_name << " "
+           << outcome.error_detail << "\n";
+    return outcome;
+  }
+
+  callback(MakeStubJniEnv());
+  EndSignalTrap();
+  outcome.dispatch_state = "called";
+
+  const auto& stub_state = GetStubJniEnvironmentState();
+  if (!stub_state.native_registrations.empty()) {
+    outcome.outcome_state = "register_natives_completed";
+    outcome.outcome_reason = "jni_registration_callback_observed_register_natives";
+    outcome.class_name = stub_state.native_registrations.front().class_name;
+    for (const auto& registration : stub_state.native_registrations) {
+      outcome.method_count += registration.method_count;
+    }
+    output << "[p1] registration callback completed: " << symbol_name
+           << " class=" << outcome.class_name
+           << " methods=" << outcome.method_count << "\n";
+    return outcome;
+  }
+
+  if (stub_state.find_class_calls > 0) {
+    outcome.outcome_state = "find_class_without_register_natives";
+    outcome.outcome_reason =
+        "jni_registration_callback_resolved_class_without_register_natives";
+    outcome.class_name =
+        stub_state.find_class_requests.empty() ? "" : stub_state.find_class_requests.front();
+    output << "[p1] registration callback resolved class without RegisterNatives: "
+           << symbol_name << "\n";
+    return outcome;
+  }
+
+  outcome.outcome_state = "no_jni_registration_observed";
+  outcome.outcome_reason = "jni_registration_callback_returned_without_jni_activity";
+  output << "[p1] registration callback returned without observed JNI registration: "
+         << symbol_name << "\n";
+  return outcome;
 }
 
 bool RequiresAndroidCompatibilityShims(const std::string& library_path) {
@@ -935,26 +1057,85 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
       report.post_jni_startup_state = "jni_onload_crashed";
       report.app_start_bridge_reason = "jni_onload_crashed";
     } else if (selected_jni_library != nullptr && any_jni_onload_success) {
-      const PostJniDispatchBoundary boundary =
-          DiscoverPostJniDispatchBoundary(selected_jni_library->path);
-      report.post_jni_dispatch_symbol_kind = boundary.symbol_kind;
-      report.post_jni_dispatch_symbol = boundary.symbol_name;
-      report.post_jni_dispatch_reason = boundary.reason;
-      if (boundary.state == "jni_registration_dispatch_required" ||
-          boundary.state == "jni_direct_method_dispatch_required") {
+      const auto registration_callbacks =
+          CollectRegistrationCallbackSymbols(selected_jni_library->path);
+      RegistrationDispatchOutcome registration_outcome;
+      bool registration_callback_completed = false;
+      bool registration_callback_crashed = false;
+      for (const auto& callback_symbol : registration_callbacks) {
+        registration_outcome = AttemptRegistrationCallbackDispatch(
+            *selected_jni_library, callback_symbol, output);
+        if (registration_outcome.dispatch_state == "crashed") {
+          registration_callback_crashed = true;
+          break;
+        }
+        if (registration_outcome.outcome_state == "register_natives_completed") {
+          registration_callback_completed = true;
+          break;
+        }
+      }
+
+      if (!registration_outcome.dispatch_symbol.empty()) {
+        report.registration_dispatch_state = registration_outcome.dispatch_state;
+        report.registration_dispatch_symbol_kind =
+            registration_outcome.dispatch_symbol_kind;
+        report.registration_dispatch_symbol =
+            registration_outcome.dispatch_symbol;
+        report.registration_outcome_state = registration_outcome.outcome_state;
+        report.registration_outcome_reason =
+            registration_outcome.outcome_reason;
+        report.registration_class_name = registration_outcome.class_name;
+        report.registration_method_count = registration_outcome.method_count;
+        report.post_jni_dispatch_symbol_kind =
+            registration_outcome.dispatch_symbol_kind;
+        report.post_jni_dispatch_symbol =
+            registration_outcome.dispatch_symbol;
+        report.post_jni_dispatch_reason =
+            registration_outcome.outcome_reason;
+      } else {
+        report.registration_dispatch_state = "not_attempted";
+        report.registration_outcome_state = "not_applicable";
+        report.registration_outcome_reason = "no_registration_callback_symbols_detected";
+      }
+
+      if (registration_callback_crashed) {
         report.app_start_bridge_state =
             "linuxoid_managed_app_start_bridge_selected";
         report.app_start_bridge_reason =
-            "jni_onload_succeeded_without_native_activity_entrypoint";
-        report.post_jni_startup_state = boundary.state;
-        report.exit_reason = boundary.state;
-      } else {
+            "jni_registration_callback_crashed_after_jni_onload";
+        report.post_jni_startup_state = "jni_registration_callback_crashed";
+        report.exit_reason = "jni_registration_callback_crashed";
+      } else if (registration_callback_completed) {
         report.app_start_bridge_state =
-            "linuxoid_managed_app_start_bridge_required";
+            "linuxoid_managed_app_start_bridge_selected";
         report.app_start_bridge_reason =
-            "jni_onload_succeeded_without_native_activity_entrypoint";
+            "jni_registration_completed_without_native_activity_entrypoint";
         report.post_jni_startup_state = "managed_activity_dispatch_required";
-        report.exit_reason = "linuxoid_managed_app_start_bridge_required";
+        report.exit_reason = "managed_activity_dispatch_required";
+      } else {
+        const PostJniDispatchBoundary boundary =
+            DiscoverPostJniDispatchBoundary(selected_jni_library->path);
+        if (report.post_jni_dispatch_symbol.empty()) {
+          report.post_jni_dispatch_symbol_kind = boundary.symbol_kind;
+          report.post_jni_dispatch_symbol = boundary.symbol_name;
+          report.post_jni_dispatch_reason = boundary.reason;
+        }
+        if (boundary.state == "jni_registration_dispatch_required" ||
+            boundary.state == "jni_direct_method_dispatch_required") {
+          report.app_start_bridge_state =
+              "linuxoid_managed_app_start_bridge_selected";
+          report.app_start_bridge_reason =
+              "jni_onload_succeeded_without_native_activity_entrypoint";
+          report.post_jni_startup_state = boundary.state;
+          report.exit_reason = boundary.state;
+        } else {
+          report.app_start_bridge_state =
+              "linuxoid_managed_app_start_bridge_required";
+          report.app_start_bridge_reason =
+              "jni_onload_succeeded_without_native_activity_entrypoint";
+          report.post_jni_startup_state = "managed_activity_dispatch_required";
+          report.exit_reason = "linuxoid_managed_app_start_bridge_required";
+        }
       }
       const std::size_t attempt_index = FindLibraryLoadAttemptIndex(
           report.library_load_attempts, selected_jni_library->path);
@@ -962,11 +1143,16 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
         report.library_load_attempts[attempt_index].failure_reason =
             report.exit_reason;
         if (report.library_load_attempts[attempt_index].error_detail.empty()) {
-          report.library_load_attempts[attempt_index].error_detail =
-              !report.post_jni_dispatch_symbol.empty()
-                  ? (report.post_jni_dispatch_symbol_kind + ":" +
-                     report.post_jni_dispatch_symbol)
-                  : "jni_onload_succeeded_without_native_activity_entrypoint";
+          if (!registration_outcome.error_detail.empty()) {
+            report.library_load_attempts[attempt_index].error_detail =
+                registration_outcome.error_detail;
+          } else {
+            report.library_load_attempts[attempt_index].error_detail =
+                !report.post_jni_dispatch_symbol.empty()
+                    ? (report.post_jni_dispatch_symbol_kind + ":" +
+                       report.post_jni_dispatch_symbol)
+                    : "jni_onload_succeeded_without_native_activity_entrypoint";
+          }
         }
       }
       output << "[p1] JNI-shaped primary library selected for Linuxoid-managed "
@@ -1082,6 +1268,20 @@ std::string RenderNativeExecuteReportJson(const NativeExecuteReport& report) {
          << EscapeJson(report.app_start_bridge_state) << "\",\n"
          << "  \"app_start_bridge_reason\": \""
          << EscapeJson(report.app_start_bridge_reason) << "\",\n"
+         << "  \"registration_dispatch_state\": \""
+         << EscapeJson(report.registration_dispatch_state) << "\",\n"
+         << "  \"registration_dispatch_symbol_kind\": \""
+         << EscapeJson(report.registration_dispatch_symbol_kind) << "\",\n"
+         << "  \"registration_dispatch_symbol\": \""
+         << EscapeJson(report.registration_dispatch_symbol) << "\",\n"
+         << "  \"registration_outcome_state\": \""
+         << EscapeJson(report.registration_outcome_state) << "\",\n"
+         << "  \"registration_outcome_reason\": \""
+         << EscapeJson(report.registration_outcome_reason) << "\",\n"
+         << "  \"registration_class_name\": \""
+         << EscapeJson(report.registration_class_name) << "\",\n"
+         << "  \"registration_method_count\": "
+         << report.registration_method_count << ",\n"
          << "  \"post_jni_startup_state\": \""
          << EscapeJson(report.post_jni_startup_state) << "\",\n"
          << "  \"post_jni_dispatch_symbol_kind\": \""

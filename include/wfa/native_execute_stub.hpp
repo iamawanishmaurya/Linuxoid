@@ -63,6 +63,13 @@ struct NativeExecuteReport {
   std::vector<JniOnLoadResult> jni_onload_results;
   std::string app_start_bridge_state = "not_applicable";
   std::string app_start_bridge_reason = "none";
+  std::string registration_dispatch_state = "not_applicable";
+  std::string registration_dispatch_symbol_kind = "none";
+  std::string registration_dispatch_symbol;
+  std::string registration_outcome_state = "not_applicable";
+  std::string registration_outcome_reason = "none";
+  std::string registration_class_name;
+  int registration_method_count = 0;
   std::string post_jni_startup_state = "not_applicable";
   std::string post_jni_dispatch_symbol_kind = "none";
   std::string post_jni_dispatch_symbol;

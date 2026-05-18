@@ -6845,7 +6845,7 @@ void TestLaunchApkFirstAppStartReportsManagedAppStartBridgeBoundary() {
   fs::remove_all(fixture.root);
 }
 
-void TestLaunchApkReportsJniRegistrationDispatchBoundaryPrecisely() {
+void TestLaunchApkReportsJniRegistrationCallbackDispatchOutcomePrecisely() {
   namespace fs = std::filesystem;
   const fs::path build_dir = ResolveBuildDirFromTestBinary();
   const fs::path compatctl = build_dir / "compatctl";
@@ -6867,14 +6867,14 @@ void TestLaunchApkReportsJniRegistrationDispatchBoundaryPrecisely() {
          "expected blocked launch readiness for JNI registration fixture");
   Expect(output.find(
              "\"launch_status\": "
-             "\"jni_registration_dispatch_required\"") !=
+             "\"managed_activity_dispatch_required\"") !=
              std::string::npos,
-         "expected JNI registration dispatch boundary for registration fixture");
+         "expected managed activity dispatch boundary after registration fixture");
   Expect(output.find(
              "\"native_loading_state\": "
-             "\"jni_registration_dispatch_required\"") !=
+             "\"managed_activity_dispatch_required\"") !=
              std::string::npos,
-         "expected native loading state to preserve registration dispatch seam");
+         "expected native loading state to preserve post-registration seam");
   Expect(output.find("\"native_jni_state\": \"called\"") !=
              std::string::npos,
          "expected JNI_OnLoad to be called for registration fixture");
@@ -6884,18 +6884,41 @@ void TestLaunchApkReportsJniRegistrationDispatchBoundaryPrecisely() {
              std::string::npos,
          "expected app-start bridge selection state for registration fixture");
   Expect(output.find(
-             "\"native_post_jni_startup_state\": "
-             "\"jni_registration_dispatch_required\"") !=
+             "\"native_registration_dispatch_state\": \"called\"") !=
              std::string::npos,
-         "expected precise post-JNI registration state");
+         "expected JNI registration callback dispatch state");
+  Expect(output.find(
+             "\"native_registration_dispatch_symbol_kind\": "
+             "\"registration_callback\"") != std::string::npos,
+         "expected registration callback dispatch symbol kind");
+  Expect(output.find(
+             "\"native_registration_dispatch_symbol\": "
+             "\"register_LinuxoidFixture\"") != std::string::npos,
+         "expected registration callback symbol in launch json");
+  Expect(output.find(
+             "\"native_registration_outcome_state\": "
+             "\"register_natives_completed\"") != std::string::npos,
+         "expected RegisterNatives completion in launch json");
+  Expect(output.find(
+             "\"native_registration_class_name\": "
+             "\"com/example/linuxoid/Fixture\"") != std::string::npos,
+         "expected registered class name in launch json");
+  Expect(output.find("\"native_registration_method_count\": 1") !=
+             std::string::npos,
+         "expected registered method count in launch json");
+  Expect(output.find(
+             "\"native_post_jni_startup_state\": "
+             "\"managed_activity_dispatch_required\"") !=
+             std::string::npos,
+         "expected precise post-JNI managed dispatch state");
   Expect(output.find(
              "\"native_post_jni_dispatch_symbol_kind\": "
-             "\"registration_helper\"") != std::string::npos,
-         "expected registration-helper dispatch symbol kind");
+             "\"registration_callback\"") != std::string::npos,
+         "expected registration-callback dispatch symbol kind");
   Expect(output.find(
-             "\"native_post_jni_dispatch_symbol\": \"registerNativeMethods\"") !=
+             "\"native_post_jni_dispatch_symbol\": \"register_LinuxoidFixture\"") !=
              std::string::npos,
-         "expected registration dispatch symbol in launch json");
+         "expected registration callback symbol in post-JNI launch json");
   Expect(output.find("\"native_loading_library_name\": \"libjni_latinime.so\"") !=
              std::string::npos,
          "expected selected registration fixture library name");
@@ -6905,15 +6928,19 @@ void TestLaunchApkReportsJniRegistrationDispatchBoundaryPrecisely() {
              std::string::npos,
          "expected nested native execute bridge selection state");
   Expect(output.find(
+             "\"registration_outcome_state\": "
+             "\"register_natives_completed\"") != std::string::npos,
+         "expected nested native execute registration outcome state");
+  Expect(output.find(
              "\"post_jni_startup_state\": "
-             "\"jni_registration_dispatch_required\"") !=
+             "\"managed_activity_dispatch_required\"") !=
              std::string::npos,
-         "expected nested native execute registration dispatch state");
+         "expected nested native execute post-registration dispatch state");
 
   fs::remove_all(fixture.root);
 }
 
-void TestLaunchApkFirstAppStartReportsJniRegistrationDispatchBoundary() {
+void TestLaunchApkFirstAppStartReportsPostRegistrationManagedDispatchBoundary() {
   namespace fs = std::filesystem;
   const fs::path build_dir = ResolveBuildDirFromTestBinary();
   const fs::path compatctl = build_dir / "compatctl";
@@ -6940,28 +6967,36 @@ void TestLaunchApkFirstAppStartReportsJniRegistrationDispatchBoundary() {
              std::string::npos,
          "expected first app start proof to preserve bridge selection state");
   Expect(output.find(
-             "\"native_post_jni_startup_state\": "
-             "\"jni_registration_dispatch_required\"") !=
+             "\"native_registration_dispatch_state\": \"called\"") !=
              std::string::npos,
-         "expected registration dispatch seam in first-app-start proof");
+         "expected registration callback dispatch state in first-app-start proof");
   Expect(output.find(
-             "\"native_post_jni_dispatch_symbol\": \"registerNativeMethods\"") !=
+             "\"native_registration_outcome_state\": "
+             "\"register_natives_completed\"") != std::string::npos,
+         "expected registration completion state in first-app-start proof");
+  Expect(output.find(
+             "\"native_post_jni_startup_state\": "
+             "\"managed_activity_dispatch_required\"") !=
              std::string::npos,
-         "expected registration dispatch symbol in first-app-start proof");
+         "expected managed dispatch seam in first-app-start proof");
+  Expect(output.find(
+             "\"native_post_jni_dispatch_symbol\": \"register_LinuxoidFixture\"") !=
+             std::string::npos,
+         "expected registration callback symbol in first-app-start proof");
   Expect(output.find(
              "\"blocking_reason\": "
-             "\"jni_registration_dispatch_required_for_first_app_start:libjni_latinime.so\"") !=
+             "\"managed_activity_dispatch_required_for_first_app_start:libjni_latinime.so\"") !=
              std::string::npos,
-         "expected narrowed first-app-start blocker for JNI registration seam");
+         "expected narrowed first-app-start blocker for post-registration seam");
   Expect(output.find(
              "\"recommended_recovery_action\": "
              "\"inspect_native_launch_diagnostics\"") != std::string::npos,
-         "expected native diagnostics recovery action for registration seam");
+         "expected native diagnostics recovery action for post-registration seam");
   Expect(output.find(
              "\"next_blocker\": "
-             "\"dispatch_jni_registration_for_libjni_latinime_so\"") !=
+             "\"bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context\"") !=
              std::string::npos,
-         "expected next blocker to point at JNI registration dispatch");
+         "expected next blocker to point at managed runtime dispatch");
 
   fs::remove_all(fixture.root);
 }
@@ -15767,8 +15802,8 @@ int main() {
     TestLaunchApkLoadsAndroidCompatFixtureThroughLinuxoidShims();
     TestLaunchApkReportsJniOnlyLibraryBoundaryPrecisely();
     TestLaunchApkFirstAppStartReportsManagedAppStartBridgeBoundary();
-    TestLaunchApkReportsJniRegistrationDispatchBoundaryPrecisely();
-    TestLaunchApkFirstAppStartReportsJniRegistrationDispatchBoundary();
+    TestLaunchApkReportsJniRegistrationCallbackDispatchOutcomePrecisely();
+    TestLaunchApkFirstAppStartReportsPostRegistrationManagedDispatchBoundary();
     TestLaunchApkReportsUnshimmedAndroidSymbolBlockerPrecisely();
   } catch (const std::exception& error) {
     std::cerr << "Test failure: " << error.what() << '\n';

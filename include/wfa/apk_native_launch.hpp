@@ -112,6 +112,13 @@ struct NativeApkFirstAppStartProof {
   std::string native_jni_state = "not_requested";
   std::string native_app_start_bridge_state = "not_requested";
   std::string native_app_start_bridge_reason = "none";
+  std::string native_registration_dispatch_state = "not_requested";
+  std::string native_registration_dispatch_symbol_kind = "none";
+  std::string native_registration_dispatch_symbol;
+  std::string native_registration_outcome_state = "not_requested";
+  std::string native_registration_outcome_reason = "none";
+  std::string native_registration_class_name;
+  int native_registration_method_count = 0;
   std::string native_post_jni_startup_state = "not_requested";
   std::string native_post_jni_dispatch_symbol_kind = "none";
   std::string native_post_jni_dispatch_symbol;
@@ -211,6 +218,13 @@ struct NativeApkLaunchReport {
   std::string native_jni_state = "not_requested";
   std::string native_app_start_bridge_state = "not_requested";
   std::string native_app_start_bridge_reason = "none";
+  std::string native_registration_dispatch_state = "not_requested";
+  std::string native_registration_dispatch_symbol_kind = "none";
+  std::string native_registration_dispatch_symbol;
+  std::string native_registration_outcome_state = "not_requested";
+  std::string native_registration_outcome_reason = "none";
+  std::string native_registration_class_name;
+  int native_registration_method_count = 0;
   std::string native_post_jni_startup_state = "not_requested";
   std::string native_post_jni_dispatch_symbol_kind = "none";
   std::string native_post_jni_dispatch_symbol;
