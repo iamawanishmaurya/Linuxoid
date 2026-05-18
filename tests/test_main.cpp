@@ -8117,6 +8117,53 @@ void TestLaunchApkStorageProofWritesReadableMarker() {
   fs::remove_all(fixture.root);
 }
 
+void TestLaunchApkStorageProofValidatesExistingStateOnRepeatedRun() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixture(
+      "linuxoid-launch-apk-storage-continuity");
+
+  const auto first = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true});
+  Expect(first.storage.ready, "expected initial storage proof");
+  Expect(!first.storage.persisted_state_preexisting,
+         "expected first storage proof to start from new state");
+  Expect(first.storage.continuity_state == "initialized_new_state",
+         "expected initial storage continuity state");
+
+  const auto second = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true});
+  const auto third = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .watchdog_seconds = 1,
+       .storage_proof_requested = true});
+
+  Expect(second.storage.ready, "expected repeated storage proof readiness");
+  Expect(second.storage.persisted_state_preexisting,
+         "expected repeated storage proof to see existing state");
+  Expect(second.storage.continuity_validated,
+         "expected repeated storage continuity validation");
+  Expect(second.storage.marker_preexisting,
+         "expected repeated storage proof to see existing marker");
+  Expect(second.storage.marker_reused,
+         "expected repeated storage proof to reuse deterministic marker");
+  Expect(second.storage.continuity_state == "validated_existing_state",
+         "expected repeated storage continuity validation state");
+  Expect(second.storage.marker_checksum == third.storage.marker_checksum,
+         "expected stable marker checksum across repeated runs");
+  Expect(ReadTextFile(second.storage.report_json_path) ==
+             ReadTextFile(third.storage.report_json_path),
+         "expected deterministic storage proof persistence round-trip");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestLaunchApkSelfHealProofRepairsAppStorage() {
   namespace fs = std::filesystem;
   const auto fixture = CreateNativeApkLaunchFixture(
@@ -8526,6 +8573,18 @@ void TestLaunchApkPermissionsProofPersistenceRoundTripIsDeterministic() {
        .watchdog_seconds = 1,
        .storage_proof_requested = true,
        .permissions_proof_requested = true});
+  Expect(second.permissions.persisted_state_preexisting,
+         "expected repeated permission report to see existing persisted state");
+  Expect(second.permissions.continuity_validated,
+         "expected repeated permission continuity validation");
+  Expect(second.permissions.continuity_state == "validated_existing_state",
+         "expected validated existing permission state on repeated run");
+  Expect(second.app_ops.persisted_state_preexisting,
+         "expected repeated app ops report to see existing persisted state");
+  Expect(second.app_ops.continuity_validated,
+         "expected repeated app ops continuity validation");
+  Expect(second.app_ops.continuity_state == "validated_existing_state",
+         "expected validated existing app ops state on repeated run");
   const std::string second_permissions =
       ReadTextFile(second.permissions.report_json_path);
   const std::string second_app_ops =
@@ -9766,6 +9825,96 @@ void TestLaunchApkSelfHealProofRetriesRuntimeBootstrapAfterFailure() {
          "expected successful retry_runtime_bootstrap action");
   Expect(fs::exists(healed.self_healing_android_device.journal_path),
          "expected runtime recovery journal path");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkSelfHealProofGatesDownstreamRepairsBehindNativeBlocker() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-launch-apk-self-heal-native-gating",
+      BuildKeyboardSettingsActivityManifestXml(), false,
+      {{"lib/x86_64/libbroken.so", "not a real shared object\n"},
+       {"classes.dex",
+        BuildFrameworkBoundaryLifecycleOnCreateDexPayload(
+            {"Lorg/futo/inputmethod/latin/App;",
+             "Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;"},
+            "Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;")}});
+
+  const auto second = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .requested_package_name = "org.futo.inputmethod.latin",
+       .requested_component =
+           "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+       .watchdog_seconds = 1,
+       .first_app_start_proof_requested = true,
+       .window_proof_requested = true,
+       .self_heal_proof_requested = true});
+  const std::string second_watchdog_json =
+      ReadTextFile(second.self_healing_android_device.report_json_path);
+  const std::string second_journal =
+      ReadTextFile(second.self_healing_android_device.journal_path);
+
+  const auto third = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .requested_package_name = "org.futo.inputmethod.latin",
+       .requested_component =
+           "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+       .watchdog_seconds = 1,
+       .first_app_start_proof_requested = true,
+       .window_proof_requested = true,
+       .self_heal_proof_requested = true});
+  const std::string third_watchdog_json =
+      ReadTextFile(third.self_healing_android_device.report_json_path);
+  const std::string third_journal =
+      ReadTextFile(third.self_healing_android_device.journal_path);
+
+  Expect(second.self_healing_android_device.ready,
+         "expected self-heal report on blocked keyboard-like launch");
+  Expect(second.self_healing_android_device.primary_blocker_reason ==
+             "native_dlopen_failed:libbroken.so",
+         "expected exact native primary blocker reason");
+  Expect(second.self_healing_android_device.recovery_gating_state ==
+             "upstream_native_blocker_gated",
+         "expected native recovery gating state");
+  Expect(second.self_healing_android_device.recovery_gating_reason ==
+             "native_dlopen_failed:libbroken.so",
+         "expected exact native recovery gating reason");
+  Expect(second.self_healing_android_device.recommended_next_action ==
+             "inspect_native_launch_diagnostics",
+         "expected native diagnostics next action");
+  Expect(second.self_healing_android_device.actions_attempted == 0,
+         "expected no downstream attempted repairs behind native blocker");
+  Expect(std::any_of(
+             second.self_healing_android_device.actions.begin(),
+             second.self_healing_android_device.actions.end(),
+             [](const wfa::SelfHealingAndroidDeviceRecoveryAction& action) {
+               return action.action == "rebuild_process_manager_state" &&
+                      action.result == "skipped_upstream_blocker";
+             }),
+         "expected process-manager repair to be gated");
+  Expect(std::any_of(
+             second.self_healing_android_device.actions.begin(),
+             second.self_healing_android_device.actions.end(),
+             [](const wfa::SelfHealingAndroidDeviceRecoveryAction& action) {
+               return action.action == "rebuild_window_manager_state" &&
+                      action.result == "skipped_upstream_blocker";
+             }),
+         "expected window-manager repair to be gated");
+  Expect(std::any_of(
+             second.self_healing_android_device.actions.begin(),
+             second.self_healing_android_device.actions.end(),
+             [](const wfa::SelfHealingAndroidDeviceRecoveryAction& action) {
+               return action.action == "retry_runtime_bootstrap" &&
+                      action.result == "skipped_upstream_blocker";
+             }),
+         "expected runtime retry to be gated");
+  Expect(second_watchdog_json == third_watchdog_json,
+         "expected stable watchdog json across repeated native-blocked runs");
+  Expect(second_journal == third_journal,
+         "expected stable watchdog journal across repeated native-blocked runs");
 
   fs::remove_all(fixture.root);
 }
@@ -15094,6 +15243,7 @@ int main() {
     TestLaunchApkStorageProofCommandRunsFixture();
     TestNativeApkStorageBridgeResolvesSafePathsAndRejectsEscapes();
     TestLaunchApkStorageProofWritesReadableMarker();
+    TestLaunchApkStorageProofValidatesExistingStateOnRepeatedRun();
     TestLaunchApkSelfHealProofRepairsAppStorage();
     TestLaunchApkPermissionsProofParsesRequestedPermissions();
     TestLaunchApkPermissionsProofAllowsSensitiveStorageWhenGranted();
@@ -15127,6 +15277,7 @@ int main() {
     TestInspectApkRuntimeCommandReportsReadyContracts();
     TestLaunchApkRuntimeProofHealsMalformedFiles();
     TestLaunchApkSelfHealProofRetriesRuntimeBootstrapAfterFailure();
+    TestLaunchApkSelfHealProofGatesDownstreamRepairsBehindNativeBlocker();
     TestLaunchApkJavaProofCommandRunsFixture();
     TestLaunchApkJavaProofTracksSessionArtifacts();
     TestInspectApkJavaCommandReportsReadyContracts();

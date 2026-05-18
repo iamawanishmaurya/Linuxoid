@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.123 - 2026-05-19
+
+- Close **Phase 6: Recovery and Runtime Hardening** around repeated keyboard APK state continuity and exact watchdog gating instead of widening the runtime sideways again.
+- Extend `launch-apk --storage-proof` and `launch-apk --permissions-proof` so repeated runs against the same staging root now preserve and validate deterministic sandbox, permission, and AppOps artifacts through explicit `persisted_state_preexisting`, `continuity_validated`, `continuity_state`, and `continuity_diagnostics` fields.
+- Tighten the Self-Healing Android Device watchdog so blocked keyboard APK launches now keep `primary_blocker_reason: native_dlopen_failed:libandroidx.graphics.path.so` authoritative, emit `recovery_gating_state: upstream_native_blocker_gated`, and journal downstream launch-dependent repairs as `skipped_upstream_blocker` instead of attempting noisy process/window/runtime retries behind a known native `dlopen` failure.
+
 ## v0.1.122 - 2026-05-18
 
 - Close **Phase 5: Visible Wayland Interaction** around the real keyboard APK window/focus seam instead of widening the runtime sideways.

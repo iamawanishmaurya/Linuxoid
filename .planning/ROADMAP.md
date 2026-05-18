@@ -16,7 +16,7 @@ This roadmap turns Linuxoid's existing proof-oriented runtime into a first real 
 - [x] **Phase 3: Runtime Context Bridge** - Reduce the gap between the minimal interpreter path and a real ART-owned activity context
 - [x] **Phase 4: JNI and Native Loading** - Bring x86_64 native libraries and JNI boundaries into the verification path
 - [x] **Phase 5: Visible Wayland Interaction** - Make the verification app visibly launch and accept meaningful interaction on Linux
-- [ ] **Phase 6: Recovery and Runtime Hardening** - Stabilize app state, permissions, and recovery diagnostics around the first real app path
+- [x] **Phase 6: Recovery and Runtime Hardening** - Stabilize app state, permissions, and recovery diagnostics around the first real app path
 
 ## Phase Details
 
@@ -157,11 +157,11 @@ Plans:
 
 **Wave 1**
 
-- [ ] 06-01: Harden app state, permissions, and sandbox continuity for the verification APK
+- [x] 06-01: Harden app state, permissions, and sandbox continuity for the verification APK
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-02: Tighten Self-Healing Android Device recovery reporting for the first real app path
+- [x] 06-02: Tighten Self-Healing Android Device recovery reporting for the first real app path
 
 ## Progress
 
@@ -175,4 +175,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. Runtime Context Bridge | 3/3 | Complete | 2026-05-18 |
 | 4. JNI and Native Loading | 2/2 | Complete | Exact native load/JNI blockers now propagate through `launch-apk` and `--first-app-start-proof` |
 | 5. Visible Wayland Interaction | 3/3 | Complete | Real keyboard `SettingsActivity` now owns a concrete window/focus target while preserving the exact native `dlopen` blocker |
-| 6. Recovery and Runtime Hardening | 0/2 | Not started | - |
+| 6. Recovery and Runtime Hardening | 2/2 | Complete | Repeated keyboard-state continuity is validated and watchdog recovery now stays gated on the earliest native blocker |

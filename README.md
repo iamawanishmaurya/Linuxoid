@@ -325,6 +325,38 @@ What it still does **not** prove:
 - this is still not full Android framework window dispatch or input ownership
 - the next real blocker on the keyboard APK path is still resolving the upstream native `dlopen` failure for `libandroidx.graphics.path.so`
 
+## Recovery and Runtime Hardening Checkpoint
+
+Linuxoid now makes the real keyboard verification path repeatable and quieter without pretending the upstream native seam is solved.
+
+- repeated `launch-apk --storage-proof` runs against the same staging root now preserve and validate the same sandbox-backed app-data state instead of blindly rewriting it
+- repeated `launch-apk --permissions-proof` runs now preserve and validate the same sandbox-backed permission and AppOps state under `sandbox/data/data/<package>/permissions`
+- the direct report now exposes continuity truth through:
+  - `persisted_state_preexisting`
+  - `continuity_validated`
+  - `continuity_state`
+  - `continuity_diagnostics`
+- on the real keyboard APK path, `launch-apk --self-heal-proof --window-proof --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity ...` now keeps the earliest native blocker authoritative through:
+  - `primary_blocker_reason: "native_dlopen_failed:libandroidx.graphics.path.so"`
+  - `recovery_gating_state: "upstream_native_blocker_gated"`
+  - `recovery_gating_reason: "native_dlopen_failed:libandroidx.graphics.path.so"`
+  - `recommended_next_action: "inspect_native_launch_diagnostics"`
+- downstream launch-dependent repairs are now journaled as `skipped_upstream_blocker` instead of being noisily attempted behind a known native `dlopen` failure
+
+What this checkpoint actually proves:
+
+- repeated verification runs keep one coherent sandbox, permission, and AppOps story for the same app identity
+- the Self-Healing Android Device watchdog now emits stable, comparable recovery artifacts for repeated keyboard APK failures
+- the real first blocker on the keyboard path stays explicit and machine-readable
+
+What it still does **not** prove:
+
+- this is still not a successful native-library fix for the keyboard APK
+- this is still not full ART-owned ActivityThread or framework dispatch
+- the next exact blockers are still:
+  - `resolve_dlopen_failure_for_libandroidx_graphics_path_so`
+  - `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
+
 `--dex-proof` now stages `classes.dex`, `classes2.dex`, and similar entries into the deterministic APK session root, parses safe DEX header plus string/type/proto/method/class metadata, can locate a deterministic entrypoint code item, and emits structured `dex` plus `art_bootstrap` JSON without claiming full Java/Kotlin ART execution yet.
 
 `--storage-proof` now implements **P9 Android App Storage + Sandbox Contract** for the direct APK session path. It materializes deterministic `sandbox/data/data/<package>`-style directories, exposes `files` plus `cache` plus native-lib plus asset/resource roots, validates app-relative paths through a Linuxoid safe resolver, writes a session marker file, rejects escape attempts explicitly, and emits nested `storage` JSON plus `storage_health` and `sandbox_health` fields for the Self-Healing Android Device loop while keeping `isolation_level: path_sandbox_only` honest.

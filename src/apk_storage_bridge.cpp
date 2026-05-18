@@ -180,6 +180,10 @@ std::string BuildStorageProofJson(const NativeApkStorageProof& report) {
          << "\",\n"
          << "  \"report_json_path\": \"" << EscapeJson(report.report_json_path)
          << "\",\n"
+         << "  \"persisted_state_preexisting\": "
+         << (report.persisted_state_preexisting ? "true" : "false") << ",\n"
+         << "  \"continuity_validated\": "
+         << (report.continuity_validated ? "true" : "false") << ",\n"
          << "  \"package_name\": \"" << EscapeJson(report.package_name)
          << "\",\n"
          << "  \"apk_path\": \"" << EscapeJson(report.apk_path) << "\",\n"
@@ -198,8 +202,14 @@ std::string BuildStorageProofJson(const NativeApkStorageProof& report) {
          << "  \"marker_path\": \"" << EscapeJson(report.marker_path)
          << "\",\n"
          << "  \"marker_size\": " << report.marker_size << ",\n"
+         << "  \"marker_preexisting\": "
+         << (report.marker_preexisting ? "true" : "false") << ",\n"
+         << "  \"marker_reused\": "
+         << (report.marker_reused ? "true" : "false") << ",\n"
          << "  \"marker_checksum\": \"" << EscapeJson(report.marker_checksum)
          << "\",\n"
+         << "  \"continuity_state\": \""
+         << EscapeJson(report.continuity_state) << "\",\n"
          << "  \"uid_placeholder\": " << report.uid_placeholder << ",\n"
          << "  \"gid_placeholder\": " << report.gid_placeholder << ",\n"
          << "  \"isolation_level\": \""
@@ -218,6 +228,8 @@ std::string BuildStorageProofJson(const NativeApkStorageProof& report) {
          << ",\n"
          << "  \"rejected_paths\": " << RenderJsonArray(report.rejected_paths)
          << ",\n"
+         << "  \"continuity_diagnostics\": "
+         << RenderJsonArray(report.continuity_diagnostics) << ",\n"
          << "  \"permission_metadata\": "
          << RenderJsonArray(report.permission_metadata) << ",\n"
          << "  \"errors\": " << RenderJsonArray(report.errors) << "\n"
@@ -295,6 +307,9 @@ NativeApkStorageProof NativeApkStorageBridgeSession::RunStorageProof() const {
   report.sandbox_state = context_.sandbox_state;
   report.permission_metadata = context_.permission_metadata;
   report.permission_metadata_ready = !context_.permission_metadata.empty();
+  report.persisted_state_preexisting =
+      fs::exists(context_.app_data_dir) || fs::exists(context_.files_dir) ||
+      fs::exists(context_.cache_dir);
 
   if (!IsValidPackageName(context_.package_name)) {
     AppendUnique(&report.errors, "unsafe_package_name");
@@ -323,9 +338,36 @@ NativeApkStorageProof NativeApkStorageBridgeSession::RunStorageProof() const {
         "package=" + context_.package_name + "\n" + "session=" +
         context_.session_id + "\n" + "isolation_level=" +
         context_.isolation_level + "\n";
+    report.marker_preexisting = fs::exists(marker_resolution.resolved_path);
     try {
-      WriteTextFile(marker_resolution.resolved_path, marker_contents);
-      report.marker_written = true;
+      const std::string existing_contents =
+          report.marker_preexisting
+              ? ReadTextFile(marker_resolution.resolved_path)
+              : std::string();
+      if (report.marker_preexisting && existing_contents == marker_contents) {
+        report.marker_reused = true;
+        report.continuity_validated = true;
+        report.continuity_state = "validated_existing_state";
+        AppendUnique(&report.continuity_diagnostics,
+                     "storage_marker_reused_without_rewrite");
+      } else {
+        WriteTextFile(marker_resolution.resolved_path, marker_contents);
+        report.marker_written = true;
+        report.continuity_validated = true;
+        if (!report.persisted_state_preexisting && !report.marker_preexisting) {
+          report.continuity_state = "initialized_new_state";
+          AppendUnique(&report.continuity_diagnostics,
+                       "storage_state_initialized_for_first_launch");
+        } else if (report.marker_preexisting) {
+          report.continuity_state = "repaired_stale_state";
+          AppendUnique(&report.continuity_diagnostics,
+                       "storage_marker_mismatch_rebuilt");
+        } else {
+          report.continuity_state = "healed_missing_marker";
+          AppendUnique(&report.continuity_diagnostics,
+                       "storage_marker_missing_rebuilt");
+        }
+      }
       const std::string read_back = ReadTextFile(marker_resolution.resolved_path);
       report.marker_read_back = read_back == marker_contents;
       report.marker_size = read_back.size();
@@ -334,6 +376,14 @@ NativeApkStorageProof NativeApkStorageBridgeSession::RunStorageProof() const {
       AppendUnique(&report.errors,
                    "storage_marker_write_failed:" +
                        std::string(error.what()));
+    }
+  }
+
+  if (report.continuity_state == "not_checked") {
+    if (report.persisted_state_preexisting) {
+      report.continuity_state = "existing_state_not_validated";
+    } else {
+      report.continuity_state = "initialized_new_state";
     }
   }
 
@@ -348,7 +398,8 @@ NativeApkStorageProof NativeApkStorageBridgeSession::RunStorageProof() const {
     }
   }
 
-  report.ready = report.errors.empty() && report.marker_written &&
+  report.ready = report.errors.empty() &&
+                 (report.marker_written || report.marker_reused) &&
                  report.marker_read_back &&
                  fs::exists(report.app_data_dir) && fs::exists(report.files_dir) &&
                  fs::exists(report.cache_dir);

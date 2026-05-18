@@ -443,6 +443,10 @@ std::string RenderPermissionsReportJson(
          << "\",\n"
          << "  \"report_json_path\": \"" << EscapeJson(report.report_json_path)
          << "\",\n"
+         << "  \"persisted_state_preexisting\": "
+         << (report.persisted_state_preexisting ? "true" : "false") << ",\n"
+         << "  \"continuity_validated\": "
+         << (report.continuity_validated ? "true" : "false") << ",\n"
          << "  \"package_name\": \"" << EscapeJson(report.package_name)
          << "\",\n"
          << "  \"user_id\": " << report.user_id << ",\n"
@@ -456,6 +460,8 @@ std::string RenderPermissionsReportJson(
          << "\",\n"
          << "  \"updated_at_unix_ms\": " << report.updated_at_unix_ms
          << ",\n"
+         << "  \"continuity_state\": \""
+         << EscapeJson(report.continuity_state) << "\",\n"
          << "  \"requested_permissions\": "
          << RenderJsonArray(report.requested_permissions) << ",\n"
          << "  \"granted_permissions\": "
@@ -468,6 +474,8 @@ std::string RenderPermissionsReportJson(
          << RenderPermissionRecordsArray(report.permission_records) << ",\n"
          << "  \"healing_actions\": "
          << RenderJsonArray(report.healing_actions) << ",\n"
+         << "  \"continuity_diagnostics\": "
+         << RenderJsonArray(report.continuity_diagnostics) << ",\n"
          << "  \"diagnostics\": "
          << RenderJsonArray(report.diagnostics) << ",\n"
          << "  \"errors\": " << RenderJsonArray(report.errors) << "\n"
@@ -489,6 +497,10 @@ std::string RenderAppOpsReportJson(const NativeApkAppOpsReport& report) {
          << "\",\n"
          << "  \"report_json_path\": \"" << EscapeJson(report.report_json_path)
          << "\",\n"
+         << "  \"persisted_state_preexisting\": "
+         << (report.persisted_state_preexisting ? "true" : "false") << ",\n"
+         << "  \"continuity_validated\": "
+         << (report.continuity_validated ? "true" : "false") << ",\n"
          << "  \"package_name\": \"" << EscapeJson(report.package_name)
          << "\",\n"
          << "  \"user_id\": " << report.user_id << ",\n"
@@ -502,6 +514,8 @@ std::string RenderAppOpsReportJson(const NativeApkAppOpsReport& report) {
          << "\",\n"
          << "  \"updated_at_unix_ms\": " << report.updated_at_unix_ms
          << ",\n"
+         << "  \"continuity_state\": \""
+         << EscapeJson(report.continuity_state) << "\",\n"
          << "  \"operations_count\": " << report.operations_count << ",\n"
          << "  \"allowed_operations\": "
          << RenderJsonArray(report.allowed_operations) << ",\n"
@@ -515,6 +529,8 @@ std::string RenderAppOpsReportJson(const NativeApkAppOpsReport& report) {
          << RenderAppOpRecordsArray(report.operation_records) << ",\n"
          << "  \"healing_actions\": "
          << RenderJsonArray(report.healing_actions) << ",\n"
+         << "  \"continuity_diagnostics\": "
+         << RenderJsonArray(report.continuity_diagnostics) << ",\n"
          << "  \"diagnostics\": "
          << RenderJsonArray(report.diagnostics) << ",\n"
          << "  \"errors\": " << RenderJsonArray(report.errors) << "\n"
@@ -585,6 +601,7 @@ NativeApkPermissionBridgeSession::BuildPermissionsReport() const {
   report.updated_at_unix_ms =
       ComputeDeterministicUnixMs(context_.package_name, context_.user_id,
                                  context_.app_id);
+  report.persisted_state_preexisting = fs::exists(report.report_json_path);
 
   if (context_.manifest_source != "archive_plain_xml" &&
       context_.manifest_source != "archive_binary_xml_decoded") {
@@ -637,14 +654,53 @@ NativeApkPermissionBridgeSession::BuildPermissionsReport() const {
   for (const auto& diagnostic : validation.diagnostics) {
     AppendUnique(&report.diagnostics, diagnostic);
   }
+  switch (validation.state) {
+    case ContractValidationOutcome::State::kMissing:
+      report.continuity_state = "initialized_missing_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "permission_state_initialized_from_missing_artifact");
+      break;
+    case ContractValidationOutcome::State::kMalformed:
+      report.continuity_state = "recovered_malformed_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "permission_state_rebuilt_after_malformed_json");
+      break;
+    case ContractValidationOutcome::State::kIncompatible:
+      report.continuity_state = "recovered_incompatible_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "permission_state_rebuilt_after_identity_mismatch");
+      break;
+    case ContractValidationOutcome::State::kStale:
+      report.continuity_state = "refreshed_stale_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "permission_state_refreshed_after_stale_contract");
+      break;
+    case ContractValidationOutcome::State::kIncomplete:
+      break;
+    case ContractValidationOutcome::State::kValid:
+      break;
+  }
   if (validation.state == ContractValidationOutcome::State::kValid) {
     const std::string existing_json = ReadTextFile(report.report_json_path);
     if (!PermissionContractLooksComplete(existing_json, report)) {
       report.healing_actions = {"rebuild_incomplete_permission_state"};
+      report.continuity_state = "recovered_incomplete_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "permission_state_rebuilt_after_incomplete_contract");
       AppendUnique(&report.diagnostics, "permission_state_incomplete");
       AppendUnique(
           &report.diagnostics,
           "Self-Healing Android Device permission contract incomplete; rebuilding deterministic state");
+    } else {
+      report.continuity_state = "validated_existing_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "permission_state_validated_without_rewrite");
     }
   }
 
@@ -674,6 +730,7 @@ NativeApkAppOpsReport NativeApkPermissionBridgeSession::BuildAppOpsReport(
   report.updated_at_unix_ms =
       ComputeDeterministicUnixMs(context_.package_name, context_.user_id,
                                  context_.app_id);
+  report.persisted_state_preexisting = fs::exists(report.report_json_path);
 
   const auto validation = ValidateExistingContract(
       report.report_json_path, report.schema_version, report.package_name,
@@ -687,6 +744,36 @@ NativeApkAppOpsReport NativeApkPermissionBridgeSession::BuildAppOpsReport(
   report.healing_actions = validation.healing_actions;
   for (const auto& diagnostic : validation.diagnostics) {
     AppendUnique(&report.diagnostics, diagnostic);
+  }
+  switch (validation.state) {
+    case ContractValidationOutcome::State::kMissing:
+      report.continuity_state = "initialized_missing_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "app_ops_state_initialized_from_missing_artifact");
+      break;
+    case ContractValidationOutcome::State::kMalformed:
+      report.continuity_state = "recovered_malformed_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "app_ops_state_rebuilt_after_malformed_json");
+      break;
+    case ContractValidationOutcome::State::kIncompatible:
+      report.continuity_state = "recovered_incompatible_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "app_ops_state_rebuilt_after_identity_mismatch");
+      break;
+    case ContractValidationOutcome::State::kStale:
+      report.continuity_state = "refreshed_stale_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "app_ops_state_refreshed_after_stale_contract");
+      break;
+    case ContractValidationOutcome::State::kIncomplete:
+      break;
+    case ContractValidationOutcome::State::kValid:
+      break;
   }
 
   if (!permissions.ready) {
@@ -782,10 +869,19 @@ NativeApkAppOpsReport NativeApkPermissionBridgeSession::BuildAppOpsReport(
     const std::string existing_json = ReadTextFile(report.report_json_path);
     if (!AppOpsContractLooksComplete(existing_json, report)) {
       report.healing_actions = {"rebuild_incomplete_app_ops_state"};
+      report.continuity_state = "recovered_incomplete_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "app_ops_state_rebuilt_after_incomplete_contract");
       AppendUnique(&report.diagnostics, "app_ops_state_incomplete");
       AppendUnique(
           &report.diagnostics,
           "Self-Healing Android Device AppOps contract incomplete; rebuilding deterministic state");
+    } else {
+      report.continuity_state = "validated_existing_state";
+      report.continuity_validated = true;
+      AppendUnique(&report.continuity_diagnostics,
+                   "app_ops_state_validated_without_rewrite");
     }
   }
   report.ready = true;

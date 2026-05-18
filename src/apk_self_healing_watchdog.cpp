@@ -297,6 +297,107 @@ std::string DetermineRecommendedNextAction(
   return "safe_mode_launch";
 }
 
+bool HasUpstreamNativeLaunchBlocker(const NativeApkLaunchReport& report) {
+  if (report.launch_ready) {
+    return false;
+  }
+  if (report.launch_status == "native_library_staging_failed" ||
+      report.launch_status == "libraries_failed_to_load" ||
+      report.launch_status == "jni_onload_missing_or_failed" ||
+      report.launch_status == "native_activity_entrypoint_missing") {
+    return true;
+  }
+  return report.native_loading_state == "dlopen_failed" ||
+         report.native_loading_state == "staging_failed" ||
+         report.native_jni_state == "jni_onload_failed" ||
+         report.native_jni_state == "jni_onload_missing";
+}
+
+std::string DescribeUpstreamNativeLaunchBlocker(
+    const NativeApkLaunchReport& report) {
+  if (!HasUpstreamNativeLaunchBlocker(report)) {
+    return "none";
+  }
+  if (report.native_loading_state == "dlopen_failed" &&
+      !report.native_loading_library_name.empty()) {
+    return "native_dlopen_failed:" + report.native_loading_library_name;
+  }
+  if (report.native_loading_state == "staging_failed" &&
+      !report.native_loading_library_name.empty()) {
+    return "native_library_staging_failed:" +
+           report.native_loading_library_name;
+  }
+  if (report.native_jni_state == "jni_onload_failed" &&
+      !report.native_loading_library_name.empty()) {
+    return "jni_onload_failed:" + report.native_loading_library_name;
+  }
+  if (report.native_jni_state == "jni_onload_missing" &&
+      !report.native_loading_library_name.empty()) {
+    return "jni_onload_missing:" + report.native_loading_library_name;
+  }
+  if (!report.native_loading_state.empty() &&
+      report.native_loading_state != "not_requested") {
+    return report.native_loading_state;
+  }
+  if (!report.native_jni_state.empty() &&
+      report.native_jni_state != "not_requested") {
+    return report.native_jni_state;
+  }
+  return report.launch_status.empty() ? "native_launch_blocked"
+                                      : report.launch_status;
+}
+
+std::string DeterminePrimaryBlockerReason(const NativeApkLaunchReport& report,
+                                          const WorkingHealthState& state) {
+  if (HasUpstreamNativeLaunchBlocker(report)) {
+    return DescribeUpstreamNativeLaunchBlocker(report);
+  }
+  if (!state.storage_ready || !state.sandbox_ready) {
+    return "storage_or_sandbox_blocked";
+  }
+  if (!state.permission_ready || !state.app_ops_ready) {
+    return "permission_or_appops_blocked";
+  }
+  if (!state.asset_ready) {
+    return "asset_bridge_blocked";
+  }
+  if (!state.resource_ready) {
+    return "resource_bridge_blocked";
+  }
+  if (!state.surface_ready) {
+    return "surface_blocked";
+  }
+  if (!state.lifecycle_ready || !state.looper_ready) {
+    return "lifecycle_or_looper_blocked";
+  }
+  if (!state.input_ready) {
+    return "input_blocked";
+  }
+  if (!state.binder_ready) {
+    return "binder_blocked";
+  }
+  if (!state.dex_ready || !state.art_ready) {
+    return "dex_or_art_blocked";
+  }
+  if (!state.package_manager_ready || !state.intent_resolution_ready ||
+      !state.activity_launch_ready) {
+    return "activity_launch_contract_blocked";
+  }
+  if (!state.activity_manager_ready || !state.process_ready) {
+    return "process_manager_contract_blocked";
+  }
+  if (!state.window_ready) {
+    return "window_manager_contract_blocked";
+  }
+  if (!state.runtime_ready) {
+    return "runtime_bridge_blocked";
+  }
+  if (!state.launch_ready) {
+    return report.launch_status.empty() ? "launch_not_ready" : report.launch_status;
+  }
+  return "none";
+}
+
 NativeApkAssetBridgeSession BuildAssetBridgeSession(
     const NativeApkLaunchReport& report) {
   const std::string selected_library_path =
@@ -1148,6 +1249,12 @@ void WriteRecoveryReport(const SelfHealingAndroidDeviceReport& report) {
          << "\",\n"
          << "  \"final_health\": \"" << EscapeJson(report.final_health)
          << "\",\n"
+         << "  \"primary_blocker_reason\": \""
+         << EscapeJson(report.primary_blocker_reason) << "\",\n"
+         << "  \"recovery_gating_state\": \""
+         << EscapeJson(report.recovery_gating_state) << "\",\n"
+         << "  \"recovery_gating_reason\": \""
+         << EscapeJson(report.recovery_gating_reason) << "\",\n"
          << "  \"storage_health\": \"" << EscapeJson(report.storage_health)
          << "\",\n"
          << "  \"sandbox_health\": \"" << EscapeJson(report.sandbox_health)
@@ -1221,6 +1328,8 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
 
   WorkingHealthState state = BuildWorkingHealthState(report_);
   watchdog.initial_health = ClassifyHealth(report_, state);
+  watchdog.primary_blocker_reason =
+      DeterminePrimaryBlockerReason(report_, state);
   watchdog.storage_health = report_.storage_health;
   watchdog.sandbox_health = report_.sandbox_health;
   watchdog.permission_health = report_.permission_health;
@@ -1258,6 +1367,21 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
     }
   };
 
+  auto record_skipped_action = [&](const std::string& subsystem,
+                                   const std::string& reason,
+                                   const std::string& action_name,
+                                   const std::string& result) {
+    watchdog.actions.push_back(
+        {.sequence_id = watchdog.actions.size() + 1,
+         .subsystem = subsystem,
+         .reason = reason,
+         .action = action_name,
+         .result = result,
+         .recoverable = state.recoverable,
+         .initial_health = ClassifyHealth(report_, state),
+         .final_health = ClassifyHealth(report_, state)});
+  };
+
   if (!AllContractsReady(report_, state)) {
     if (report_.permissions_proof_requested &&
         (!state.permission_ready || !state.app_ops_ready)) {
@@ -1293,90 +1417,154 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
                                                              errors);
                      });
     }
-    if (report_.surface_proof_requested && !state.surface_ready) {
-      attempt_action("surface", "surface_health_blocked", "restart_surface",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptRestartSurface(
-                           report_, fs::path(watchdog.artifact_root), &state,
-                           errors);
-                     });
-    }
-    if (report_.lifecycle_proof_requested &&
-        (!state.lifecycle_ready || !state.looper_ready)) {
-      attempt_action("lifecycle", "lifecycle_or_looper_blocked",
-                     "restart_lifecycle",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptRestartLifecycle(
-                           report_, fs::path(watchdog.artifact_root), &state,
-                           errors);
-                     });
-    }
-    if (report_.lifecycle_proof_requested && !state.input_ready) {
-      attempt_action("input_queue", "input_health_blocked", "reset_input_queue",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptResetInputQueue(
-                           report_, fs::path(watchdog.artifact_root), &state,
-                           errors);
-                     });
-    }
-    if (report_.activity_proof_requested && !state.binder_ready) {
-      attempt_action("binder_service_registry", "binder_health_blocked",
-                     "refresh_binder_services",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptRefreshBinderServices(report_, &state,
-                                                           errors);
-                     });
-    }
-    if (report_.dex_proof_requested && (!state.dex_ready || !state.art_ready)) {
-      attempt_action("dex_art_bootstrap", "dex_or_art_health_blocked",
-                     "rebuild_dex_bootstrap",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptRebuildDexBootstrap(
-                           report_, fs::path(watchdog.artifact_root), &state,
-                           errors);
-                     });
-    }
-    if (report_.activity_proof_requested &&
-        (!state.package_manager_ready || !state.intent_resolution_ready ||
-         !state.activity_launch_ready)) {
-      attempt_action("intent_resolution", "activity_launch_contract_blocked",
-                     "rerun_intent_resolution",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptRerunIntentResolution(
-                           report_, fs::path(watchdog.artifact_root), &state,
-                           errors);
-                     });
-    }
-    if (report_.process_proof_requested &&
-        (!state.activity_manager_ready || !state.process_ready)) {
-      attempt_action("process_manager", "process_manager_contract_blocked",
-                     "rebuild_process_manager_state",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptRebuildProcessManagerState(report_, &state,
-                                                                errors);
-                     });
-    }
-    if (report_.window_proof_requested && !state.window_ready) {
-      attempt_action("window_manager", "window_health_blocked",
-                     "rebuild_window_manager_state",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptRebuildWindowManagerState(report_, &state,
-                                                               errors);
-                     });
-    }
-    if (report_.runtime_proof_requested && !state.runtime_ready) {
-      attempt_action("art_runtime_bridge", "runtime_health_blocked",
-                     "retry_runtime_bootstrap",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptRetryRuntimeBootstrap(report_, &state,
-                                                           errors);
-                     });
-    }
-    if (!state.launch_ready && watchdog.actions.empty()) {
-      attempt_action("launch", "launch_not_ready", "safe_mode_launch",
-                     [&](std::vector<std::string>* errors) {
-                       return AttemptSafeModeLaunch(report_, &state, errors);
-                     });
+    const bool gate_launch_dependent_repairs =
+        HasUpstreamNativeLaunchBlocker(report_) && !state.launch_ready;
+    if (gate_launch_dependent_repairs) {
+      watchdog.recovery_gating_state = "upstream_native_blocker_gated";
+      watchdog.recovery_gating_reason =
+          DescribeUpstreamNativeLaunchBlocker(report_);
+      if (report_.surface_proof_requested && !state.surface_ready) {
+        record_skipped_action("surface", "surface_health_blocked",
+                              "restart_surface", "skipped_upstream_blocker");
+      }
+      if (report_.lifecycle_proof_requested &&
+          (!state.lifecycle_ready || !state.looper_ready)) {
+        record_skipped_action("lifecycle", "lifecycle_or_looper_blocked",
+                              "restart_lifecycle", "skipped_upstream_blocker");
+      }
+      if (report_.lifecycle_proof_requested && !state.input_ready) {
+        record_skipped_action("input_queue", "input_health_blocked",
+                              "reset_input_queue", "skipped_upstream_blocker");
+      }
+      if (report_.activity_proof_requested && !state.binder_ready) {
+        record_skipped_action("binder_service_registry",
+                              "binder_health_blocked",
+                              "refresh_binder_services",
+                              "skipped_upstream_blocker");
+      }
+      if (report_.dex_proof_requested && (!state.dex_ready || !state.art_ready)) {
+        record_skipped_action("dex_art_bootstrap",
+                              "dex_or_art_health_blocked",
+                              "rebuild_dex_bootstrap",
+                              "skipped_upstream_blocker");
+      }
+      if (report_.activity_proof_requested &&
+          (!state.package_manager_ready || !state.intent_resolution_ready ||
+           !state.activity_launch_ready)) {
+        record_skipped_action("intent_resolution",
+                              "activity_launch_contract_blocked",
+                              "rerun_intent_resolution",
+                              "skipped_upstream_blocker");
+      }
+      if (report_.process_proof_requested &&
+          (!state.activity_manager_ready || !state.process_ready)) {
+        record_skipped_action("process_manager",
+                              "process_manager_contract_blocked",
+                              "rebuild_process_manager_state",
+                              "skipped_upstream_blocker");
+      }
+      if (report_.window_proof_requested && !state.window_ready) {
+        record_skipped_action("window_manager", "window_health_blocked",
+                              "rebuild_window_manager_state",
+                              "skipped_upstream_blocker");
+      }
+      if (report_.runtime_proof_requested && !state.runtime_ready) {
+        record_skipped_action("art_runtime_bridge", "runtime_health_blocked",
+                              "retry_runtime_bootstrap",
+                              "skipped_upstream_blocker");
+      }
+      if (!state.launch_ready && watchdog.actions.empty()) {
+        record_skipped_action("launch", "launch_not_ready", "safe_mode_launch",
+                              "skipped_upstream_blocker");
+      }
+    } else {
+      if (report_.surface_proof_requested && !state.surface_ready) {
+        attempt_action("surface", "surface_health_blocked", "restart_surface",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptRestartSurface(
+                             report_, fs::path(watchdog.artifact_root), &state,
+                             errors);
+                       });
+      }
+      if (report_.lifecycle_proof_requested &&
+          (!state.lifecycle_ready || !state.looper_ready)) {
+        attempt_action("lifecycle", "lifecycle_or_looper_blocked",
+                       "restart_lifecycle",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptRestartLifecycle(
+                             report_, fs::path(watchdog.artifact_root), &state,
+                             errors);
+                       });
+      }
+      if (report_.lifecycle_proof_requested && !state.input_ready) {
+        attempt_action("input_queue", "input_health_blocked",
+                       "reset_input_queue",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptResetInputQueue(
+                             report_, fs::path(watchdog.artifact_root), &state,
+                             errors);
+                       });
+      }
+      if (report_.activity_proof_requested && !state.binder_ready) {
+        attempt_action("binder_service_registry", "binder_health_blocked",
+                       "refresh_binder_services",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptRefreshBinderServices(report_, &state,
+                                                             errors);
+                       });
+      }
+      if (report_.dex_proof_requested &&
+          (!state.dex_ready || !state.art_ready)) {
+        attempt_action("dex_art_bootstrap", "dex_or_art_health_blocked",
+                       "rebuild_dex_bootstrap",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptRebuildDexBootstrap(
+                             report_, fs::path(watchdog.artifact_root), &state,
+                             errors);
+                       });
+      }
+      if (report_.activity_proof_requested &&
+          (!state.package_manager_ready || !state.intent_resolution_ready ||
+           !state.activity_launch_ready)) {
+        attempt_action("intent_resolution", "activity_launch_contract_blocked",
+                       "rerun_intent_resolution",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptRerunIntentResolution(
+                             report_, fs::path(watchdog.artifact_root), &state,
+                             errors);
+                       });
+      }
+      if (report_.process_proof_requested &&
+          (!state.activity_manager_ready || !state.process_ready)) {
+        attempt_action("process_manager", "process_manager_contract_blocked",
+                       "rebuild_process_manager_state",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptRebuildProcessManagerState(
+                             report_, &state, errors);
+                       });
+      }
+      if (report_.window_proof_requested && !state.window_ready) {
+        attempt_action("window_manager", "window_health_blocked",
+                       "rebuild_window_manager_state",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptRebuildWindowManagerState(report_, &state,
+                                                                 errors);
+                       });
+      }
+      if (report_.runtime_proof_requested && !state.runtime_ready) {
+        attempt_action("art_runtime_bridge", "runtime_health_blocked",
+                       "retry_runtime_bootstrap",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptRetryRuntimeBootstrap(report_, &state,
+                                                             errors);
+                       });
+      }
+      if (!state.launch_ready && watchdog.actions.empty()) {
+        attempt_action("launch", "launch_not_ready", "safe_mode_launch",
+                       [&](std::vector<std::string>* errors) {
+                         return AttemptSafeModeLaunch(report_, &state, errors);
+                       });
+      }
     }
   } else {
     watchdog.actions.push_back(
@@ -1411,6 +1599,8 @@ SelfHealingAndroidDeviceReport SelfHealingAndroidDeviceWatchdog::Run() const {
   watchdog.runtime_health =
       state.runtime_ready ? "ready" : report_.runtime_health;
   watchdog.recoverable = state.recoverable;
+  watchdog.primary_blocker_reason =
+      DeterminePrimaryBlockerReason(report_, state);
   watchdog.recommended_next_action =
       DetermineRecommendedNextAction(report_, state);
 

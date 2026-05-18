@@ -51,6 +51,8 @@ struct NativeApkPermissionBridgeContext {
 struct NativeApkPermissionsReport {
   bool ready = false;
   bool contract_ready = false;
+  bool persisted_state_preexisting = false;
+  bool continuity_validated = false;
   std::string schema_version = "linuxoid.permission.contract.v1";
   std::string session_id;
   std::string artifact_root;
@@ -63,12 +65,14 @@ struct NativeApkPermissionsReport {
   std::string apk_path;
   std::string staged_dir;
   std::uint64_t updated_at_unix_ms = 0;
+  std::string continuity_state = "not_checked";
   std::vector<std::string> requested_permissions;
   std::vector<std::string> granted_permissions;
   std::vector<std::string> denied_permissions;
   std::string decode_level = "not_requested";
   std::vector<NativeApkPermissionRecord> permission_records;
   std::vector<std::string> healing_actions;
+  std::vector<std::string> continuity_diagnostics;
   std::vector<std::string> diagnostics;
   std::vector<std::string> errors;
 };
@@ -76,6 +80,8 @@ struct NativeApkPermissionsReport {
 struct NativeApkAppOpsReport {
   bool ready = false;
   bool contract_ready = false;
+  bool persisted_state_preexisting = false;
+  bool continuity_validated = false;
   std::string schema_version = "linuxoid.appops.contract.v1";
   std::string session_id;
   std::string artifact_root;
@@ -88,6 +94,7 @@ struct NativeApkAppOpsReport {
   std::string apk_path;
   std::string staged_dir;
   std::uint64_t updated_at_unix_ms = 0;
+  std::string continuity_state = "not_checked";
   std::size_t operations_count = 0;
   std::vector<std::string> allowed_operations;
   std::vector<std::string> denied_operations;
@@ -95,6 +102,7 @@ struct NativeApkAppOpsReport {
   std::vector<std::string> ignored_placeholder_operations;
   std::vector<NativeApkAppOpRecord> operation_records;
   std::vector<std::string> healing_actions;
+  std::vector<std::string> continuity_diagnostics;
   std::vector<std::string> diagnostics;
   std::vector<std::string> errors;
 };

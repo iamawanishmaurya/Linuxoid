@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Recovery and Runtime Hardening Checkpoint GREEN
+  Action: Extended repeated `launch-apk --storage-proof` and `launch-apk --permissions-proof` runs so Linuxoid now preserves and validates deterministic sandbox, permission, and AppOps artifacts under the same app-data root, then tightened the Self-Healing Android Device watchdog so blocked keyboard APK launches keep the exact native seam authoritative and journal downstream launch-dependent repairs as `skipped_upstream_blocker` instead of attempting noisy retries.
+  Result: Linuxoid now gives repeated keyboard-style verification runs one stable persistence and recovery story: `continuity_state: validated_existing_state` for sandbox-backed state, `primary_blocker_reason: native_dlopen_failed:libandroidx.graphics.path.so`, `recovery_gating_state: upstream_native_blocker_gated`, and `recommended_next_action: inspect_native_launch_diagnostics`.
+  Timestamp: 2026-05-19T09:45:00+05:30
+
 - Step: Visible Wayland Interaction Checkpoint GREEN
   Action: Extended `launch-apk --window-proof` so Linuxoid now binds the resolved keyboard `SettingsActivity` session to one deterministic `window_manager` target, records `visible_target_state`, `focus_state`, `focus_owned`, `focus_owner`, `interaction_state`, and `interaction_target_component`, and preserves the exact upstream native blocker while still reporting best-effort `backing_mode`, `wayland_surface_available`, and `egl_surface_available` truth.
   Result: Linuxoid now tells one coherent visible-launch and focus/input story for the real keyboard activity instead of collapsing back into generic window failure, while still honestly blocking at `native_dlopen_failed:libandroidx.graphics.path.so` before visible app use exists.

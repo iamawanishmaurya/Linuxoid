@@ -30,6 +30,9 @@ struct SelfHealingAndroidDeviceReport {
   std::string journal_path;
   std::string initial_health = "failed";
   std::string final_health = "failed";
+  std::string primary_blocker_reason = "none";
+  std::string recovery_gating_state = "not_gated";
+  std::string recovery_gating_reason = "none";
   std::string storage_health = "not_requested";
   std::string sandbox_health = "not_requested";
   std::string permission_health = "not_requested";

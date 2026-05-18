@@ -4873,6 +4873,12 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << EscapeJson(report.storage.artifact_root) << "\",\n"
          << "    \"report_json_path\": \""
          << EscapeJson(report.storage.report_json_path) << "\",\n"
+         << "    \"persisted_state_preexisting\": "
+         << (report.storage.persisted_state_preexisting ? "true" : "false")
+         << ",\n"
+         << "    \"continuity_validated\": "
+         << (report.storage.continuity_validated ? "true" : "false")
+         << ",\n"
          << "    \"package_name\": \""
          << EscapeJson(report.storage.package_name) << "\",\n"
          << "    \"apk_path\": \"" << EscapeJson(report.storage.apk_path)
@@ -4894,12 +4900,18 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"marker_path\": \"" << EscapeJson(report.storage.marker_path)
          << "\",\n"
          << "    \"marker_size\": " << report.storage.marker_size << ",\n"
+         << "    \"marker_preexisting\": "
+         << (report.storage.marker_preexisting ? "true" : "false") << ",\n"
+         << "    \"marker_reused\": "
+         << (report.storage.marker_reused ? "true" : "false") << ",\n"
          << "    \"marker_written\": "
          << (report.storage.marker_written ? "true" : "false") << ",\n"
          << "    \"marker_read_back\": "
          << (report.storage.marker_read_back ? "true" : "false") << ",\n"
          << "    \"marker_checksum\": \""
          << EscapeJson(report.storage.marker_checksum) << "\",\n"
+         << "    \"continuity_state\": \""
+         << EscapeJson(report.storage.continuity_state) << "\",\n"
          << "    \"uid_placeholder\": " << report.storage.uid_placeholder
          << ",\n"
          << "    \"gid_placeholder\": " << report.storage.gid_placeholder
@@ -4919,6 +4931,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << RenderJsonArray(report.storage.accepted_paths) << ",\n"
          << "    \"rejected_paths\": "
          << RenderJsonArray(report.storage.rejected_paths) << ",\n"
+         << "    \"continuity_diagnostics\": "
+         << RenderJsonArray(report.storage.continuity_diagnostics) << ",\n"
          << "    \"errors\": " << RenderJsonArray(report.storage.errors)
          << "\n"
          << "  },\n"
@@ -4936,6 +4950,13 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << EscapeJson(report.permissions.artifact_root) << "\",\n"
          << "    \"report_json_path\": \""
          << EscapeJson(report.permissions.report_json_path) << "\",\n"
+         << "    \"persisted_state_preexisting\": "
+         << (report.permissions.persisted_state_preexisting ? "true"
+                                                            : "false")
+         << ",\n"
+         << "    \"continuity_validated\": "
+         << (report.permissions.continuity_validated ? "true" : "false")
+         << ",\n"
          << "    \"package_name\": \""
          << EscapeJson(report.permissions.package_name) << "\",\n"
          << "    \"user_id\": " << report.permissions.user_id << ",\n"
@@ -4950,6 +4971,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << EscapeJson(report.permissions.staged_dir) << "\",\n"
          << "    \"updated_at_unix_ms\": "
          << report.permissions.updated_at_unix_ms << ",\n"
+         << "    \"continuity_state\": \""
+         << EscapeJson(report.permissions.continuity_state) << "\",\n"
          << "    \"requested_permissions\": "
          << RenderJsonArray(report.permissions.requested_permissions) << ",\n"
          << "    \"granted_permissions\": "
@@ -4963,6 +4986,9 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << ",\n"
          << "    \"healing_actions\": "
          << RenderJsonArray(report.permissions.healing_actions) << ",\n"
+         << "    \"continuity_diagnostics\": "
+         << RenderJsonArray(report.permissions.continuity_diagnostics)
+         << ",\n"
          << "    \"diagnostics\": "
          << RenderJsonArray(report.permissions.diagnostics) << ",\n"
          << "    \"errors\": "
@@ -4981,6 +5007,12 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << EscapeJson(report.app_ops.artifact_root) << "\",\n"
          << "    \"report_json_path\": \""
          << EscapeJson(report.app_ops.report_json_path) << "\",\n"
+         << "    \"persisted_state_preexisting\": "
+         << (report.app_ops.persisted_state_preexisting ? "true" : "false")
+         << ",\n"
+         << "    \"continuity_validated\": "
+         << (report.app_ops.continuity_validated ? "true" : "false")
+         << ",\n"
          << "    \"package_name\": \""
          << EscapeJson(report.app_ops.package_name) << "\",\n"
          << "    \"user_id\": " << report.app_ops.user_id << ",\n"
@@ -4995,6 +5027,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << EscapeJson(report.app_ops.staged_dir) << "\",\n"
          << "    \"updated_at_unix_ms\": "
          << report.app_ops.updated_at_unix_ms << ",\n"
+         << "    \"continuity_state\": \""
+         << EscapeJson(report.app_ops.continuity_state) << "\",\n"
          << "    \"operations_count\": " << report.app_ops.operations_count
          << ",\n"
          << "    \"allowed_operations\": "
@@ -5011,6 +5045,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << ",\n"
          << "    \"healing_actions\": "
          << RenderJsonArray(report.app_ops.healing_actions) << ",\n"
+         << "    \"continuity_diagnostics\": "
+         << RenderJsonArray(report.app_ops.continuity_diagnostics) << ",\n"
          << "    \"diagnostics\": "
          << RenderJsonArray(report.app_ops.diagnostics) << ",\n"
          << "    \"errors\": " << RenderJsonArray(report.app_ops.errors)
@@ -5040,6 +5076,15 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "    \"final_health\": \""
          << EscapeJson(report.self_healing_android_device.final_health)
+         << "\",\n"
+         << "    \"primary_blocker_reason\": \""
+         << EscapeJson(report.self_healing_android_device.primary_blocker_reason)
+         << "\",\n"
+         << "    \"recovery_gating_state\": \""
+         << EscapeJson(report.self_healing_android_device.recovery_gating_state)
+         << "\",\n"
+         << "    \"recovery_gating_reason\": \""
+         << EscapeJson(report.self_healing_android_device.recovery_gating_reason)
          << "\",\n"
          << "    \"storage_health\": \""
          << EscapeJson(report.self_healing_android_device.storage_health)

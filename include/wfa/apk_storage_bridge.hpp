@@ -37,6 +37,10 @@ struct NativeApkStoragePathResolution {
 
 struct NativeApkStorageProof {
   bool ready = false;
+  bool persisted_state_preexisting = false;
+  bool continuity_validated = false;
+  bool marker_preexisting = false;
+  bool marker_reused = false;
   std::string session_id;
   std::string artifact_root;
   std::string report_json_path;
@@ -52,6 +56,7 @@ struct NativeApkStorageProof {
   std::string marker_path;
   std::size_t marker_size = 0;
   std::string marker_checksum;
+  std::string continuity_state = "not_checked";
   int uid_placeholder = 10000;
   int gid_placeholder = 10000;
   std::string isolation_level = "path_sandbox_only";
@@ -63,6 +68,7 @@ struct NativeApkStorageProof {
   std::vector<std::string> accepted_paths;
   std::vector<std::string> rejected_paths;
   std::vector<std::string> permission_metadata;
+  std::vector<std::string> continuity_diagnostics;
   std::vector<std::string> errors;
 };
 
