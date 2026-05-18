@@ -47,6 +47,7 @@ add_library(
   src/apk_activity_launch_bridge.cpp
   src/apk_asset_bridge.cpp
   src/apk_dex_bridge.cpp
+  src/apk_java_proof_bridge.cpp
   src/apk_lifecycle_bridge.cpp
   src/apk_native_launch.cpp
   src/apk_permission_bridge.cpp

@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: P14 Java/Kotlin APK Proof Contract GREEN
+  Action: Added `launch-apk --java-proof` and `inspect-apk-java`, persisted deterministic sandbox-backed `java-proof-state.json`, `java-proof-session-map.json`, and `java-proof-events.jsonl` artifacts, wired package/activity/process/window/runtime bootstrap-and-lifecycle proof through a Java/Kotlin-style APK fixture path, validated or healed missing, malformed, incomplete, stale, or incompatible Java proof state, and threaded `java_proof_health` plus deterministic recovery recommendations back into the Self-Healing Android Device watchdog without claiming real Java/Kotlin bytecode execution.
+  Result: Linuxoid now has a Linuxoid-owned Java/Kotlin APK proof contract for direct APK sessions, plus an honest Self-Healing Android Device repair loop that can diagnose blocked runtime/bootstrap wiring, rebuild persisted proof state, and keep the no-Waydroid, no-emulator, no-ADB, no-Android-SDK, no-Gradle test path intact while the next handoff moves toward real managed bytecode invocation.
+  Timestamp: 2026-05-19T00:35:00+05:30
+
 - Step: P13 Real ART Runtime Path Java VM Bootstrap Contract GREEN
   Action: Added `launch-apk --runtime-proof` and `inspect-apk-runtime`, persisted deterministic sandbox-backed `runtime-state.json`, `runtime-session-map.json`, and `runtime-events.jsonl` artifacts, modeled runtime-root discovery plus boot classpath plus runtime-library inputs, validated or healed malformed/incomplete/stale/incompatible runtime-manager state, and threaded `runtime_health` back into the Self-Healing Android Device watchdog with deterministic `retry_runtime_bootstrap` recovery.
   Result: Linuxoid now has a Linuxoid-owned ART/runtime bootstrap contract for direct APK sessions, plus an honest Self-Healing Android Device repair loop that can retry blocked or failed runtime bootstrap after upstream package, activity, process, window, storage, permission/AppOps, Binder, or DEX/bootstrap repairs converge without claiming full Java/Kotlin bytecode execution yet.

@@ -492,6 +492,7 @@ std::string DetermineRecommendedRecoveryAction(
       (!report.surface_proof_requested || report.surface_proof_ready) &&
       (!report.window_proof_requested || report.window_manager.ready) &&
       (!report.runtime_proof_requested || report.runtime_bridge.ready) &&
+      (!report.java_proof_requested || report.java_apk_proof.ready) &&
       (!report.asset_proof_requested || report.asset_bridge.ready) &&
       (!report.asset_proof_requested || report.resource_bridge.ready) &&
       (!report.storage_proof_requested || report.storage.ready) &&
@@ -632,6 +633,11 @@ std::string DetermineRecommendedRecoveryAction(
                ? "retry_runtime_bootstrap"
                : report.runtime_bridge.recommended_recovery_action;
   }
+  if (report.java_proof_requested && !report.java_apk_proof.ready) {
+    return report.java_apk_proof.recommended_recovery_action == "none"
+               ? "inspect_java_kotlin_apk_proof_diagnostics"
+               : report.java_apk_proof.recommended_recovery_action;
+  }
   if (report.surface_proof_requested && !report.surface_proof_ready) {
     return "recreate_native_surface_session";
   }
@@ -643,6 +649,7 @@ bool DetermineRecoverable(const NativeApkLaunchReport& report) {
       (!report.surface_proof_requested || report.surface_proof_ready) &&
       (!report.window_proof_requested || report.window_manager.ready) &&
       (!report.runtime_proof_requested || report.runtime_bridge.ready) &&
+      (!report.java_proof_requested || report.java_apk_proof.ready) &&
       (!report.asset_proof_requested || report.asset_bridge.ready) &&
       (!report.asset_proof_requested || report.resource_bridge.ready) &&
       (!report.storage_proof_requested || report.storage.ready) &&
@@ -973,6 +980,8 @@ NativeApkRuntimeBridgeSession BuildRuntimeBridgeSession(
       std::getenv("LINUXOID_ART_RUNTIME_ROOT_OVERRIDE");
   const char* runtime_probe_override_env =
       std::getenv("LINUXOID_ART_RUNTIME_PROBE_OVERRIDE");
+  const char* disable_host_art_probe_env =
+      std::getenv("LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE");
   return NativeApkRuntimeBridgeSession(
       {.session_id =
            report.package_name + ":" + report.install_id + ":art-runtime",
@@ -1028,6 +1037,9 @@ NativeApkRuntimeBridgeSession BuildRuntimeBridgeSession(
            runtime_root_override_env == nullptr ? "" : runtime_root_override_env,
        .runtime_probe_override =
            runtime_probe_override_env == nullptr ? "" : runtime_probe_override_env,
+       .disable_host_runtime_probe =
+           disable_host_art_probe_env != nullptr &&
+           std::string(disable_host_art_probe_env) == "1",
        .storage_health = report.storage_health,
        .sandbox_health = report.sandbox_health,
        .permission_health = report.permission_health,
@@ -1058,6 +1070,94 @@ NativeApkRuntimeBridgeSession BuildRuntimeBridgeSession(
        .simulate_bootstrap_failure = simulate_bootstrap_failure,
        .bootstrap_recovered = bootstrap_recovered,
        .dex_files = dex_files});
+}
+
+NativeApkJavaProofSession BuildJavaProofBridgeSession(
+    const NativeApkLaunchReport& report, bool allow_persisted_contract_repair) {
+  const fs::path app_data_dir =
+      !report.storage.app_data_dir.empty()
+          ? fs::path(report.storage.app_data_dir)
+          : (fs::path(report.sandbox_root) / "data" / "data" /
+             report.package_name);
+  const fs::path artifact_root = app_data_dir / "java-proof";
+  std::vector<std::string> dex_files;
+  for (const auto& dex_file : report.dex.files) {
+    if (!dex_file.staged_path.empty()) {
+      dex_files.push_back(dex_file.staged_path);
+    }
+  }
+  if (dex_files.empty()) {
+    dex_files = report.art_bootstrap.dex_files;
+  }
+
+  return NativeApkJavaProofSession(
+      {.session_id = report.package_name + ":" + report.install_id +
+                     ":java-proof",
+       .package_name = report.package_name,
+       .requested_package_name = report.requested_package_name,
+       .requested_component = report.requested_component,
+       .apk_path = report.apk_path,
+       .staged_dir = report.staged_dir,
+       .sandbox_root = report.sandbox_root,
+       .app_data_dir = app_data_dir.string(),
+       .artifact_root = artifact_root.string(),
+       .install_id = report.install_id,
+       .version_name = report.version_name,
+       .version_code = report.version_code,
+       .user_id = report.permissions.user_id,
+       .app_id = report.permissions.app_id,
+       .uid_placeholder = report.storage.uid_placeholder,
+       .gid_placeholder = report.storage.gid_placeholder,
+       .launch_status = report.launch_status,
+       .launch_ready = report.launch_ready,
+       .launcher_component = report.launcher_component,
+       .resolved_component = report.intent_resolution.resolved_component,
+       .process_session_id = report.activity_manager.session_id,
+       .process_identity = report.process_manager.process_identity,
+       .process_name = report.process_manager.process_name,
+       .pid_value = report.process_manager.pid_value,
+       .pid_source = report.process_manager.pid_source,
+       .window_session_id = report.window_manager.session_id,
+       .window_id = report.window_manager.window_id,
+       .runtime_session_id = report.runtime_bridge.session_id,
+       .runtime_handle = report.runtime_bridge.runtime_handle,
+       .runtime_root = report.runtime_bridge.runtime_root,
+       .runtime_discovery_source = report.runtime_bridge.discovery_source,
+       .runtime_bootstrap_state = report.runtime_bridge.bootstrap_state,
+       .package_manager_ready = report.package_manager.ready,
+       .intent_resolution_ready = report.intent_resolution.ready,
+       .activity_launch_ready = report.activity_launch.ready,
+       .process_ready = report.process_manager.ready,
+       .window_ready = report.window_manager.ready,
+       .runtime_ready = report.runtime_bridge.ready,
+       .storage_ready = report.storage.ready,
+       .sandbox_ready = report.sandbox_health == "ready",
+       .permission_ready = report.permissions.ready,
+       .app_ops_ready = report.app_ops.ready,
+       .surface_ready = report.surface_proof_ready,
+       .lifecycle_ready = report.lifecycle.ready && report.looper.ready &&
+                          report.input_queue.ready,
+       .dex_ready = report.dex.ready,
+       .art_ready = report.art_bootstrap.ready,
+       .assets_count = report.assets_count,
+       .resource_table_present = report.resource_bridge.resource_table_present,
+       .dex_files = dex_files,
+       .art_runtime_available = report.runtime_bridge.art_runtime_available,
+       .class_loader_ready = report.runtime_bridge.class_loader_ready,
+       .bytecode_execution_ready =
+           report.runtime_bridge.bytecode_execution_ready,
+       .java_execution_supported =
+           report.runtime_bridge.java_execution_supported,
+       .self_healing_requested = report.self_heal_proof_requested,
+       .self_healing_ready = report.self_healing_android_device.ready,
+       .self_healing_initial_health =
+           report.self_healing_android_device.initial_health,
+       .self_healing_final_health =
+           report.self_healing_android_device.final_health,
+       .self_healing_recommended_next_action =
+           report.self_healing_android_device.recommended_next_action,
+       .persisted_artifact_root_preexisting = fs::exists(artifact_root),
+       .allow_persisted_contract_repair = allow_persisted_contract_repair});
 }
 
 NativeApkActivityLaunchBridgeSession BuildActivityLaunchBridgeSession(
@@ -1191,6 +1291,12 @@ void PopulateRequestedProofFailures(NativeApkLaunchReport* report) {
   } else {
     report->runtime_health = "not_requested";
   }
+  if (report->java_proof_requested) {
+    report->java_apk_proof.errors = report->errors;
+    report->java_proof_health = "blocked";
+  } else {
+    report->java_proof_health = "not_requested";
+  }
   if (report->activity_proof_requested) {
     report->binder_health = "blocked";
     report->activity_health = "blocked";
@@ -1299,12 +1405,66 @@ void ApplySimulatedSubsystemFaults(NativeApkLaunchReport* report,
   }
 }
 
+void RefreshAggregateLaunchHealth(NativeApkLaunchReport* report) {
+  const bool asset_contract_ready =
+      !report->asset_proof_requested ||
+      (report->asset_bridge.ready && report->resource_bridge.ready);
+  const bool storage_contract_ready =
+      !report->storage_proof_requested || report->storage.ready;
+  const bool permissions_contract_ready =
+      !report->permissions_proof_requested ||
+      (report->permissions.ready && report->app_ops.ready);
+  const bool lifecycle_contract_ready =
+      !report->lifecycle_proof_requested ||
+      (report->lifecycle.ready && report->looper.ready &&
+       report->input_queue.ready);
+  const bool dex_contract_ready =
+      !report->dex_proof_requested ||
+      (report->dex.ready && report->art_bootstrap.ready);
+  const bool activity_contract_ready =
+      !report->activity_proof_requested ||
+      (report->package_manager.ready && report->intent_resolution.ready &&
+       report->activity_launch.ready);
+  const bool process_contract_ready =
+      !report->process_proof_requested ||
+      (report->activity_manager.ready && report->process_manager.ready);
+  const bool window_contract_ready =
+      !report->window_proof_requested || report->window_manager.ready;
+  const bool runtime_contract_ready =
+      !report->runtime_proof_requested || report->runtime_bridge.ready;
+  const bool java_contract_ready =
+      !report->java_proof_requested || report->java_apk_proof.ready;
+  report->launch_health =
+      report->launch_ready &&
+              (!report->surface_proof_requested || report->surface_proof_ready) &&
+              window_contract_ready && runtime_contract_ready &&
+              java_contract_ready && asset_contract_ready &&
+              storage_contract_ready && permissions_contract_ready &&
+              lifecycle_contract_ready && dex_contract_ready &&
+              activity_contract_ready && process_contract_ready
+          ? "ready"
+          : "blocked";
+  report->recoverable = DetermineRecoverable(*report);
+  report->recommended_recovery_action =
+      DetermineRecommendedRecoveryAction(*report);
+}
+
 NativeApkLaunchReport FinalizeNativeApkLaunchReport(
     NativeApkLaunchReport report, const NativeApkLaunchOptions& options) {
   if (options.self_heal_proof_requested) {
     report.self_healing_android_device =
         SelfHealingAndroidDeviceWatchdog(report).Run();
   }
+  if (report.java_proof_requested && options.self_heal_proof_requested) {
+    report.java_apk_proof = BuildJavaProofBridgeSession(
+                                report, !report.self_heal_proof_requested)
+                                .BuildReport();
+    report.java_proof_health = report.java_apk_proof.ready ? "ready" : "blocked";
+    for (const auto& error : report.java_apk_proof.errors) {
+      AppendError(&report.errors, error);
+    }
+  }
+  RefreshAggregateLaunchHealth(&report);
   if (!report.report_json_path.empty()) {
     WriteTextFile(report.report_json_path, RenderNativeApkLaunchJson(report));
   }
@@ -1534,8 +1694,10 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
   report.requested_package_name = options.requested_package_name;
   report.requested_component = options.requested_component;
   report.self_heal_proof_requested = options.self_heal_proof_requested;
+  report.java_proof_requested = options.java_proof_requested;
   report.runtime_proof_requested =
-      options.runtime_proof_requested || options.simulate_failed_runtime_bootstrap;
+      options.runtime_proof_requested || report.java_proof_requested ||
+      options.simulate_failed_runtime_bootstrap;
   report.window_proof_requested =
       options.window_proof_requested || report.runtime_proof_requested ||
       options.self_heal_proof_requested;
@@ -1557,7 +1719,8 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       options.surface_proof_requested || report.activity_proof_requested ||
       report.window_proof_requested || options.self_heal_proof_requested;
   report.asset_proof_requested =
-      options.asset_proof_requested || options.self_heal_proof_requested;
+      options.asset_proof_requested || report.java_proof_requested ||
+      options.self_heal_proof_requested;
   report.lifecycle_proof_requested =
       options.lifecycle_proof_requested || report.activity_proof_requested ||
       options.self_heal_proof_requested;
@@ -1606,6 +1769,12 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
                 "local_art_runtime_bootstrap_contract_only");
     AppendError(&report.limitations,
                 "future_java_execution_requires_real_art_runtime");
+  }
+  if (report.java_proof_requested) {
+    AppendError(&report.limitations,
+                "java_kotlin_apk_proof_contract_only");
+    AppendError(&report.limitations,
+                "no_real_java_bytecode_execution_yet");
   }
   if (report.self_heal_proof_requested) {
     AppendError(&report.limitations,
@@ -2008,48 +2177,19 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
     report.runtime_health = "not_requested";
   }
 
-  const bool asset_contract_ready =
-      !report.asset_proof_requested ||
-      (report.asset_bridge.ready && report.resource_bridge.ready);
-  const bool storage_contract_ready =
-      !report.storage_proof_requested || report.storage.ready;
-  const bool permissions_contract_ready =
-      !report.permissions_proof_requested ||
-      (report.permissions.ready && report.app_ops.ready);
-  const bool lifecycle_contract_ready =
-      !report.lifecycle_proof_requested ||
-      (report.lifecycle.ready && report.looper.ready && report.input_queue.ready);
-  const bool dex_contract_ready =
-      !report.dex_proof_requested ||
-      (report.dex.ready && report.art_bootstrap.ready);
-  const bool activity_contract_ready =
-      !report.activity_proof_requested ||
-      (report.package_manager.ready && report.intent_resolution.ready &&
-       report.activity_launch.ready);
-  const bool process_contract_ready =
-      !report.process_proof_requested ||
-      (report.activity_manager.ready && report.process_manager.ready);
-  const bool window_contract_ready =
-      !report.window_proof_requested || report.window_manager.ready;
-  const bool runtime_contract_ready =
-      !report.runtime_proof_requested || report.runtime_bridge.ready;
-  report.launch_health =
-      report.launch_ready &&
-              (!report.surface_proof_requested || report.surface_proof_ready) &&
-              window_contract_ready &&
-              runtime_contract_ready &&
-              asset_contract_ready &&
-              storage_contract_ready &&
-              permissions_contract_ready &&
-              lifecycle_contract_ready &&
-              dex_contract_ready &&
-              activity_contract_ready &&
-              process_contract_ready
-          ? "ready"
-          : "blocked";
-  report.recoverable = DetermineRecoverable(report);
-  report.recommended_recovery_action =
-      DetermineRecommendedRecoveryAction(report);
+  if (report.java_proof_requested) {
+    report.java_apk_proof = BuildJavaProofBridgeSession(
+                                report, !report.self_heal_proof_requested)
+                                .BuildReport();
+    report.java_proof_health = report.java_apk_proof.ready ? "ready" : "blocked";
+    for (const auto& error : report.java_apk_proof.errors) {
+      AppendError(&report.errors, error);
+    }
+  } else {
+    report.java_proof_health = "not_requested";
+  }
+
+  RefreshAggregateLaunchHealth(&report);
 
   return FinalizeNativeApkLaunchReport(std::move(report), options);
 }
@@ -2093,6 +2233,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << (report.window_proof_requested ? "true" : "false") << ",\n"
          << "  \"runtime_proof_requested\": "
          << (report.runtime_proof_requested ? "true" : "false") << ",\n"
+         << "  \"java_proof_requested\": "
+         << (report.java_proof_requested ? "true" : "false") << ",\n"
          << "  \"storage_proof_requested\": "
          << (report.storage_proof_requested ? "true" : "false") << ",\n"
          << "  \"permissions_proof_requested\": "
@@ -2141,6 +2283,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "  \"runtime_health\": \"" << EscapeJson(report.runtime_health)
          << "\",\n"
+         << "  \"java_proof_health\": \""
+         << EscapeJson(report.java_proof_health) << "\",\n"
          << "  \"asset_health\": \"" << EscapeJson(report.asset_health)
          << "\",\n"
          << "  \"resource_health\": \"" << EscapeJson(report.resource_health)
@@ -3000,6 +3144,149 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << RenderJsonArray(report.runtime_bridge.diagnostics) << ",\n"
          << "    \"errors\": "
          << RenderJsonArray(report.runtime_bridge.errors) << "\n"
+         << "  },\n"
+         << "  \"java_apk_proof\": {\n"
+         << "    \"schema_version\": \""
+         << EscapeJson(report.java_apk_proof.schema_version) << "\",\n"
+         << "    \"ready\": "
+         << (report.java_apk_proof.ready ? "true" : "false") << ",\n"
+         << "    \"contract_ready\": "
+         << (report.java_apk_proof.contract_ready ? "true" : "false")
+         << ",\n"
+         << "    \"session_id\": \""
+         << EscapeJson(report.java_apk_proof.session_id) << "\",\n"
+         << "    \"artifact_root\": \""
+         << EscapeJson(report.java_apk_proof.artifact_root) << "\",\n"
+         << "    \"report_json_path\": \""
+         << EscapeJson(report.java_apk_proof.report_json_path)
+         << "\",\n"
+         << "    \"session_map_path\": \""
+         << EscapeJson(report.java_apk_proof.session_map_path)
+         << "\",\n"
+         << "    \"event_log_path\": \""
+         << EscapeJson(report.java_apk_proof.event_log_path) << "\",\n"
+         << "    \"package_name\": \""
+         << EscapeJson(report.java_apk_proof.package_name) << "\",\n"
+         << "    \"user_id\": " << report.java_apk_proof.user_id << ",\n"
+         << "    \"app_id\": " << report.java_apk_proof.app_id << ",\n"
+         << "    \"uid_placeholder\": "
+         << report.java_apk_proof.uid_placeholder << ",\n"
+         << "    \"gid_placeholder\": "
+         << report.java_apk_proof.gid_placeholder << ",\n"
+         << "    \"sandbox_root\": \""
+         << EscapeJson(report.java_apk_proof.sandbox_root) << "\",\n"
+         << "    \"app_data_dir\": \""
+         << EscapeJson(report.java_apk_proof.app_data_dir) << "\",\n"
+         << "    \"apk_path\": \""
+         << EscapeJson(report.java_apk_proof.apk_path) << "\",\n"
+         << "    \"staged_dir\": \""
+         << EscapeJson(report.java_apk_proof.staged_dir) << "\",\n"
+         << "    \"updated_at_unix_ms\": "
+         << report.java_apk_proof.updated_at_unix_ms << ",\n"
+         << "    \"proof_mode\": \""
+         << EscapeJson(report.java_apk_proof.proof_mode) << "\",\n"
+         << "    \"launcher_component\": \""
+         << EscapeJson(report.java_apk_proof.launcher_component)
+         << "\",\n"
+         << "    \"resolved_component\": \""
+         << EscapeJson(report.java_apk_proof.resolved_component)
+         << "\",\n"
+         << "    \"process_session_id\": \""
+         << EscapeJson(report.java_apk_proof.process_session_id)
+         << "\",\n"
+         << "    \"process_identity\": \""
+         << EscapeJson(report.java_apk_proof.process_identity) << "\",\n"
+         << "    \"process_name\": \""
+         << EscapeJson(report.java_apk_proof.process_name) << "\",\n"
+         << "    \"pid_value\": " << report.java_apk_proof.pid_value
+         << ",\n"
+         << "    \"pid_source\": \""
+         << EscapeJson(report.java_apk_proof.pid_source) << "\",\n"
+         << "    \"window_session_id\": \""
+         << EscapeJson(report.java_apk_proof.window_session_id)
+         << "\",\n"
+         << "    \"window_id\": \""
+         << EscapeJson(report.java_apk_proof.window_id) << "\",\n"
+         << "    \"runtime_session_id\": \""
+         << EscapeJson(report.java_apk_proof.runtime_session_id)
+         << "\",\n"
+         << "    \"runtime_handle\": \""
+         << EscapeJson(report.java_apk_proof.runtime_handle) << "\",\n"
+         << "    \"runtime_root\": \""
+         << EscapeJson(report.java_apk_proof.runtime_root) << "\",\n"
+         << "    \"runtime_discovery_source\": \""
+         << EscapeJson(report.java_apk_proof.runtime_discovery_source)
+         << "\",\n"
+         << "    \"runtime_bootstrap_state\": \""
+         << EscapeJson(report.java_apk_proof.runtime_bootstrap_state)
+         << "\",\n"
+         << "    \"assets_count\": " << report.java_apk_proof.assets_count
+         << ",\n"
+         << "    \"resource_table_present\": "
+         << (report.java_apk_proof.resource_table_present ? "true" : "false")
+         << ",\n"
+         << "    \"dex_files_count\": "
+         << report.java_apk_proof.dex_files_count << ",\n"
+         << "    \"package_manager_ready\": "
+         << (report.java_apk_proof.package_manager_ready ? "true" : "false")
+         << ",\n"
+         << "    \"intent_resolution_ready\": "
+         << (report.java_apk_proof.intent_resolution_ready ? "true"
+                                                           : "false")
+         << ",\n"
+         << "    \"activity_launch_ready\": "
+         << (report.java_apk_proof.activity_launch_ready ? "true"
+                                                         : "false")
+         << ",\n"
+         << "    \"process_ready\": "
+         << (report.java_apk_proof.process_ready ? "true" : "false")
+         << ",\n"
+         << "    \"window_ready\": "
+         << (report.java_apk_proof.window_ready ? "true" : "false")
+         << ",\n"
+         << "    \"runtime_ready\": "
+         << (report.java_apk_proof.runtime_ready ? "true" : "false")
+         << ",\n"
+         << "    \"art_runtime_available\": "
+         << (report.java_apk_proof.art_runtime_available ? "true" : "false")
+         << ",\n"
+         << "    \"class_loader_ready\": "
+         << (report.java_apk_proof.class_loader_ready ? "true" : "false")
+         << ",\n"
+         << "    \"bytecode_execution_ready\": "
+         << (report.java_apk_proof.bytecode_execution_ready ? "true"
+                                                            : "false")
+         << ",\n"
+         << "    \"java_execution_supported\": "
+         << (report.java_apk_proof.java_execution_supported ? "true"
+                                                            : "false")
+         << ",\n"
+         << "    \"self_healing_requested\": "
+         << (report.java_apk_proof.self_healing_requested ? "true"
+                                                          : "false")
+         << ",\n"
+         << "    \"self_healing_ready\": "
+         << (report.java_apk_proof.self_healing_ready ? "true" : "false")
+         << ",\n"
+         << "    \"self_healing_final_health\": \""
+         << EscapeJson(report.java_apk_proof.self_healing_final_health)
+         << "\",\n"
+         << "    \"proof_state\": \""
+         << EscapeJson(report.java_apk_proof.proof_state) << "\",\n"
+         << "    \"blocking_reason\": \""
+         << EscapeJson(report.java_apk_proof.blocking_reason) << "\",\n"
+         << "    \"recommended_recovery_action\": \""
+         << EscapeJson(report.java_apk_proof.recommended_recovery_action)
+         << "\",\n"
+         << "    \"states_visited\": "
+         << RenderJsonArray(report.java_apk_proof.states_visited) << ",\n"
+         << "    \"healing_actions\": "
+         << RenderJsonArray(report.java_apk_proof.healing_actions)
+         << ",\n"
+         << "    \"diagnostics\": "
+         << RenderJsonArray(report.java_apk_proof.diagnostics) << ",\n"
+         << "    \"errors\": "
+         << RenderJsonArray(report.java_apk_proof.errors) << "\n"
          << "  },\n"
          << "  \"storage\": {\n"
          << "    \"ready\": " << (report.storage.ready ? "true" : "false")

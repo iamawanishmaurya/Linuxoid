@@ -54,6 +54,7 @@ struct NativeApkRuntimeBridgeContext {
   bool egl_surface_available = false;
   std::string runtime_root_override;
   std::string runtime_probe_override;
+  bool disable_host_runtime_probe = false;
   std::string storage_health = "not_requested";
   std::string sandbox_health = "not_requested";
   std::string permission_health = "not_requested";

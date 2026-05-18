@@ -47,11 +47,13 @@ void PrintUsage() {
       << "  compatctl launch-apk --dex-proof <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --storage-proof <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --permissions-proof <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --java-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --runtime-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --process-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --activity-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --self-heal-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk-surface <apk-path> [staging-root]\n"
+      << "  compatctl inspect-apk-java <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-permissions <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-process <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-runtime <apk-path> [staging-root]\n"
@@ -249,6 +251,7 @@ int main(int argc, char** argv) {
       bool process_proof_requested = false;
       bool window_proof_requested = false;
       bool runtime_proof_requested = false;
+      bool java_proof_requested = false;
       bool storage_proof_requested = false;
       bool permissions_proof_requested = false;
       bool self_heal_proof_requested = false;
@@ -307,6 +310,11 @@ int main(int argc, char** argv) {
           ++apk_arg_index;
           continue;
         }
+        if (argument == "--java-proof") {
+          java_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
         if (argument == "--self-heal-proof") {
           self_heal_proof_requested = true;
           ++apk_arg_index;
@@ -346,6 +354,7 @@ int main(int argc, char** argv) {
           .process_proof_requested = process_proof_requested,
           .window_proof_requested = window_proof_requested,
           .runtime_proof_requested = runtime_proof_requested,
+          .java_proof_requested = java_proof_requested,
           .storage_proof_requested = storage_proof_requested,
           .permissions_proof_requested = permissions_proof_requested,
           .self_heal_proof_requested = self_heal_proof_requested,
@@ -371,7 +380,8 @@ int main(int argc, char** argv) {
           (!report.process_proof_requested ||
            (report.activity_manager.ready && report.process_manager.ready)) &&
           (!report.window_proof_requested || report.window_manager.ready) &&
-          (!report.runtime_proof_requested || report.runtime_bridge.ready);
+          (!report.runtime_proof_requested || report.runtime_bridge.ready) &&
+          (!report.java_proof_requested || report.java_apk_proof.ready);
       const bool self_heal_converged =
           report.self_healing_android_device.ready &&
           (report.self_healing_android_device.final_health == "healthy" ||
@@ -393,6 +403,22 @@ int main(int argc, char** argv) {
       const auto report = wfa::InspectApkResourceReadiness(argv[2], resource_root);
       std::cout << wfa::RenderApkResourceReadinessJson(report);
       return report.manifest.manifest_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "inspect-apk-java") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const wfa::NativeApkLaunchOptions options{
+          .staging_root = argc == 4 ? argv[3] : "/tmp/linuxoid-apk-launch",
+          .watchdog_seconds = 1,
+          .java_proof_requested = true,
+      };
+      const auto report = wfa::LaunchNativeApk(argv[2], options);
+      std::cout << wfa::RenderNativeApkLaunchJson(report);
+      return report.java_apk_proof.ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "inspect-apk-permissions") {

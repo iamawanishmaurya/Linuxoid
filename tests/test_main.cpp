@@ -305,6 +305,14 @@ std::string BuildResolvableDexPayload(
   return payload;
 }
 
+std::string BuildInvalidDexMagicPayload(
+    const std::vector<std::string>& class_descriptors) {
+  std::string payload = BuildResolvableDexPayload(class_descriptors);
+  Expect(payload.size() >= 8, "expected dex payload to include dex magic");
+  payload.replace(0, 8, "badmagic");
+  return payload;
+}
+
 struct RuntimeHealthBootstrapFixture {
   std::filesystem::path root;
   wfa::NativeActivityBootstrap bootstrap;
@@ -326,6 +334,11 @@ struct NativeApkLaunchFixture {
   std::filesystem::path staging_root;
   std::string package_name;
   std::string launcher_component;
+};
+
+struct JavaKotlinApkProofFixture {
+  NativeApkLaunchFixture launch;
+  std::filesystem::path runtime_root;
 };
 
 NativeRuntimePackageFixture CreateNativeRuntimePackageFixture(
@@ -521,6 +534,39 @@ NativeApkLaunchFixture CreateNativeApkLaunchFixtureWithManifest(
           .staging_root = root / "staging",
           .package_name = "com.example.launchapk",
           .launcher_component = "com.example.launchapk/.MainActivity"};
+}
+
+JavaKotlinApkProofFixture CreateJavaKotlinApkProofFixture(
+    const std::string& fixture_name, bool include_runtime_root = true,
+    const std::vector<std::pair<std::string, std::string>>& extra_entries = {}) {
+  const bool extra_entries_override_dex = std::any_of(
+      extra_entries.begin(), extra_entries.end(),
+      [](const std::pair<std::string, std::string>& entry) {
+        return entry.first == "classes.dex" ||
+               (entry.first.rfind("classes", 0) == 0 &&
+                entry.first.size() > 4 &&
+                entry.first.substr(entry.first.size() - 4) == ".dex");
+      });
+  const auto launch = CreateNativeApkLaunchFixture(
+      fixture_name, true, true,
+      [&]() {
+        std::vector<std::pair<std::string, std::string>> entries;
+        if (!extra_entries_override_dex) {
+          entries.push_back(
+              {"classes.dex",
+               BuildResolvableDexPayload({"Lcom/example/launchapk/App;",
+                                          "Lcom/example/launchapk/MainActivity;"})});
+        }
+        entries.insert(entries.end(), extra_entries.begin(), extra_entries.end());
+        return entries;
+      }());
+
+  std::filesystem::path runtime_root;
+  if (include_runtime_root) {
+    runtime_root = CreateArtRuntimeRootFixture(launch.root / "art-runtime");
+  }
+
+  return {.launch = launch, .runtime_root = runtime_root};
 }
 
 wfa::NativeApkAssetBridgeSession BuildAssetBridgeSessionForLaunchReport(
@@ -8391,6 +8437,238 @@ void TestLaunchApkSelfHealProofRetriesRuntimeBootstrapAfterFailure() {
   fs::remove_all(fixture.root);
 }
 
+void TestLaunchApkJavaProofCommandRunsFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-launch-apk-java-proof-valid");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --java-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected launch-apk java proof command to succeed");
+  Expect(output.find("\"java_proof_requested\": true") != std::string::npos,
+         "expected java proof request flag in json");
+  Expect(output.find("\"java_proof_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready java proof health in json");
+  Expect(output.find("\"java_apk_proof\": {") != std::string::npos,
+         "expected java_apk_proof section in json");
+  Expect(output.find("\"proof_state\": \"ready\"") != std::string::npos,
+         "expected ready java proof state in json");
+  Expect(output.find("\"runtime_bootstrap_state\": \"ready\"") !=
+             std::string::npos,
+         "expected ready runtime bootstrap state in java proof json");
+  Expect(output.find("\"java_execution_supported\": false") !=
+             std::string::npos,
+         "expected honest no-java-execution flag in java proof json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkJavaProofTracksSessionArtifacts() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-launch-apk-java-proof-artifacts");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  ReadCommandOutput(compatctl.string() + " launch-apk --java-proof " +
+                        fixture.launch.apk_path.string() + " " +
+                        fixture.launch.staging_root.string(),
+                    &exit_code);
+
+  Expect(exit_code == 0, "expected launch-apk java proof command to succeed");
+  const fs::path java_root =
+      fixture.launch.staging_root /
+      "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/"
+      "sandbox/data/data/com.example.launchapk/java-proof";
+  Expect(fs::exists(java_root / "java-proof-state.json"),
+         "expected java-proof-state artifact");
+  Expect(fs::exists(java_root / "java-proof-session-map.json"),
+         "expected java-proof-session-map artifact");
+  Expect(fs::exists(java_root / "java-proof-events.jsonl"),
+         "expected java-proof-events artifact");
+
+  const std::string session_map =
+      ReadTextFile(java_root / "java-proof-session-map.json");
+  Expect(session_map.find("com.example.launchapk/.MainActivity") !=
+             std::string::npos,
+         "expected java proof session map to reference resolved activity");
+  Expect(session_map.find("com.example.launchapk:vc1-1.0.0:process-manager") !=
+             std::string::npos,
+         "expected java proof session map to reference process session");
+  Expect(session_map.find("com.example.launchapk:vc1-1.0.0:window-manager") !=
+             std::string::npos,
+         "expected java proof session map to reference window session");
+  Expect(session_map.find("com.example.launchapk:vc1-1.0.0:art-runtime") !=
+             std::string::npos,
+         "expected java proof session map to reference runtime session");
+
+  const std::string event_log =
+      ReadTextFile(java_root / "java-proof-events.jsonl");
+  Expect(event_log.find("\"state\": \"package_inspected\"") !=
+             std::string::npos,
+         "expected package_inspected state in java proof event log");
+  Expect(event_log.find("\"state\": \"runtime_contract_ready\"") !=
+             std::string::npos,
+         "expected runtime_contract_ready state in java proof event log");
+  Expect(event_log.find("\"state\": \"proof_ready\"") != std::string::npos,
+         "expected proof_ready state in java proof event log");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestInspectApkJavaCommandReportsReadyContracts() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-inspect-apk-java-ready");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-java " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0, "expected inspect-apk-java command to succeed");
+  Expect(!output.empty() && output.front() == '{',
+         "expected structured json from inspect-apk-java");
+  Expect(output.find("\"java_proof_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready java proof health in inspect-apk-java json");
+  Expect(output.find("\"java_apk_proof\": {") != std::string::npos,
+         "expected java_apk_proof section in inspect-apk-java json");
+  Expect(output.find("\"proof_state\": \"ready\"") != std::string::npos,
+         "expected ready java proof state in inspect-apk-java json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkJavaProofBlocksWhenRuntimeUnavailable() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-launch-apk-java-proof-runtime-missing", false);
+  const ScopedEnvironmentVariable disable_host_art_probe(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --java-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected launch-apk java proof command to fail without runtime root");
+  Expect(output.find("\"java_proof_health\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked java proof health in runtime-missing json");
+  Expect(output.find(
+             "\"blocking_reason\": \"art_runtime_unavailable_for_java_proof\"") !=
+             std::string::npos,
+         "expected runtime-unavailable blocking reason in java proof json");
+  Expect(output.find(
+             "\"recommended_recovery_action\": \"retry_runtime_bootstrap\"") !=
+             std::string::npos,
+         "expected retry_runtime_bootstrap recommendation in java proof json");
+  Expect(output.find("Self-Healing Android Device") != std::string::npos,
+         "expected Self-Healing Android Device wording in java proof diagnostics");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkJavaProofBlocksWhenDexInvalid() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-launch-apk-java-proof-invalid-dex", true,
+      {{"classes.dex",
+        BuildInvalidDexMagicPayload({"Lcom/example/launchapk/App;",
+                                     "Lcom/example/launchapk/MainActivity;"})}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --java-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected launch-apk java proof command to fail with invalid dex");
+  Expect(output.find("\"java_proof_health\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked java proof health in invalid-dex json");
+  Expect(output.find(
+             "\"blocking_reason\": \"dex_bootstrap_not_ready_for_java_proof\"") !=
+             std::string::npos,
+         "expected dex-bootstrap blocking reason in java proof json");
+  Expect(output.find(
+             "\"recommended_recovery_action\": \"rebuild_dex_bootstrap\"") !=
+             std::string::npos,
+         "expected rebuild_dex_bootstrap recommendation in java proof json");
+  Expect(output.find("dex_magic_invalid") != std::string::npos,
+         "expected invalid dex diagnostic in java proof json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkJavaProofHealsMalformedFiles() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-launch-apk-java-proof-heal-malformed");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  ReadCommandOutput(compatctl.string() + " launch-apk --java-proof " +
+                        fixture.launch.apk_path.string() + " " +
+                        fixture.launch.staging_root.string(),
+                    &exit_code);
+  Expect(exit_code == 0, "expected initial java proof command to succeed");
+
+  const fs::path java_root =
+      fixture.launch.staging_root /
+      "users/0/packages/com.example.launchapk/vc1-1.0.0/launch-apk/default/"
+      "sandbox/data/data/com.example.launchapk/java-proof";
+  WriteTextFile(java_root / "java-proof-state.json", "{malformed");
+
+  const std::string healed_output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-java " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected malformed java proof state to heal on inspect");
+  Expect(healed_output.find("rebuild_malformed_java_apk_proof_state") !=
+             std::string::npos,
+         "expected java proof malformed healing action in json");
+  Expect(healed_output.find("\"java_proof_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready java proof health after healing");
+  Expect(healed_output.find("Self-Healing Android Device") !=
+             std::string::npos,
+         "expected Self-Healing Android Device wording in java proof healing json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
 void TestRuntimeBridgeOutputParsers() {
   Expect(wfa::OutputContainsInstalledPackage("package:org.futo.inputmethod.latin\n",
                                              "org.futo.inputmethod.latin"),
@@ -12687,6 +12965,12 @@ int main() {
     TestInspectApkRuntimeCommandReportsReadyContracts();
     TestLaunchApkRuntimeProofHealsMalformedFiles();
     TestLaunchApkSelfHealProofRetriesRuntimeBootstrapAfterFailure();
+    TestLaunchApkJavaProofCommandRunsFixture();
+    TestLaunchApkJavaProofTracksSessionArtifacts();
+    TestInspectApkJavaCommandReportsReadyContracts();
+    TestLaunchApkJavaProofBlocksWhenRuntimeUnavailable();
+    TestLaunchApkJavaProofBlocksWhenDexInvalid();
+    TestLaunchApkJavaProofHealsMalformedFiles();
     TestLaunchApkPermissionsProofEmitsDeniedAudioCaptureDiagnostics();
   TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();

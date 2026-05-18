@@ -325,9 +325,11 @@ RuntimeDiscovery DiscoverRuntime(const NativeApkRuntimeBridgeContext& context) {
       candidates.push_back(probe_path.parent_path().parent_path());
     }
   }
-  candidates.emplace_back("/opt/linuxoid/art-runtime");
-  candidates.emplace_back("/usr/lib/android-runtime");
-  candidates.emplace_back("/usr/local/lib/android-runtime");
+  if (!context.disable_host_runtime_probe) {
+    candidates.emplace_back("/opt/linuxoid/art-runtime");
+    candidates.emplace_back("/usr/lib/android-runtime");
+    candidates.emplace_back("/usr/local/lib/android-runtime");
+  }
 
   for (const auto& candidate : candidates) {
     if (candidate.empty() || !fs::exists(candidate)) {

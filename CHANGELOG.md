@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.107 - 2026-05-18
+
+- Implement **P14 Java/Kotlin APK Proof Contract** on the direct `launch-apk` path through `--java-proof` and `inspect-apk-java`, extending the staged APK session into a Linuxoid-owned `java_apk_proof` contract that wires package inspection, intent/activity resolution, process/session identity, window/surface state, runtime bootstrap state, and Self-Healing Android Device diagnostics together without claiming full Java/Kotlin bytecode execution.
+- Persist deterministic Java/Kotlin proof artifacts under `sandbox/data/data/<package>/java-proof/java-proof-state.json`, `java-proof-session-map.json`, and `java-proof-events.jsonl`, and validate or heal missing, malformed, incomplete, stale, or incompatible proof state without introducing Waydroid, emulator, ADB, Android SDK, Gradle, network, or live-display test dependencies.
+- Add regression coverage for successful Java/Kotlin-style proof APK execution wiring, deterministic session artifact mapping, focused `inspect-apk-java` operator output, useful blocked diagnostics for invalid DEX and missing runtime configuration, healing of malformed proof state, and preservation of the existing P2 through P13 behavior.
+- Update repo docs and status output to make **P14 Java/Kotlin APK Proof Contract** the current direct-runtime slice and point the next handoff at **P15 Managed Bytecode Invocation + ActivityThread Contract**.
+
 ## v0.1.106 - 2026-05-18
 
 - Implement **P13 Real ART Runtime Path / Java VM Bootstrap Contract** on the direct `launch-apk` path through `--runtime-proof` and `inspect-apk-runtime`, extending the staged APK session into a Linuxoid-owned `runtime_bridge` contract that models runtime-root discovery, boot classpath assembly, native runtime library directories, staged dex inputs, package/activity/process/window identity, and a deterministic runtime handle without Waydroid, emulator, or ADB.

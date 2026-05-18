@@ -4,6 +4,7 @@
 #include "wfa/apk_activity_launch_bridge.hpp"
 #include "wfa/apk_asset_bridge.hpp"
 #include "wfa/apk_dex_bridge.hpp"
+#include "wfa/apk_java_proof_bridge.hpp"
 #include "wfa/apk_lifecycle_bridge.hpp"
 #include "wfa/apk_process_bridge.hpp"
 #include "wfa/apk_runtime_bridge.hpp"
@@ -32,6 +33,7 @@ struct NativeApkLaunchOptions {
   bool process_proof_requested = false;
   bool window_proof_requested = false;
   bool runtime_proof_requested = false;
+  bool java_proof_requested = false;
   bool storage_proof_requested = false;
   bool permissions_proof_requested = false;
   bool self_heal_proof_requested = false;
@@ -119,6 +121,7 @@ struct NativeApkLaunchReport {
   std::string activity_manager_health = "not_requested";
   std::string process_health = "not_requested";
   std::string runtime_health = "not_requested";
+  std::string java_proof_health = "not_requested";
   std::string storage_health = "not_requested";
   std::string sandbox_health = "not_requested";
   std::string permission_health = "not_requested";
@@ -140,6 +143,7 @@ struct NativeApkLaunchReport {
   bool process_proof_requested = false;
   bool window_proof_requested = false;
   bool runtime_proof_requested = false;
+  bool java_proof_requested = false;
   bool storage_proof_requested = false;
   bool permissions_proof_requested = false;
   bool self_heal_proof_requested = false;
@@ -168,6 +172,7 @@ struct NativeApkLaunchReport {
   NativeApkProcessManagerReport process_manager;
   NativeApkWindowManagerReport window_manager;
   NativeApkRuntimeBridgeReport runtime_bridge;
+  NativeApkJavaProofReport java_apk_proof;
   NativeApkStorageProof storage;
   NativeApkPermissionsReport permissions;
   NativeApkAppOpsReport app_ops;
