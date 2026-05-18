@@ -273,6 +273,7 @@ std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions) {
 std::string BuildDexPayloadWithEntrypoint(
     const std::vector<std::string>& class_descriptors,
     const std::string& requested_entrypoint_class_descriptor,
+    const std::string& entrypoint_method_name,
     const std::vector<std::uint16_t>& entrypoint_instructions,
     const std::string& return_type_descriptor = "V") {
   std::vector<std::string> classes = class_descriptors;
@@ -292,7 +293,7 @@ std::string BuildDexPayloadWithEntrypoint(
     }
   };
   append_unique(return_type_descriptor);
-  append_unique("linuxoidCheckpoint");
+  append_unique(entrypoint_method_name);
 
   std::vector<std::string> type_descriptors = classes;
   type_descriptors.push_back(return_type_descriptor);
@@ -367,7 +368,7 @@ std::string BuildDexPayloadWithEntrypoint(
              static_cast<std::uint16_t>(
                  type_indices.at(entrypoint_class_descriptor)));
   write_le16(method_ids_off + 2u, 0u);
-  write_le32(method_ids_off + 4u, string_indices.at("linuxoidCheckpoint"));
+  write_le32(method_ids_off + 4u, string_indices.at(entrypoint_method_name));
 
   const std::string code_item = BuildDexCodeItem(entrypoint_instructions);
   std::vector<std::uint32_t> class_data_offsets(classes.size(), 0u);
@@ -433,18 +434,37 @@ std::string BuildDexPayloadWithEntrypoint(
 
 std::string BuildResolvableDexPayload(
     const std::vector<std::string>& class_descriptors) {
-  return BuildDexPayloadWithEntrypoint(class_descriptors, "", {0x000eu});
+  return BuildDexPayloadWithEntrypoint(class_descriptors, "",
+                                       "linuxoidCheckpoint", {0x000eu});
 }
 
 std::string BuildResolvableIntReturningDexPayload(
     const std::vector<std::string>& class_descriptors) {
   return BuildDexPayloadWithEntrypoint(class_descriptors, "",
+                                       "linuxoidCheckpoint",
                                        {0x1012u, 0x000fu}, "I");
+}
+
+std::string BuildResolvableLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(class_descriptors,
+                                       requested_entrypoint_class_descriptor,
+                                       "onCreate", {0x1012u, 0x000fu}, "I");
 }
 
 std::string BuildUnsupportedOpcodeDexPayload(
     const std::vector<std::string>& class_descriptors) {
-  return BuildDexPayloadWithEntrypoint(class_descriptors, "", {0x00ffu});
+  return BuildDexPayloadWithEntrypoint(class_descriptors, "",
+                                       "linuxoidCheckpoint", {0x00ffu});
+}
+
+std::string BuildUnsupportedLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(class_descriptors,
+                                       requested_entrypoint_class_descriptor,
+                                       "onCreate", {0x00ffu});
 }
 
 std::string BuildInvalidDexMagicPayload(
@@ -8837,9 +8857,10 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
   const auto fixture = CreateJavaKotlinApkProofFixture(
       "linuxoid-first-app-start-checkpoint-ready", true,
       {{"classes.dex",
-        BuildResolvableIntReturningDexPayload(
+        BuildResolvableLifecycleOnCreateDexPayload(
             {"Lcom/example/launchapk/App;",
-             "Lcom/example/launchapk/MainActivity;"})}});
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
   const ScopedEnvironmentVariable runtime_root_override(
       "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
   const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
@@ -8884,7 +8905,13 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
              "\"bytecode_execution_backend\": "
              "\"linuxoid_minimal_dex_interpreter\"") != std::string::npos,
          "expected minimal interpreter backend in first app start json");
-  Expect(output.find("\"target_method_name\": \"linuxoidCheckpoint\"") !=
+  Expect(output.find("\"lifecycle_method_name\": \"onCreate\"") !=
+             std::string::npos,
+         "expected lifecycle method name in first app start json");
+  Expect(output.find("\"lifecycle_method_signature\": \"()I\"") !=
+             std::string::npos,
+         "expected lifecycle method signature in first app start json");
+  Expect(output.find("\"target_method_name\": \"onCreate\"") !=
              std::string::npos,
          "expected deterministic target method name in first app start json");
   Expect(output.find("\"target_method_signature\": \"()I\"") !=
@@ -8918,6 +8945,9 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
          "expected returned value type in first app start json");
   Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
          "expected returned value payload in first app start json");
+  Expect(output.find("\"activity_lifecycle_state\": \"destroyed\"") !=
+             std::string::npos,
+         "expected lifecycle proof state after bytecode execution in first app start json");
   Expect(output.find(
              "\"blocking_reason\": \"needs-real-activitythread-context\"") !=
              std::string::npos,
@@ -8937,9 +8967,10 @@ void TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary() {
   const auto fixture = CreateJavaKotlinApkProofFixture(
       "linuxoid-first-app-start-checkpoint-unsupported-opcode", true,
       {{"classes.dex",
-        BuildUnsupportedOpcodeDexPayload(
+        BuildUnsupportedLifecycleOnCreateDexPayload(
             {"Lcom/example/launchapk/App;",
-             "Lcom/example/launchapk/MainActivity;"})}});
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
   const ScopedEnvironmentVariable runtime_root_override(
       "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
   const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
@@ -8959,6 +8990,9 @@ void TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary() {
   Expect(output.find("\"bytecode_execution_state\": \"unsupported_opcode\"") !=
              std::string::npos,
          "expected unsupported opcode execution state in first app start json");
+  Expect(output.find("\"lifecycle_method_name\": \"onCreate\"") !=
+             std::string::npos,
+         "expected lifecycle method name in unsupported-opcode first app start json");
   Expect(output.find("\"first_executed_opcode\": \"opcode-0xff\"") !=
              std::string::npos,
          "expected exact unsupported opcode name in first app start json");

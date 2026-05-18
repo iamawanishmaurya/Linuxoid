@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: First MainActivity Bytecode Checkpoint GREEN
+  Action: Retargeted `launch-apk --first-app-start-proof` from the standalone checkpoint helper method to a deterministic `MainActivity.onCreate()I`-style fixture method, kept the DEX interpreter subset minimal, and threaded lifecycle method name/signature plus returned-value proof through the persisted first-app-start report.
+  Result: Linuxoid can now prove that one minimal app launch path attempts and completes a real MainActivity lifecycle DEX method through the actual Linuxoid execution path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending ART-owned framework dispatch already exists.
+  Timestamp: 2026-05-18T23:35:00+05:30
+
 - Step: First DEX Method Return Checkpoint GREEN
   Action: Extended the direct `launch-apk --first-app-start-proof` path from the earlier single-opcode proof to a tiny real method-return slice, updated the deterministic fixture DEX payload so `linuxoidCheckpoint()I` executes `const/4` plus `return`, and threaded decoded-instruction count, last opcode, returned value type, and returned value through the persisted first-app-start report.
   Result: Linuxoid can now prove that one minimal Android app fixture reaches a real DEX `return` instruction through the actual Linuxoid path, while still naming the next exact blocker as `bridge_activity_oncreate_into_real_art_runtime_context` instead of pretending ART-owned activity execution already exists.

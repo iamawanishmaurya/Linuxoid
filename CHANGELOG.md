@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.112 - 2026-05-18
+
+- Advance the execution-first checkpoint from a standalone DEX helper method into a **First MainActivity Bytecode Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, keeping the change tightly scoped to one deterministic lifecycle entrypoint instead of adding new broad compatibility layers.
+- Extend the fixture and first-app-start path so Linuxoid resolves the real `MainActivity` class and executes a tiny `onCreate()I`-style DEX method through the minimal interpreter, recording `lifecycle_method_name`, `lifecycle_method_signature`, decoded plus executed instruction counts, first plus last opcode, and the returned integer value.
+- Keep the result honest: the checkpoint now proves a MainActivity lifecycle bytecode slice returns cleanly through Linuxoid's own interpreter, while still reporting `needs-real-activitythread-context` and `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker beyond this minimal managed-lifecycle seam.
+
 ## v0.1.111 - 2026-05-18
 
 - Advance the **First DEX Method Return Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]` and `compatctl inspect-apk-first-start <apk-path> [staging-root]`, keeping the same execution-first scope and avoiding any new broad compatibility scaffolding.

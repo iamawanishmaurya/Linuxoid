@@ -399,6 +399,12 @@ std::string DetermineDexEntrypointClassDescriptor(
   return "";
 }
 
+std::string DetermineDexEntrypointMethodName(
+    const NativeApkLaunchReport& report) {
+  return report.first_app_start_proof_requested ? "onCreate"
+                                                : "linuxoidCheckpoint";
+}
+
 NativeApkDexBridgeSession BuildDexBridgeSession(
     const NativeApkLaunchReport& report, const fs::path& artifact_root) {
   return NativeApkDexBridgeSession(
@@ -411,7 +417,7 @@ NativeApkDexBridgeSession BuildDexBridgeSession(
        .artifact_root = artifact_root.string(),
        .entrypoint_class_descriptor =
            DetermineDexEntrypointClassDescriptor(report),
-       .entrypoint_method_name = "linuxoidCheckpoint",
+       .entrypoint_method_name = DetermineDexEntrypointMethodName(report),
        .asset_bridge_status = report.asset_health,
        .lifecycle_status = report.lifecycle_health,
        .binder_service_registry_status =

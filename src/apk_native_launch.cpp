@@ -810,6 +810,12 @@ std::string DetermineDexEntrypointClassDescriptor(
   return "";
 }
 
+std::string DetermineDexEntrypointMethodName(
+    const NativeApkLaunchReport& report) {
+  return report.first_app_start_proof_requested ? "onCreate"
+                                                : "linuxoidCheckpoint";
+}
+
 NativeApkDexBridgeSession BuildDexBridgeSession(
     const NativeApkLaunchReport& report) {
   return NativeApkDexBridgeSession(
@@ -821,7 +827,7 @@ NativeApkDexBridgeSession BuildDexBridgeSession(
        .artifact_root = (fs::path(report.staged_dir) / "art").string(),
        .entrypoint_class_descriptor =
            DetermineDexEntrypointClassDescriptor(report),
-       .entrypoint_method_name = "linuxoidCheckpoint",
+       .entrypoint_method_name = DetermineDexEntrypointMethodName(report),
        .asset_bridge_status = report.asset_health,
        .lifecycle_status = report.lifecycle_health,
        .binder_service_registry_status =
@@ -1812,6 +1818,10 @@ std::string RenderFirstAppStartJson(
          << EscapeJson(proof.bytecode_execution_state) << "\",\n"
          << "  \"bytecode_execution_backend\": \""
          << EscapeJson(proof.bytecode_execution_backend) << "\",\n"
+         << "  \"lifecycle_method_name\": \""
+         << EscapeJson(proof.lifecycle_method_name) << "\",\n"
+         << "  \"lifecycle_method_signature\": \""
+         << EscapeJson(proof.lifecycle_method_signature) << "\",\n"
          << "  \"target_method_name\": \""
          << EscapeJson(proof.target_method_name) << "\",\n"
          << "  \"target_method_signature\": \""
@@ -1919,6 +1929,9 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.dex_parse_state = report.dex.parse_state;
   proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
   proof.bytecode_execution_backend = report.dex.execution_probe.execution_backend;
+  proof.lifecycle_method_name = report.dex.execution_probe.target_method_name;
+  proof.lifecycle_method_signature =
+      report.dex.execution_probe.target_method_signature;
   proof.target_method_name = report.dex.execution_probe.target_method_name;
   proof.target_method_signature = report.dex.execution_probe.target_method_signature;
   proof.dex_files_count = report.dex.files_count;
@@ -4148,6 +4161,12 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"bytecode_execution_backend\": \""
          << EscapeJson(
                 report.first_android_app_start.bytecode_execution_backend)
+         << "\",\n"
+         << "    \"lifecycle_method_name\": \""
+         << EscapeJson(report.first_android_app_start.lifecycle_method_name)
+         << "\",\n"
+         << "    \"lifecycle_method_signature\": \""
+         << EscapeJson(report.first_android_app_start.lifecycle_method_signature)
          << "\",\n"
          << "    \"target_method_name\": \""
          << EscapeJson(report.first_android_app_start.target_method_name)

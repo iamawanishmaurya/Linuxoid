@@ -109,6 +109,8 @@ struct NativeApkFirstAppStartProof {
   std::string dex_parse_state = "not_requested";
   std::string bytecode_execution_state = "not_attempted";
   std::string bytecode_execution_backend = "none";
+  std::string lifecycle_method_name;
+  std::string lifecycle_method_signature;
   std::string target_method_name;
   std::string target_method_signature;
   int dex_files_count = 0;
