@@ -69,9 +69,9 @@ std::string RenderProjectStatusReport() {
   output << "Scaffold Readiness: " << RenderLoadingBar(phase_progress) << "\n";
   output << "Native Execution Readiness: " << RenderLoadingBar(98) << "\n";
   output << "Execution Focus: P0 Freeze & Triage -> P1 NDK Execution Core -> P2 Window + Graphics\n";
-  output << "Current Direct Runtime Phase: First DEX Object/Register/Field Checkpoint\n";
+  output << "Current Direct Runtime Phase: First DEX App-Method Invocation Checkpoint\n";
   output << "Next Phase: P16 Managed Bytecode Invocation + ActivityThread Contract (bridge MainActivity onCreate into a real ART-owned runtime context)\n";
-  output << "First App Start Checkpoint: `launch-apk --first-app-start-proof` now parses real DEX tables, executes the deterministic `MainActivity.onCreate()I` fixture method through Linuxoid's minimal interpreter, crosses a stubbed `android.app.Activity.onCreate()V` framework boundary, allocates a placeholder `StateCarrier` object, executes deterministic `iput` plus `iget` access for `value:I`, reaches a real DEX `return` with value `1`, and reports the next blocker as `bridge_activity_oncreate_into_real_art_runtime_context`.\n";
+  output << "First App Start Checkpoint: `launch-apk --first-app-start-proof` now parses real DEX tables, resolves `MainActivity` from staged DEX metadata, materializes a deterministic lifecycle receiver placeholder in `v0`, executes a tiny app-local `linuxoidComputeValue()I` helper through `invoke-direct` plus `move-result`, crosses a stubbed `android.app.Activity.onCreate()V` framework boundary, allocates a placeholder `StateCarrier` object, executes deterministic `iput` plus `iget` access for `value:I`, reaches a real DEX `return` with value `1`, and reports the next blocker as `bridge_activity_oncreate_into_real_art_runtime_context`.\n";
   output << "Legacy Scaffold Phases:\n";
 
   for (const auto& phase : phases) {

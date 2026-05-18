@@ -1818,6 +1818,22 @@ std::string RenderFirstAppStartJson(
          << EscapeJson(proof.bytecode_execution_state) << "\",\n"
          << "  \"bytecode_execution_backend\": \""
          << EscapeJson(proof.bytecode_execution_backend) << "\",\n"
+         << "  \"class_loading_state\": \""
+         << EscapeJson(proof.class_loading_state) << "\",\n"
+         << "  \"lifecycle_receiver_state\": \""
+         << EscapeJson(proof.lifecycle_receiver_state) << "\",\n"
+         << "  \"lifecycle_receiver_class_descriptor\": \""
+         << EscapeJson(proof.lifecycle_receiver_class_descriptor) << "\",\n"
+         << "  \"lifecycle_receiver_register\": "
+         << proof.lifecycle_receiver_register << ",\n"
+         << "  \"app_method_invocation_state\": \""
+         << EscapeJson(proof.app_method_invocation_state) << "\",\n"
+         << "  \"app_invoked_method_class_descriptor\": \""
+         << EscapeJson(proof.app_invoked_method_class_descriptor) << "\",\n"
+         << "  \"app_invoked_method_name\": \""
+         << EscapeJson(proof.app_invoked_method_name) << "\",\n"
+         << "  \"app_invoked_method_signature\": \""
+         << EscapeJson(proof.app_invoked_method_signature) << "\",\n"
          << "  \"invoked_method_class_descriptor\": \""
          << EscapeJson(proof.invoked_method_class_descriptor) << "\",\n"
          << "  \"invoked_method_name\": \""
@@ -1953,6 +1969,21 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.dex_parse_state = report.dex.parse_state;
   proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
   proof.bytecode_execution_backend = report.dex.execution_probe.execution_backend;
+  proof.class_loading_state = report.dex.execution_probe.class_loading_state;
+  proof.lifecycle_receiver_state =
+      report.dex.execution_probe.lifecycle_receiver_state;
+  proof.lifecycle_receiver_class_descriptor =
+      report.dex.execution_probe.lifecycle_receiver_class_descriptor;
+  proof.lifecycle_receiver_register =
+      report.dex.execution_probe.lifecycle_receiver_register;
+  proof.app_method_invocation_state =
+      report.dex.execution_probe.app_method_invocation_state;
+  proof.app_invoked_method_class_descriptor =
+      report.dex.execution_probe.app_invoked_method_class_descriptor;
+  proof.app_invoked_method_name =
+      report.dex.execution_probe.app_invoked_method_name;
+  proof.app_invoked_method_signature =
+      report.dex.execution_probe.app_invoked_method_signature;
   proof.invoked_method_class_descriptor =
       report.dex.execution_probe.invoked_method_class_descriptor;
   proof.invoked_method_name = report.dex.execution_probe.invoked_method_name;
@@ -4206,6 +4237,35 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"bytecode_execution_backend\": \""
          << EscapeJson(
                 report.first_android_app_start.bytecode_execution_backend)
+         << "\",\n"
+         << "    \"class_loading_state\": \""
+         << EscapeJson(report.first_android_app_start.class_loading_state)
+         << "\",\n"
+         << "    \"lifecycle_receiver_state\": \""
+         << EscapeJson(
+                report.first_android_app_start.lifecycle_receiver_state)
+         << "\",\n"
+         << "    \"lifecycle_receiver_class_descriptor\": \""
+         << EscapeJson(report.first_android_app_start
+                           .lifecycle_receiver_class_descriptor)
+         << "\",\n"
+         << "    \"lifecycle_receiver_register\": "
+         << report.first_android_app_start.lifecycle_receiver_register
+         << ",\n"
+         << "    \"app_method_invocation_state\": \""
+         << EscapeJson(
+                report.first_android_app_start.app_method_invocation_state)
+         << "\",\n"
+         << "    \"app_invoked_method_class_descriptor\": \""
+         << EscapeJson(report.first_android_app_start
+                           .app_invoked_method_class_descriptor)
+         << "\",\n"
+         << "    \"app_invoked_method_name\": \""
+         << EscapeJson(report.first_android_app_start.app_invoked_method_name)
+         << "\",\n"
+         << "    \"app_invoked_method_signature\": \""
+         << EscapeJson(
+                report.first_android_app_start.app_invoked_method_signature)
          << "\",\n"
          << "    \"invoked_method_class_descriptor\": \""
          << EscapeJson(

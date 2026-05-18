@@ -1,5 +1,15 @@
 # Steps Log
 
+- Step: First DEX App-Method Invocation Checkpoint GREEN
+  Action: Extended the deterministic `MainActivity.onCreate()I` fixture method to call a tiny app-local helper `linuxoidComputeValue()I`, taught the DEX bridge to retain class-defined method `code_off` metadata, execute one tiny `invoke-direct` target to completion, propagate its return value through `move-result`, and threaded `app_method_invocation_*` proof fields through the persisted first-app-start report.
+  Result: Linuxoid can now prove that one minimal app launch path resolves the lifecycle receiver class, executes a real app-local method invocation seam, and still returns through the actual Linuxoid execution path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending ART-owned managed dispatch already exists.
+  Timestamp: 2026-05-19T03:10:00+05:30
+
+- Step: First DEX Class-Loading/Lifecycle Receiver Checkpoint GREEN
+  Action: Resolved `Lcom/example/launchapk/MainActivity;` from staged DEX metadata before bytecode interpretation, materialized a deterministic lifecycle receiver placeholder in register `v0`, validated that the first `invoke-super` boundary consumes that receiver, and threaded `class_loading_state` plus `lifecycle_receiver_*` proof fields through the persisted first-app-start report.
+  Result: Linuxoid can now prove that one minimal app launch path reaches a tiny class-loading plus lifecycle-receiver seam before the existing framework/object/field path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending ART-owned managed dispatch already exists.
+  Timestamp: 2026-05-19T02:35:00+05:30
+
 - Step: First DEX Object/Register/Field Checkpoint GREEN
   Action: Extended the deterministic `MainActivity.onCreate()I` fixture method to allocate a placeholder `Lcom/example/launchapk/StateCarrier;` object, execute deterministic `iput` plus `iget` access for `value:I`, added the smallest DEX field-table plus `new-instance` plus `iput` plus `iget` interpreter support needed to model that seam honestly, and threaded `object_register_field_*` proof fields through the persisted first-app-start report.
   Result: Linuxoid can now prove that one minimal app launch path crosses a first Android framework boundary and then executes one tiny object/register/field round-trip through the actual Linuxoid execution path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending ART-owned managed objects already exist.

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.116 - 2026-05-18
+
+- Advance the execution-first checkpoint into a **First DEX App-Method Invocation Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, still scoped to one deterministic `MainActivity` seam instead of broad framework growth.
+- Extend the minimal DEX interpreter and first-app-start report so Linuxoid now resolves `Lcom/example/launchapk/MainActivity;` from staged DEX metadata, materializes a deterministic lifecycle receiver placeholder in `v0`, executes a tiny app-local `invoke-direct` helper method `linuxoidComputeValue()I`, and propagates its return value through `move-result` before the existing object/field checkpoint path.
+- Keep the result honest: Linuxoid now supports one tiny app-local method invocation seam, but this is still not a real ART class loader, ActivityThread, heap-backed framework dispatch, or end-to-end Android app execution, and the next blocker remains `bridge_activity_oncreate_into_real_art_runtime_context`.
+
+## v0.1.115 - 2026-05-18
+
+- Advance the execution-first checkpoint into a **First DEX Class-Loading/Lifecycle Receiver Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, still scoped to one deterministic `MainActivity` seam instead of broad framework growth.
+- Extend the minimal DEX interpreter and first-app-start report so Linuxoid now resolves `Lcom/example/launchapk/MainActivity;` from staged DEX/class-loader metadata, materializes a deterministic lifecycle receiver placeholder in register `v0`, and then executes the existing stubbed `Landroid/app/Activity;->onCreate()V` boundary plus placeholder object/field round-trip.
+- Keep the result honest: Linuxoid now models one tiny class-loading plus lifecycle-receiver contract before bytecode interpretation, but this is still not a real ART class loader, ActivityThread, or heap-backed Android framework execution, and the next blocker remains `bridge_activity_oncreate_into_real_art_runtime_context`.
+
 ## v0.1.114 - 2026-05-18
 
 - Advance the execution-first checkpoint into a **First DEX Object/Register/Field Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, still scoped to one deterministic `MainActivity` seam instead of broad framework growth.

@@ -109,6 +109,14 @@ struct NativeApkFirstAppStartProof {
   std::string dex_parse_state = "not_requested";
   std::string bytecode_execution_state = "not_attempted";
   std::string bytecode_execution_backend = "none";
+  std::string class_loading_state = "not_attempted";
+  std::string lifecycle_receiver_state = "not_materialized";
+  std::string lifecycle_receiver_class_descriptor;
+  int lifecycle_receiver_register = -1;
+  std::string app_method_invocation_state = "not_reached";
+  std::string app_invoked_method_class_descriptor;
+  std::string app_invoked_method_name;
+  std::string app_invoked_method_signature;
   std::string invoked_method_class_descriptor;
   std::string invoked_method_name;
   std::string invoked_method_signature;
