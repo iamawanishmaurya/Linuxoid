@@ -1111,6 +1111,26 @@ JavaKotlinApkProofFixture CreateJavaKotlinApkProofFixture(
   return {.launch = launch, .runtime_root = runtime_root};
 }
 
+std::string BuildKeyboardSettingsActivityManifestXml() {
+  std::ostringstream manifest;
+  manifest << "<manifest package=\"org.futo.inputmethod.latin\""
+           << " android:versionCode=\"11654\""
+           << " android:versionName=\"0.1.28\">\n"
+           << "  <uses-sdk android:minSdkVersion=\"24\""
+           << " android:targetSdkVersion=\"35\"/>\n"
+           << "  <application android:name=\"org.futo.inputmethod.latin.App\">\n"
+           << "    <activity"
+           << " android:name=\"org.futo.inputmethod.latin.uix.settings.SettingsActivity\">\n"
+           << "      <intent-filter>\n"
+           << "        <action android:name=\"android.intent.action.MAIN\"/>\n"
+           << "        <category android:name=\"android.intent.category.LAUNCHER\"/>\n"
+           << "      </intent-filter>\n"
+           << "    </activity>\n"
+           << "  </application>\n"
+           << "</manifest>\n";
+  return manifest.str();
+}
+
 ThirdPartyCompatibilityFixture CreateThirdPartyCompatibilityFixture(
     const std::string& fixture_name, const std::string& manifest_xml,
     bool include_native_library, bool include_runtime_root,
@@ -9813,9 +9833,18 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
              std::string::npos,
          "expected app invoked method signature in first app start json");
   Expect(output.find(
-             "\"dex_parse_state\": \"header_tables_methods_and_code_item\"") !=
+             "\"dex_parse_state\": \"entrypoint_code_item_resolved\"") !=
              std::string::npos,
          "expected dex parse state in first app start json");
+  Expect(output.find("\"target_class_lookup_state\": \"class_resolved\"") !=
+             std::string::npos,
+         "expected class lookup state in first app start json");
+  Expect(output.find("\"target_method_lookup_state\": \"method_resolved\"") !=
+             std::string::npos,
+         "expected method lookup state in first app start json");
+  Expect(output.find("\"code_item_lookup_state\": \"code_item_resolved\"") !=
+             std::string::npos,
+         "expected code item lookup state in first app start json");
   Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
              std::string::npos,
          "expected returned bytecode execution state in first app start json");
@@ -10077,6 +10106,101 @@ void TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid() {
          "expected rebuild_dex_bootstrap recommendation in first app start json");
 
   fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartProofTargetsKeyboardSettingsActivityFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-keyboard-managed-activity-start",
+      BuildKeyboardSettingsActivityManifestXml(), true,
+      {{"classes.dex",
+        BuildFrameworkBoundaryLifecycleOnCreateDexPayload(
+            {"Lorg/futo/inputmethod/latin/App;",
+             "Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;"},
+            "Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;")}});
+  const auto runtime_root =
+      CreateArtRuntimeRootFixture(fixture.root / "art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() +
+          " launch-apk --first-app-start-proof"
+          " --package org.futo.inputmethod.latin"
+          " --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected keyboard settings activity proof fixture to stop at a precise managed-start boundary");
+  Expect(output.find(
+             "\"activity_name\": "
+             "\"org.futo.inputmethod.latin.uix.settings.SettingsActivity\"") !=
+             std::string::npos,
+         "expected real keyboard activity name in first app start json");
+  Expect(output.find(
+             "\"activity_component\": "
+             "\"org.futo.inputmethod.latin/.uix.settings.SettingsActivity\"") !=
+             std::string::npos,
+         "expected real keyboard activity component in first app start json");
+  Expect(output.find(
+             "\"activity_target_resolution_state\": "
+             "\"resolved-from-intent-contract\"") != std::string::npos,
+         "expected resolved activity target state in first app start json");
+  Expect(output.find(
+             "\"entrypoint_class_descriptor\": "
+             "\"Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;\"") !=
+             std::string::npos,
+         "expected keyboard activity class descriptor in first app start json");
+  Expect(output.find("\"first_app_start_health\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked first app start health for keyboard fixture boundary");
+  Expect(output.find(
+             "\"dex_parse_state\": \"entrypoint_code_item_resolved\"") !=
+             std::string::npos,
+         "expected precise dex parse state for keyboard fixture activity");
+  Expect(output.find(
+             "\"class_loading_state\": \"resolved-from-staged-dex\"") !=
+             std::string::npos,
+         "expected staged-dex class loading state for keyboard fixture");
+  Expect(output.find(
+             "\"target_class_lookup_state\": \"class_resolved\"") !=
+             std::string::npos,
+         "expected class-resolved lookup state for keyboard fixture");
+  Expect(output.find(
+             "\"target_method_lookup_state\": \"method_resolved\"") !=
+             std::string::npos,
+         "expected method-resolved lookup state for keyboard fixture");
+  Expect(output.find(
+             "\"code_item_lookup_state\": \"code_item_resolved\"") !=
+             std::string::npos,
+         "expected code-item-resolved lookup state for keyboard fixture");
+  Expect(output.find("\"lifecycle_method_name\": \"onCreate\"") !=
+             std::string::npos,
+         "expected lifecycle method name in keyboard fixture json");
+  Expect(output.find("\"framework_boundary_state\": \"blocked\"") !=
+             std::string::npos,
+         "expected first framework boundary to report the exact blocked state");
+  Expect(output.find("\"framework_boundary_reason\": "
+                     "\"invoke_receiver_missing\"") !=
+             std::string::npos,
+         "expected framework boundary reason for keyboard fixture");
+  Expect(output.find("\"bytecode_execution_state\": "
+                     "\"framework_boundary_blocked\"") !=
+             std::string::npos,
+         "expected precise framework-boundary execution state for keyboard fixture");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"dex_invoke_receiver_missing\"") !=
+             std::string::npos,
+         "expected exact invoke-receiver blocker for keyboard fixture");
+  Expect(output.find("\"next_blocker\": "
+                     "\"propagate_framework_invoke_receiver_registers\"") !=
+             std::string::npos,
+         "expected actionable next blocker for keyboard fixture");
+
+  fs::remove_all(fixture.root);
 }
 
 void TestInspectApkCompatibilityCommandReportsNeedsRealArtForJavaFixture() {
@@ -14701,6 +14825,7 @@ int main() {
     TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary();
     TestLaunchApkFirstAppStartCheckpointBlocksWithoutRuntimeRoot();
     TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid();
+    TestLaunchApkFirstAppStartProofTargetsKeyboardSettingsActivityFixture();
     TestInspectApkCompatibilityCommandReportsNeedsRealArtForJavaFixture();
     TestNativeApkCompatibilityClassifiesPermissionHeavyFixtureAsPartial();
     TestNativeApkCompatibilityClassifiesMissingNativeLibrary();

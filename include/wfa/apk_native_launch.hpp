@@ -95,6 +95,7 @@ struct NativeApkFirstAppStartProof {
   std::string package_name;
   std::string activity_name;
   std::string activity_component;
+  std::string activity_target_resolution_state = "not_resolved";
   std::string entrypoint_class_descriptor;
   std::string process_session_id;
   std::string process_identity;
@@ -110,6 +111,9 @@ struct NativeApkFirstAppStartProof {
   std::string bytecode_execution_state = "not_attempted";
   std::string bytecode_execution_backend = "none";
   std::string class_loading_state = "not_attempted";
+  std::string target_class_lookup_state = "not_attempted";
+  std::string target_method_lookup_state = "not_attempted";
+  std::string code_item_lookup_state = "not_attempted";
   std::string lifecycle_receiver_state = "not_materialized";
   std::string lifecycle_receiver_class_descriptor;
   int lifecycle_receiver_register = -1;

@@ -12,7 +12,7 @@ This roadmap turns Linuxoid's existing proof-oriented runtime into a first real 
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Keyboard APK Intake** - Make the real verification APK parse, stage, and surface trustworthy runtime metadata
-- [ ] **Phase 2: Managed Activity Start** - Resolve and drive the launcher settings activity through a deeper managed startup path
+- [x] **Phase 2: Managed Activity Start** - Resolve and drive the launcher settings activity through a deeper managed startup path
 - [ ] **Phase 3: Runtime Context Bridge** - Reduce the gap between the minimal interpreter path and a real ART-owned activity context
 - [ ] **Phase 4: JNI and Native Loading** - Bring x86_64 native libraries and JNI boundaries into the verification path
 - [ ] **Phase 5: Visible Wayland Interaction** - Make the verification app visibly launch and accept meaningful interaction on Linux
@@ -57,15 +57,15 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 02-01: Bind real launcher activity resolution to the first-app-start proof
+- [x] 02-01: Bind real launcher activity resolution to the first-app-start proof
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02: Extend managed execution reporting around the activity startup path
+- [x] 02-02: Extend managed execution reporting around the activity startup path
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-03: Add hard regression coverage for real activity-start boundaries
+- [x] 02-03: Add hard regression coverage for real activity-start boundaries
 
 ### Phase 3: Runtime Context Bridge
 
@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Keyboard APK Intake | 3/3 | Complete | 2026-05-18 |
-| 2. Managed Activity Start | 0/3 | Planned | - |
+| 2. Managed Activity Start | 3/3 | Complete | 2026-05-18 |
 | 3. Runtime Context Bridge | 0/3 | Not started | - |
 | 4. JNI and Native Loading | 0/2 | Not started | - |
 | 5. Visible Wayland Interaction | 0/3 | Not started | - |

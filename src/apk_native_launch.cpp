@@ -830,6 +830,27 @@ std::string DetermineDexEntrypointMethodName(
                                                 : "linuxoidCheckpoint";
 }
 
+std::string DetermineActivityTargetResolutionState(
+    const NativeApkLaunchReport& report,
+    const std::string& entrypoint_class_descriptor) {
+  if (report.intent_resolution.ready &&
+      !report.intent_resolution.resolved_activity_class.empty() &&
+      !entrypoint_class_descriptor.empty()) {
+    return "resolved-from-intent-contract";
+  }
+  if (!report.intent_resolution.resolved_component.empty() &&
+      !entrypoint_class_descriptor.empty()) {
+    return "derived-from-resolved-component";
+  }
+  if (!report.requested_component.empty() && !entrypoint_class_descriptor.empty()) {
+    return "derived-from-requested-component";
+  }
+  if (!report.launcher_component.empty() && !entrypoint_class_descriptor.empty()) {
+    return "derived-from-launcher-component";
+  }
+  return "not_resolved";
+}
+
 NativeApkDexBridgeSession BuildDexBridgeSession(
     const NativeApkLaunchReport& report) {
   return NativeApkDexBridgeSession(
@@ -1670,6 +1691,11 @@ std::string DetermineFirstAppStartRecoveryAction(
   if (blocking_reason.rfind("unsupported-dex-opcode:", 0) == 0) {
     return "extend_minimal_dex_interpreter";
   }
+  if (blocking_reason == "dex_invoke_receiver_missing" ||
+      blocking_reason == "dex_invoke_register_out_of_range" ||
+      blocking_reason == "dex_move_result_without_pending_value") {
+    return "extend_minimal_dex_interpreter";
+  }
   if (blocking_reason == "dex_bootstrap_not_ready_for_first_app_start") {
     return "rebuild_dex_bootstrap";
   }
@@ -1729,6 +1755,15 @@ std::string DetermineFirstAppStartNextBlocker(
            SanitizeExecutionToken(blocking_reason.substr(
                std::string("unsupported-dex-opcode:").size()));
   }
+  if (blocking_reason == "dex_invoke_receiver_missing") {
+    return "propagate_framework_invoke_receiver_registers";
+  }
+  if (blocking_reason == "dex_invoke_register_out_of_range") {
+    return "repair_dex_invoke_register_mapping";
+  }
+  if (blocking_reason == "dex_move_result_without_pending_value") {
+    return "preserve_dex_pending_result_state";
+  }
   if (blocking_reason == "art_runtime_unavailable_for_first_app_start") {
     return "provide_discoverable_art_runtime_root";
   }
@@ -1760,6 +1795,25 @@ std::string DetermineFirstAppStartNextBlocker(
 
 std::string DetermineFirstAppStartDexState(
     const NativeApkLaunchReport& report) {
+  const bool probe_lookup_attempted =
+      report.dex.execution_probe.ready ||
+      report.dex.execution_probe.execution_attempted ||
+      report.dex.execution_probe.class_loading_state != "not_attempted" ||
+      report.dex.execution_probe.target_class_lookup_state != "not_attempted" ||
+      report.dex.execution_probe.target_method_lookup_state !=
+          "not_attempted" ||
+      report.dex.execution_probe.code_item_lookup_state != "not_attempted" ||
+      report.dex.execution_probe.parse_state != "not_requested" ||
+      report.dex.execution_probe.exact_blocker != "none";
+  if (probe_lookup_attempted) {
+    if (report.dex.execution_probe.reached_return) {
+      return "bytecode_return_reached";
+    }
+    if (report.dex.execution_probe.execution_state == "unsupported_opcode") {
+      return "bytecode_boundary_reached";
+    }
+    return report.dex.execution_probe.parse_state;
+  }
   if (!report.dex.ready) {
     return "dex_unavailable";
   }
@@ -1768,15 +1822,6 @@ std::string DetermineFirstAppStartDexState(
   }
   if (!report.runtime_bridge.class_loader_ready) {
     return "class_loader_blocked";
-  }
-  if (report.dex.execution_probe.ready) {
-    if (report.dex.execution_probe.reached_return) {
-      return "bytecode_return_reached";
-    }
-    if (report.dex.execution_probe.execution_state == "unsupported_opcode") {
-      return "bytecode_boundary_reached";
-    }
-    return report.dex.execution_probe.parse_state;
   }
   return "class_loader_ready";
 }
@@ -1806,6 +1851,8 @@ std::string RenderFirstAppStartJson(
          << "\",\n"
          << "  \"activity_component\": \""
          << EscapeJson(proof.activity_component) << "\",\n"
+         << "  \"activity_target_resolution_state\": \""
+         << EscapeJson(proof.activity_target_resolution_state) << "\",\n"
          << "  \"entrypoint_class_descriptor\": \""
          << EscapeJson(proof.entrypoint_class_descriptor) << "\",\n"
          << "  \"process_session_id\": \""
@@ -1834,6 +1881,12 @@ std::string RenderFirstAppStartJson(
          << EscapeJson(proof.bytecode_execution_backend) << "\",\n"
          << "  \"class_loading_state\": \""
          << EscapeJson(proof.class_loading_state) << "\",\n"
+         << "  \"target_class_lookup_state\": \""
+         << EscapeJson(proof.target_class_lookup_state) << "\",\n"
+         << "  \"target_method_lookup_state\": \""
+         << EscapeJson(proof.target_method_lookup_state) << "\",\n"
+         << "  \"code_item_lookup_state\": \""
+         << EscapeJson(proof.code_item_lookup_state) << "\",\n"
          << "  \"lifecycle_receiver_state\": \""
          << EscapeJson(proof.lifecycle_receiver_state) << "\",\n"
          << "  \"lifecycle_receiver_class_descriptor\": \""
@@ -1968,8 +2021,10 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.package_name = report.package_name;
   proof.activity_name = report.intent_resolution.resolved_activity_class;
   proof.activity_component = report.intent_resolution.resolved_component;
-  proof.entrypoint_class_descriptor =
-      ToDexDescriptor(report.intent_resolution.resolved_activity_class);
+  proof.entrypoint_class_descriptor = DetermineDexEntrypointClassDescriptor(report);
+  proof.activity_target_resolution_state =
+      DetermineActivityTargetResolutionState(report,
+                                            proof.entrypoint_class_descriptor);
   proof.process_session_id = report.activity_manager.session_id;
   proof.process_identity = report.process_manager.process_identity;
   proof.process_name = report.process_manager.process_name;
@@ -1984,6 +2039,11 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
   proof.bytecode_execution_backend = report.dex.execution_probe.execution_backend;
   proof.class_loading_state = report.dex.execution_probe.class_loading_state;
+  proof.target_class_lookup_state =
+      report.dex.execution_probe.target_class_lookup_state;
+  proof.target_method_lookup_state =
+      report.dex.execution_probe.target_method_lookup_state;
+  proof.code_item_lookup_state = report.dex.execution_probe.code_item_lookup_state;
   proof.lifecycle_receiver_state =
       report.dex.execution_probe.lifecycle_receiver_state;
   proof.lifecycle_receiver_class_descriptor =
@@ -4209,6 +4269,10 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"activity_component\": \""
          << EscapeJson(report.first_android_app_start.activity_component)
          << "\",\n"
+         << "    \"activity_target_resolution_state\": \""
+         << EscapeJson(
+                report.first_android_app_start.activity_target_resolution_state)
+         << "\",\n"
          << "    \"entrypoint_class_descriptor\": \""
          << EscapeJson(
                 report.first_android_app_start.entrypoint_class_descriptor)
@@ -4253,6 +4317,15 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "    \"class_loading_state\": \""
          << EscapeJson(report.first_android_app_start.class_loading_state)
+         << "\",\n"
+         << "    \"target_class_lookup_state\": \""
+         << EscapeJson(report.first_android_app_start.target_class_lookup_state)
+         << "\",\n"
+         << "    \"target_method_lookup_state\": \""
+         << EscapeJson(report.first_android_app_start.target_method_lookup_state)
+         << "\",\n"
+         << "    \"code_item_lookup_state\": \""
+         << EscapeJson(report.first_android_app_start.code_item_lookup_state)
          << "\",\n"
          << "    \"lifecycle_receiver_state\": \""
          << EscapeJson(

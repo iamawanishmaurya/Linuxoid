@@ -178,8 +178,13 @@ std::string ReadDexString(const std::string& bytes, std::uint32_t offset,
   if (cursor >= bytes.size()) {
     return "";
   }
+  (void)utf16_length;
   if (ok != nullptr) {
-    *ok = value.size() == utf16_length;
+    // DEX stores a UTF-16 code unit count ahead of a MUTF-8 payload, so the
+    // byte length does not necessarily match the declared character length.
+    // A null-terminated payload inside bounds is enough for this staged lookup
+    // contract; exact Unicode semantics remain outside the current checkpoint.
+    *ok = true;
   }
   return value;
 }
@@ -224,6 +229,7 @@ struct ParsedDexTables {
   std::vector<std::string> strings;
   std::vector<std::uint32_t> type_descriptor_string_indices;
   std::vector<DexProtoId> protos;
+  std::vector<std::string> proto_signatures;
   std::vector<DexFieldId> fields;
   std::vector<DexMethodId> methods;
   std::vector<std::uint32_t> method_code_offsets;
@@ -255,7 +261,44 @@ std::string BuildMethodSignature(const ParsedDexTables& tables,
   if (method.proto_idx >= tables.protos.size()) {
     return "()?";
   }
-  const auto& proto = tables.protos[method.proto_idx];
+  if (method.proto_idx >= tables.proto_signatures.size()) {
+    return "()?";
+  }
+  return tables.proto_signatures[method.proto_idx];
+}
+
+std::string BuildProtoSignature(const std::string& bytes,
+                                const ParsedDexTables& tables,
+                                const DexProtoId& proto) {
+  std::ostringstream signature;
+  signature << "(";
+  if (proto.parameters_off != 0) {
+    if (proto.parameters_off + 4u > bytes.size()) {
+      return "()?";
+    }
+    const std::uint32_t parameter_count =
+        ReadLe32(bytes, proto.parameters_off);
+    const std::size_t parameters_offset =
+        static_cast<std::size_t>(proto.parameters_off) + 4u;
+    if (parameters_offset + static_cast<std::size_t>(parameter_count) * 2u >
+        bytes.size()) {
+      return "()?";
+    }
+    for (std::uint32_t index = 0; index < parameter_count; ++index) {
+      const std::uint16_t type_index =
+          ReadLe16(bytes, parameters_offset + index * 2u);
+      if (type_index >= tables.type_descriptor_string_indices.size()) {
+        return "()?";
+      }
+      const std::uint32_t string_index =
+          tables.type_descriptor_string_indices[type_index];
+      if (string_index >= tables.strings.size()) {
+        return "()?";
+      }
+      signature << tables.strings[string_index];
+    }
+  }
+  signature << ")";
   if (proto.return_type_idx >= tables.type_descriptor_string_indices.size()) {
     return "()?";
   }
@@ -264,7 +307,8 @@ std::string BuildMethodSignature(const ParsedDexTables& tables,
   if (return_string_index >= tables.strings.size()) {
     return "()?";
   }
-  return "()" + tables.strings[return_string_index];
+  signature << tables.strings[return_string_index];
+  return signature.str();
 }
 
 bool ResolveMethodReference(const ParsedDexTables& tables,
@@ -380,6 +424,7 @@ bool ParseDexTables(const std::string& bytes, NativeApkDexFileReport* file,
   tables->strings.clear();
   tables->type_descriptor_string_indices.clear();
   tables->protos.clear();
+  tables->proto_signatures.clear();
   tables->fields.clear();
   tables->methods.clear();
   tables->method_code_offsets.clear();
@@ -414,6 +459,11 @@ bool ParseDexTables(const std::string& bytes, NativeApkDexFileReport* file,
         {.shorty_idx = ReadLe32(bytes, offset + 0u),
          .return_type_idx = ReadLe32(bytes, offset + 4u),
          .parameters_off = ReadLe32(bytes, offset + 8u)});
+  }
+  tables->proto_signatures.reserve(tables->protos.size());
+  for (const auto& proto : tables->protos) {
+    tables->proto_signatures.push_back(
+        BuildProtoSignature(bytes, *tables, proto));
   }
 
   for (std::uint32_t index = 0; index < field_ids_size; ++index) {
@@ -631,8 +681,12 @@ std::string DescribeOpcode(std::uint16_t opcode) {
       return "new-instance";
     case 0x52:
       return "iget";
+    case 0x54:
+      return "iget-object";
     case 0x59:
       return "iput";
+    case 0x5b:
+      return "iput-object";
     case 0x6e:
       return "invoke-virtual";
     case 0x6f:
@@ -675,8 +729,16 @@ struct DexInlineInvocationResult {
 
 DexInlineInvocationResult ExecuteInlineInvokedMethod(
     const std::string& bytes, const ParsedDexTables& tables,
-    const DexExecutionCandidate& candidate) {
+    const DexExecutionCandidate& candidate,
+    const std::vector<DexRegisterValue>& incoming_registers,
+    std::map<std::uint32_t, PlaceholderObject>* objects) {
   DexInlineInvocationResult result;
+  if (objects == nullptr) {
+    result.execution_state = "object_state_missing";
+    result.exact_blocker = "dex_invoked_method_object_state_missing";
+    result.errors.push_back("dex_invoked_method_object_state_missing");
+    return result;
+  }
   if (candidate.code_off == 0) {
     result.execution_state = "code_item_missing";
     result.exact_blocker = "dex_invoked_method_code_item_missing";
@@ -700,7 +762,12 @@ DexInlineInvocationResult ExecuteInlineInvokedMethod(
 
   const std::uint16_t registers_size = ReadLe16(bytes, candidate.code_off + 0u);
   std::vector<DexRegisterValue> registers(
-      std::max<std::size_t>(registers_size, 1u));
+      std::max<std::size_t>(registers_size,
+                            std::max<std::size_t>(incoming_registers.size(), 1u)));
+  for (std::size_t index = 0;
+       index < incoming_registers.size() && index < registers.size(); ++index) {
+    registers[index] = incoming_registers[index];
+  }
   const std::string return_type_descriptor =
       DetermineReturnTypeDescriptor(candidate.method_signature);
 
@@ -735,6 +802,65 @@ DexInlineInvocationResult ExecuteInlineInvokedMethod(
         registers[destination] = {.kind = DexRegisterValue::Kind::kInt,
                                   .int_value = literal};
         ++pc;
+        continue;
+      }
+      case 0x59:
+      case 0x5b: {  // iput / iput-object
+        if (pc + 1u >= insns_size) {
+          result.execution_state = "field_store_truncated";
+          result.exact_blocker = opcode == 0x59
+                                     ? "dex_invoked_method_iput_truncated"
+                                     : "dex_invoked_method_iput_object_truncated";
+          result.errors.push_back(result.exact_blocker);
+          return result;
+        }
+        const std::uint32_t value_register =
+            static_cast<std::uint32_t>((code_unit >> 8u) & 0x0fu);
+        const std::uint32_t object_register =
+            static_cast<std::uint32_t>((code_unit >> 12u) & 0x0fu);
+        const std::uint16_t field_index =
+            ReadLe16(bytes, insns_off + (pc + 1u) * 2u);
+        if (value_register >= registers.size() ||
+            object_register >= registers.size()) {
+          result.execution_state = "register_out_of_range";
+          result.exact_blocker =
+              "dex_invoked_method_register_out_of_range";
+          result.errors.push_back("dex_invoked_method_register_out_of_range");
+          return result;
+        }
+        if (registers[object_register].kind != DexRegisterValue::Kind::kObject) {
+          result.execution_state = "invoke_receiver_missing";
+          result.exact_blocker =
+              opcode == 0x59 ? "dex_invoked_method_iput_object_missing"
+                             : "dex_invoked_method_iput_object_reference_missing";
+          result.errors.push_back(result.exact_blocker);
+          return result;
+        }
+        std::string field_class_descriptor;
+        std::string field_name;
+        std::string field_signature;
+        if (!ResolveFieldReference(tables, field_index, &field_class_descriptor,
+                                   &field_name, &field_signature,
+                                   &result.errors)) {
+          result.execution_state = "field_resolution_failed";
+          result.exact_blocker =
+              result.errors.empty()
+                  ? "dex_invoked_method_field_resolution_failed"
+                  : result.errors.front();
+          return result;
+        }
+        auto object_it = objects->find(registers[object_register].object_id);
+        if (object_it == objects->end()) {
+          result.execution_state = "object_identity_missing";
+          result.exact_blocker =
+              "dex_invoked_method_object_identity_missing";
+          result.errors.push_back("dex_invoked_method_object_identity_missing");
+          return result;
+        }
+        const std::string field_key =
+            field_class_descriptor + "->" + field_name + ":" + field_signature;
+        object_it->second.fields[field_key] = registers[value_register];
+        pc += 2u;
         continue;
       }
       case 0x0e:  // return-void
@@ -782,6 +908,42 @@ DexInlineInvocationResult ExecuteInlineInvokedMethod(
   return result;
 }
 
+std::string DetermineLookupStateFromBlocker(const std::string& blocker) {
+  if (blocker == "dex_entrypoint_class_missing") {
+    return "class_missing";
+  }
+  if (blocker == "dex_entrypoint_class_unknown") {
+    return "class_unknown";
+  }
+  if (blocker == "dex_entrypoint_class_data_missing") {
+    return "class_data_missing";
+  }
+  if (blocker == "dex_entrypoint_method_missing") {
+    return "method_missing";
+  }
+  if (blocker == "dex_entrypoint_code_item_missing") {
+    return "code_item_missing";
+  }
+  if (blocker == "dex_code_item_truncated") {
+    return "code_item_truncated";
+  }
+  if (blocker == "dex_instructions_truncated") {
+    return "instructions_truncated";
+  }
+  if (blocker == "dex_table_bounds_invalid" ||
+      blocker == "dex_string_data_invalid" ||
+      blocker == "dex_type_descriptor_invalid" ||
+      blocker == "dex_class_descriptor_invalid" ||
+      blocker == "dex_class_string_invalid" ||
+      blocker == "dex_class_data_truncated" ||
+      blocker == "dex_field_data_truncated" ||
+      blocker == "dex_method_data_truncated" ||
+      blocker == "dex_method_index_invalid") {
+    return "dex_tables_invalid";
+  }
+  return "blocked";
+}
+
 NativeApkDexExecutionProbeReport RunExecutionProbe(
     const std::string& bytes, const NativeApkDexBridgeSessionConfig& config,
     const NativeApkDexFileReport& file, const ParsedDexTables& tables) {
@@ -791,35 +953,77 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
   probe.parse_state = "header_tables_methods_and_code_item";
 
   if (!file.valid_dex_magic) {
+    probe.class_loading_state = "blocked";
+    probe.target_class_lookup_state = "dex_magic_invalid";
     probe.execution_state = "dex_magic_invalid";
+    probe.parse_state = "dex_magic_invalid";
     probe.exact_blocker = "dex_magic_invalid";
     probe.errors.push_back("dex_magic_invalid");
     return probe;
   }
   if (probe.target_class_descriptor.empty()) {
+    probe.class_loading_state = "blocked";
+    probe.target_class_lookup_state = "class_unknown";
     probe.execution_state = "entrypoint_class_unknown";
+    probe.parse_state = "entrypoint_class_unknown";
     probe.exact_blocker = "dex_entrypoint_class_unknown";
     probe.errors.push_back("dex_entrypoint_class_unknown");
     return probe;
   }
 
+  const bool class_present =
+      std::find(tables.class_descriptors.begin(), tables.class_descriptors.end(),
+                probe.target_class_descriptor) != tables.class_descriptors.end();
+  if (!class_present) {
+    probe.ready = true;
+    probe.class_loading_state = "blocked";
+    probe.target_class_lookup_state = "class_missing";
+    probe.execution_state = "entrypoint_missing";
+    probe.parse_state = "entrypoint_class_missing";
+    probe.exact_blocker = "dex_entrypoint_class_missing";
+    probe.errors.push_back("dex_entrypoint_class_missing");
+    AppendUnique(&probe.diagnostics,
+                 "Self-Healing Android Device DEX probe resolved the real activity target but could not find its class descriptor in staged DEX");
+    return probe;
+  }
+  probe.class_loading_state = "resolved-from-staged-dex";
+  probe.target_class_lookup_state = "class_resolved";
+
   DexExecutionCandidate candidate;
   if (!FindEntrypointMethod(bytes, tables, probe.target_class_descriptor,
                             probe.target_method_name, &candidate,
                             &probe.errors)) {
-    probe.class_loading_state = "blocked";
+    probe.ready = true;
+    probe.target_method_lookup_state =
+        DetermineLookupStateFromBlocker(probe.errors.empty()
+                                            ? "dex_entrypoint_missing"
+                                            : probe.errors.front());
+    if (probe.target_method_lookup_state == "method_missing" ||
+        probe.target_method_lookup_state == "class_data_missing") {
+      probe.parse_state = probe.errors.empty() ? "entrypoint_method_missing"
+                                               : probe.errors.front().substr(4);
+    } else {
+      probe.parse_state = probe.errors.empty() ? "entrypoint_lookup_blocked"
+                                               : probe.errors.front().substr(4);
+    }
+    if (probe.parse_state == "entrypoint_class_data_missing") {
+      probe.target_method_lookup_state = "class_data_missing";
+    }
     probe.execution_state = "entrypoint_missing";
     probe.exact_blocker = probe.errors.empty() ? "dex_entrypoint_missing"
                                                : probe.errors.front();
     return probe;
   }
 
+  probe.ready = true;
   probe.target_method_found = true;
-  probe.class_loading_state = "resolved-from-staged-dex";
+  probe.target_method_lookup_state = "method_resolved";
   probe.target_method_signature = candidate.method_signature;
   probe.code_item_found = candidate.code_off != 0;
   probe.code_item_offset = candidate.code_off;
   if (candidate.code_off == 0) {
+    probe.code_item_lookup_state = "code_item_missing";
+    probe.parse_state = "entrypoint_code_item_missing";
     probe.execution_state = "code_item_missing";
     probe.exact_blocker = "dex_entrypoint_code_item_missing";
     probe.errors.push_back("dex_entrypoint_code_item_missing");
@@ -827,6 +1031,8 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
   }
 
   if (candidate.code_off + 16u > bytes.size()) {
+    probe.code_item_lookup_state = "code_item_truncated";
+    probe.parse_state = "entrypoint_code_item_truncated";
     probe.execution_state = "code_item_truncated";
     probe.exact_blocker = "dex_code_item_truncated";
     probe.errors.push_back("dex_code_item_truncated");
@@ -836,14 +1042,17 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
   const std::uint32_t insns_size = ReadLe32(bytes, candidate.code_off + 12u);
   const std::size_t insns_off = static_cast<std::size_t>(candidate.code_off) + 16u;
   if (insns_off + static_cast<std::size_t>(insns_size) * 2u > bytes.size()) {
+    probe.code_item_lookup_state = "instructions_truncated";
+    probe.parse_state = "entrypoint_instructions_truncated";
     probe.execution_state = "instructions_truncated";
     probe.exact_blocker = "dex_instructions_truncated";
     probe.errors.push_back("dex_instructions_truncated");
     return probe;
   }
 
+  probe.code_item_lookup_state = "code_item_resolved";
+  probe.parse_state = "entrypoint_code_item_resolved";
   probe.execution_attempted = true;
-  probe.ready = true;
   probe.execution_state = "interpreting";
   const std::string return_type_descriptor =
       DetermineReturnTypeDescriptor(probe.target_method_signature);
@@ -1077,14 +1286,97 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
           loaded_value = field_it->second;
         }
         registers[destination] = loaded_value;
+        const std::string operation =
+            probe.object_register_field_operation ==
+                    "new-instance+invoke-direct+iput-object+iget-object"
+                ? "new-instance+invoke-direct+iput-object+iget-object+iget"
+                : "new-instance+iput+iget";
         mark_object_field_operation(
-            "new-instance+iput+iget", "object-placeholder",
+            operation, "object-placeholder",
             "linuxoid_placeholder_object_and_field_state_for_minimal_checkpoint",
             object_it->second.class_descriptor, field_class_descriptor,
             field_name, field_signature);
         AppendUnique(
             &probe.diagnostics,
             "Self-Healing Android Device DEX probe executed placeholder object field access");
+        pc += 2u;
+        continue;
+      }
+      case 0x54: {  // iget-object
+        if (pc + 1u >= insns_size) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason = "iget_object_truncated";
+          probe.execution_state = "iget_object_truncated";
+          probe.exact_blocker = "dex_iget_object_truncated";
+          probe.errors.push_back("dex_iget_object_truncated");
+          return probe;
+        }
+        const std::uint32_t destination =
+            static_cast<std::uint32_t>((code_unit >> 8u) & 0x0fu);
+        const std::uint32_t object_register =
+            static_cast<std::uint32_t>((code_unit >> 12u) & 0x0fu);
+        const std::uint16_t field_index =
+            ReadLe16(bytes, insns_off + (pc + 1u) * 2u);
+        if (destination >= registers.size() ||
+            object_register >= registers.size()) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason = "iget_object_register_out_of_range";
+          probe.execution_state = "register_out_of_range";
+          probe.exact_blocker = "dex_iget_object_register_out_of_range";
+          probe.errors.push_back("dex_iget_object_register_out_of_range");
+          return probe;
+        }
+        if (registers[object_register].kind != DexRegisterValue::Kind::kObject) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason =
+              "iget_object_placeholder_missing";
+          probe.execution_state = "object_register_missing";
+          probe.exact_blocker = "dex_iget_object_placeholder_missing";
+          probe.errors.push_back("dex_iget_object_placeholder_missing");
+          return probe;
+        }
+        std::string field_class_descriptor;
+        std::string field_name;
+        std::string field_signature;
+        if (!ResolveFieldReference(tables, field_index, &field_class_descriptor,
+                                   &field_name, &field_signature,
+                                   &probe.errors)) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason =
+              "iget_object_field_resolution_failed";
+          probe.execution_state = "iget_object_unresolved";
+          probe.exact_blocker =
+              probe.errors.empty()
+                  ? "dex_iget_object_field_resolution_failed"
+                  : probe.errors.front();
+          return probe;
+        }
+        auto object_it = objects.find(registers[object_register].object_id);
+        if (object_it == objects.end()) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason = "iget_object_identity_missing";
+          probe.execution_state = "object_identity_missing";
+          probe.exact_blocker = "dex_iget_object_identity_missing";
+          probe.errors.push_back("dex_iget_object_identity_missing");
+          return probe;
+        }
+        const std::string field_key =
+            field_class_descriptor + "->" + field_name + ":" + field_signature;
+        DexRegisterValue loaded_value = {.kind = DexRegisterValue::Kind::kUnknown};
+        const auto field_it = object_it->second.fields.find(field_key);
+        if (field_it != object_it->second.fields.end()) {
+          loaded_value = field_it->second;
+        }
+        registers[destination] = loaded_value;
+        mark_object_field_operation(
+            "new-instance+invoke-direct+iput-object+iget-object",
+            "object-placeholder",
+            "linuxoid_placeholder_object_and_field_state_for_minimal_checkpoint",
+            object_it->second.class_descriptor, field_class_descriptor,
+            field_name, field_signature);
+        AppendUnique(
+            &probe.diagnostics,
+            "Self-Healing Android Device DEX probe executed placeholder object reference field access");
         pc += 2u;
         continue;
       }
@@ -1151,6 +1443,78 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
             "linuxoid_placeholder_object_and_field_state_for_minimal_checkpoint",
             object_it->second.class_descriptor, field_class_descriptor,
             field_name, field_signature);
+        pc += 2u;
+        continue;
+      }
+      case 0x5b: {  // iput-object
+        if (pc + 1u >= insns_size) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason = "iput_object_truncated";
+          probe.execution_state = "iput_object_truncated";
+          probe.exact_blocker = "dex_iput_object_truncated";
+          probe.errors.push_back("dex_iput_object_truncated");
+          return probe;
+        }
+        const std::uint32_t value_register =
+            static_cast<std::uint32_t>((code_unit >> 8u) & 0x0fu);
+        const std::uint32_t object_register =
+            static_cast<std::uint32_t>((code_unit >> 12u) & 0x0fu);
+        const std::uint16_t field_index =
+            ReadLe16(bytes, insns_off + (pc + 1u) * 2u);
+        if (value_register >= registers.size() ||
+            object_register >= registers.size()) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason = "iput_object_register_out_of_range";
+          probe.execution_state = "register_out_of_range";
+          probe.exact_blocker = "dex_iput_object_register_out_of_range";
+          probe.errors.push_back("dex_iput_object_register_out_of_range");
+          return probe;
+        }
+        if (registers[object_register].kind != DexRegisterValue::Kind::kObject) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason =
+              "iput_object_placeholder_missing";
+          probe.execution_state = "object_register_missing";
+          probe.exact_blocker = "dex_iput_object_placeholder_missing";
+          probe.errors.push_back("dex_iput_object_placeholder_missing");
+          return probe;
+        }
+        std::string field_class_descriptor;
+        std::string field_name;
+        std::string field_signature;
+        if (!ResolveFieldReference(tables, field_index, &field_class_descriptor,
+                                   &field_name, &field_signature,
+                                   &probe.errors)) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason =
+              "iput_object_field_resolution_failed";
+          probe.execution_state = "iput_object_unresolved";
+          probe.exact_blocker =
+              probe.errors.empty()
+                  ? "dex_iput_object_field_resolution_failed"
+                  : probe.errors.front();
+          return probe;
+        }
+        auto object_it = objects.find(registers[object_register].object_id);
+        if (object_it == objects.end()) {
+          probe.object_register_field_state = "blocked";
+          probe.object_register_field_reason = "iput_object_identity_missing";
+          probe.execution_state = "object_identity_missing";
+          probe.exact_blocker = "dex_iput_object_identity_missing";
+          probe.errors.push_back("dex_iput_object_identity_missing");
+          return probe;
+        }
+        const std::string field_key =
+            field_class_descriptor + "->" + field_name + ":" + field_signature;
+        object_it->second.fields[field_key] = registers[value_register];
+        mark_object_field_operation(
+            "new-instance+invoke-direct+iput-object", "object-placeholder",
+            "linuxoid_placeholder_object_and_field_state_for_minimal_checkpoint",
+            object_it->second.class_descriptor, field_class_descriptor,
+            field_name, field_signature);
+        AppendUnique(
+            &probe.diagnostics,
+            "Self-Healing Android Device DEX probe stored a placeholder object reference into an instance field");
         pc += 2u;
         continue;
       }
@@ -1289,20 +1653,16 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
         probe.app_invoked_method_name = invoked_method.method_name;
         probe.app_invoked_method_signature = invoked_method.method_signature;
 
-        if (invoked_method.class_descriptor != probe.target_class_descriptor) {
-          probe.app_method_invocation_state = "blocked";
-          probe.execution_state = "invoke_target_unimplemented";
-          probe.exact_blocker =
-              "app-invoke-target-unimplemented:" +
-              invoked_method.class_descriptor + "->" + invoked_method.method_name +
-              invoked_method.method_signature;
-          probe.diagnostics.push_back(
-              "Self-Healing Android Device DEX probe reached an app-local invoke target outside the tiny supported checkpoint");
-          return probe;
+        std::vector<DexRegisterValue> incoming_registers;
+        incoming_registers.reserve(register_count);
+        for (std::uint32_t index = 0; index < register_count && index < 5u;
+             ++index) {
+          incoming_registers.push_back(registers[registers_used[index]]);
         }
 
         const auto invoked_result =
-            ExecuteInlineInvokedMethod(bytes, tables, invoked_method);
+            ExecuteInlineInvokedMethod(bytes, tables, invoked_method,
+                                       incoming_registers, &objects);
         probe.decoded_instruction_count += invoked_result.decoded_instruction_count;
         probe.executed_instruction_count += invoked_result.executed_instruction_count;
         if (!invoked_result.errors.empty()) {
@@ -1319,8 +1679,15 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
           probe.exact_blocker = invoked_result.exact_blocker;
           return probe;
         }
+        if (invoked_method.method_name == "<init>") {
+          mark_object_field_operation(
+              "new-instance+invoke-direct", "object-placeholder",
+              "linuxoid_placeholder_object_and_field_state_for_minimal_checkpoint",
+              invoked_method.class_descriptor, "", "", "");
+        }
         pending_result = invoked_result.returned_value;
-        pending_result_valid = true;
+        pending_result_valid =
+            DetermineReturnTypeDescriptor(invoked_method.method_signature) != "V";
         probe.app_method_invocation_state = "invoke-direct-returned";
         AppendUnique(
             &probe.diagnostics,
@@ -1409,6 +1776,12 @@ std::string RenderDexExecutionProbeJson(
          << "\",\n"
          << "    \"class_loading_state\": \""
          << EscapeJson(probe.class_loading_state) << "\",\n"
+         << "    \"target_class_lookup_state\": \""
+         << EscapeJson(probe.target_class_lookup_state) << "\",\n"
+         << "    \"target_method_lookup_state\": \""
+         << EscapeJson(probe.target_method_lookup_state) << "\",\n"
+         << "    \"code_item_lookup_state\": \""
+         << EscapeJson(probe.code_item_lookup_state) << "\",\n"
          << "    \"lifecycle_receiver_state\": \""
          << EscapeJson(probe.lifecycle_receiver_state) << "\",\n"
          << "    \"lifecycle_receiver_class_descriptor\": \""
@@ -1695,6 +2068,24 @@ NativeApkDexProofReport NativeApkDexBridgeSession::RunDexProof(
 
     ParsedDexTables tables;
     if (!ParseDexTables(read_result.contents, &file, &tables)) {
+      if (!execution_probe_resolved &&
+          !report.execution_probe.target_class_descriptor.empty()) {
+        report.execution_probe.ready = true;
+        report.execution_probe.class_loading_state = "blocked";
+        report.execution_probe.target_class_lookup_state = "dex_tables_invalid";
+        report.execution_probe.parse_state = "dex_tables_invalid";
+        report.execution_probe.execution_state = "entrypoint_lookup_blocked";
+        report.execution_probe.exact_blocker =
+            file.errors.empty() ? "dex_tables_invalid" : file.errors.front();
+        if (!file.errors.empty()) {
+          report.execution_probe.errors.push_back(file.errors.front());
+        }
+        AppendUnique(
+            &report.execution_probe.diagnostics,
+            "Self-Healing Android Device DEX probe could not reach class lookup because staged DEX table parsing failed");
+        execution_probe_resolved = true;
+        report.parse_state = report.execution_probe.parse_state;
+      }
       for (const auto& error : file.errors) {
         AppendUnique(&report.errors, error + ":" + entry.path);
       }
@@ -1717,6 +2108,9 @@ NativeApkDexProofReport NativeApkDexBridgeSession::RunDexProof(
   }
 
   if (!execution_probe_resolved) {
+    report.execution_probe.ready = true;
+    report.execution_probe.class_loading_state = "blocked";
+    report.execution_probe.target_class_lookup_state = "class_missing";
     report.execution_probe.parse_state = "entrypoint_lookup_unresolved";
     report.execution_probe.execution_state = "entrypoint_missing";
     report.execution_probe.exact_blocker = "dex_entrypoint_class_missing";

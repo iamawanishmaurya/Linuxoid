@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planned
-stopped_at: Phase 2 planned; next action is to execute 02-01 and bind the real keyboard settings activity into first-app-start proof
-last_updated: "2026-05-18T14:10:00.000Z"
-last_activity: 2026-05-18 -- Phase 2 planning complete
+status: in_progress
+stopped_at: Phase 2 complete; next action is to plan Phase 3 runtime context bridge around invoke receiver propagation and ActivityThread handoff
+last_updated: "2026-05-18T18:30:00.000Z"
+last_activity: 2026-05-18 -- Phase 2 managed activity start complete
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 3
-  percent: 17
+  completed_plans: 6
+  percent: 33
 ---
 
 # Project State
@@ -21,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Run a real Android app directly on Linux through Linuxoid's own compatibility/runtime path, with honest execution and honest blockers instead of emulator fallback.
-**Current focus:** Phase 2 - Managed Activity Start
+**Current focus:** Phase 3 - Runtime Context Bridge
 
 ## Current Position
 
-Phase: 2 of 6 (Managed Activity Start)
-Plan: 3 plans across 3 waves
-Status: Ready to execute - Phase 2 plans now target the real `org.futo.inputmethod.latin.uix.settings.SettingsActivity` managed-start seam
-Last activity: 2026-05-18 -- Phase 2 planned around real activity resolution, lifecycle entrypoint reporting, and regression proof
+Phase: 3 of 6 (Runtime Context Bridge)
+Plan: planning not started for the next phase
+Status: Phase 2 complete - the real keyboard settings activity is now resolved into staged DEX lifecycle lookup with exact blocker reporting
+Last activity: 2026-05-18 -- Phase 2 completed around real activity resolution, lifecycle entrypoint reporting, and regression proof
 
-Progress: [██░░░░░░░░] 17%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3
+- Total plans completed: 6
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -52,16 +52,16 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Execute Phase 2 plan 02-01 to bind the real launcher/settings activity into the first-app-start proof
-- Narrow the staged `x86_64` native-library loading blocker while keeping the managed activity-start seam explicit
+- Plan Phase 3 around `propagate_framework_invoke_receiver_registers` and real managed receiver propagation
+- Narrow the staged `x86_64` native-library loading blocker while keeping the managed `SettingsActivity.onCreate(Landroid/os/Bundle;)V` seam explicit
 
 ### Blockers/Concerns
 
-- Current project blocker: the real keyboard APK now clears intake and resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, but the direct launch path still stops at `libraries_failed_to_load` before the managed proof reaches real class loading
-- Likely next implementation seam: Phase 2 plan 02-01 in `src/apk_native_launch.cpp`, `src/apk_dex_bridge.cpp`, and `tests/test_main.cpp`
+- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity` and `onCreate(Landroid/os/Bundle;)V` from staged DEX metadata, but the direct launch path still stops at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start` before end-to-end managed start can continue
+- Next managed-runtime seam after lookup: `framework_boundary_reason: invoke_receiver_missing` with `next_blocker: propagate_framework_invoke_receiver_registers`
 
 ## Session Continuity
 
-Last session: 2026-05-18 19:35
-Stopped at: Phase 2 planned; next action is to execute 02-01 and bind the real keyboard settings activity into first-app-start proof
-Resume file: .planning/phases/02-managed-activity-start/02-01-PLAN.md
+Last session: 2026-05-18 22:30
+Stopped at: Phase 2 complete; next action is to plan Phase 3 runtime context bridge around invoke receiver propagation and ActivityThread handoff
+Resume file: .planning/ROADMAP.md

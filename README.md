@@ -283,9 +283,9 @@ What it does **not** prove yet:
 
 `--java-proof` now implements **P14 Java/Kotlin APK Proof Contract** on top of the existing package, activity, process, window, and runtime seams. It does not claim real Java/Kotlin bytecode execution yet. Instead, it proves that a Java/Kotlin-style APK can be inspected, resolved through `MAIN`/`LAUNCHER`, mapped onto deterministic process plus window plus runtime session artifacts, and persisted as a Linuxoid-owned `java_apk_proof` contract under `sandbox/data/data/<package>/java-proof/java-proof-state.json`, `java-proof-session-map.json`, and `java-proof-events.jsonl`. `inspect-apk-java` exposes that same proof contract directly, and the diagnostics stay explicit about current limits: this is bootstrap-and-lifecycle wiring proof for the Self-Healing Android Device path, not full ART-owned bytecode execution yet.
 
-### First DEX Constructor + Object Reference Checkpoint
+### Managed Activity Start Checkpoint
 
-`launch-apk --first-app-start-proof` and `inspect-apk-first-start` now drive one minimal Android app fixture through the real Linuxoid direct-session path as far as the current runtime honestly can:
+`launch-apk --first-app-start-proof` and `inspect-apk-first-start` now expose the first real managed-activity start seam on top of the existing direct Linuxoid session path:
 
 - APK inspection and plain-XML manifest/package parsing
 - launcher `MAIN` / `LAUNCHER` intent resolution
@@ -298,26 +298,27 @@ What it does **not** prove yet:
 
 What actually runs today:
 
-- Linuxoid resolves the fixture `MainActivity`
+- Linuxoid still resolves and executes the deterministic fixture `com.example.launchapk.MainActivity.onCreate()I`
 - Linuxoid stages the APK, data directory, dex payload, and runtime inputs
 - Linuxoid creates process, window, runtime, and Java-proof session artifacts
 - Linuxoid parses real DEX header, string, type, proto, method, and class tables
-- Linuxoid locates the deterministic fixture lifecycle method `com.example.launchapk.MainActivity.onCreate()I`
 - Linuxoid resolves `Lcom/example/launchapk/MainActivity;` from staged DEX/class-loader metadata before interpretation starts
-- Linuxoid materializes a deterministic lifecycle receiver placeholder for `MainActivity` and binds it to register `v0` for the minimal checkpoint
+- Linuxoid materializes a deterministic lifecycle receiver placeholder for `MainActivity` and binds it to register `v0`
+- Linuxoid crosses the first framework-style call boundary as a stubbed `Landroid/app/Activity;->onCreate()V`
 - Linuxoid executes one tiny real app-local `invoke-direct` constructor path for `Lcom/example/launchapk/StateCarrier;-><init>()V`
 - Linuxoid stores that placeholder object into `MainActivity.currentCarrier:Lcom/example/launchapk/StateCarrier;`
 - Linuxoid reads that object back with `iget-object`, reads `StateCarrier.value:I` with `iget`, and returns the deterministic integer result
-- Linuxoid decodes and executes a tiny real DEX instruction path through Linuxoid's minimal interpreter and records it in `first_android_app_start`
-- Linuxoid resolves the first framework-style call boundary as `Landroid/app/Activity;->onCreate()V`
-- Linuxoid now also models one placeholder constructor seam plus one deterministic object-reference field seam plus one deterministic integer field round-trip for that lifecycle path
-- Linuxoid currently supports the smallest opcode, method-resolution, object, register, and field subset needed for this checkpoint: DEX header plus string plus type plus proto plus field plus method plus class tables, `nop`, `const/4`, `move-result`, `return-void`, `return`, `return-wide`, `return-object`, `new-instance`, `iget`, `iget-object`, `iput`, `iput-object`, `invoke-super` resolution plus stub handling for `android.app.Activity.onCreate()V`, and one tiny app-local `invoke-direct` method interpretation path for a constructor body
+- Linuxoid now also resolves the real verification target `org.futo.inputmethod.latin/.uix.settings.SettingsActivity` into staged DEX lookup state
+- Linuxoid derives `Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;` and resolves the real lifecycle method `onCreate(Landroid/os/Bundle;)V`
+- Linuxoid records exact class-loading, method-lookup, and code-item-lookup state for that real activity instead of collapsing to generic `dex_unavailable`
+- Linuxoid keeps the first managed framework boundary honest when the keyboard-identity execution fixture reaches it: `framework_boundary_state: "blocked"` with `framework_boundary_reason: "invoke_receiver_missing"`
 
 What does **not** run yet:
 
 - real ART-owned `ActivityThread` / application bootstrap
-- managed `MainActivity` method invocation through ART
-- broad Java/Kotlin APK execution beyond the deterministic lifecycle checkpoint method
+- managed `SettingsActivity` invocation through a real ART-owned runtime context
+- receiver propagation across the real framework-owned invoke boundary
+- broad Java/Kotlin APK execution beyond the deterministic lifecycle checkpoint methods
 - general Android framework dispatch or compatibility beyond the single stubbed boundary
 
 The checkpoint stays explicit about that boundary. On the healthy fixture path today it reports:
@@ -337,7 +338,7 @@ The checkpoint stays explicit about that boundary. On the healthy fixture path t
 - `first_android_app_start.app_invoked_method_class_descriptor: "Lcom/example/launchapk/StateCarrier;"`
 - `first_android_app_start.app_invoked_method_name: "<init>"`
 - `first_android_app_start.app_invoked_method_signature: "()V"`
-- `first_android_app_start.dex_parse_state: "header_tables_methods_and_code_item"`
+- `first_android_app_start.dex_parse_state: "entrypoint_code_item_resolved"`
 - `first_android_app_start.bytecode_execution_state: "returned"`
 - `first_android_app_start.object_register_field_operation: "new-instance+invoke-direct+iput-object+iget-object+iget"`
 - `first_android_app_start.object_register_field_state: "object-placeholder"`
@@ -356,11 +357,26 @@ The checkpoint stays explicit about that boundary. On the healthy fixture path t
 - `first_android_app_start.activity_lifecycle_state: "destroyed"`
 - `first_android_app_start.blocking_reason: "needs-real-activitythread-context"`
 
-So this is a truthful first DEX constructor plus object-reference proof for the Self-Healing Android Device path. Linuxoid now resolves `MainActivity` from staged DEX metadata, materializes a deterministic lifecycle receiver placeholder, crosses a stubbed `android.app.Activity.onCreate()V` boundary, allocates a placeholder `StateCarrier` object, executes a tiny real app-local constructor body through `invoke-direct`, stores that object into `MainActivity.currentCarrier`, reads it back with `iget-object`, reads `StateCarrier.value:I` with `iget`, and reaches a real `return` instruction with a deterministic value, but that is still not a claim that Linuxoid already provides a real ART class loader, ActivityThread, heap, or end-to-end Android framework execution.
+On the real keyboard verification path today, Linuxoid now reports:
+
+- `first_android_app_start.activity_name: "org.futo.inputmethod.latin.uix.settings.SettingsActivity"`
+- `first_android_app_start.activity_component: "org.futo.inputmethod.latin/.uix.settings.SettingsActivity"`
+- `first_android_app_start.activity_target_resolution_state: "resolved-from-intent-contract"`
+- `first_android_app_start.entrypoint_class_descriptor: "Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;"`
+- `first_android_app_start.class_loading_state: "resolved-from-staged-dex"`
+- `first_android_app_start.target_class_lookup_state: "class_resolved"`
+- `first_android_app_start.target_method_lookup_state: "method_resolved"`
+- `first_android_app_start.code_item_lookup_state: "code_item_resolved"`
+- `first_android_app_start.lifecycle_method_name: "onCreate"`
+- `first_android_app_start.lifecycle_method_signature: "(Landroid/os/Bundle;)V"`
+
+So this is a truthful managed-activity start checkpoint for the Self-Healing Android Device path. Linuxoid now resolves the real keyboard `SettingsActivity` class and `onCreate(Bundle)V` seam from staged DEX metadata, while the deterministic execution fixture still proves the minimal interpreter can cross one framework boundary, one constructor boundary, and one object-reference field round-trip to a real `return`. That is still not a claim that Linuxoid already provides a real ART class loader, ActivityThread, heap, or end-to-end Android framework execution.
 
 Immediate next blocker:
 
-- `bridge_activity_oncreate_into_real_art_runtime_context`
+- real keyboard APK end-to-end launch still blocks earlier at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start`
+- the next managed-runtime interpreter seam after lookup is `propagate_framework_invoke_receiver_registers`
+- the next larger runtime-context blocker remains `bridge_activity_oncreate_into_real_art_runtime_context`
 
 `inspect-apk-compatibility` and `inspect-apk-compatibility-suite` now implement **P15 Third-Party APK Compatibility Sprint** on top of those same direct-session seams. They do not invent a disconnected mock matrix. Instead, Linuxoid launches the real staged APK session through package inspection, intent/activity resolution, storage sandboxing, permissions/AppOps, native/JNI load, process/session creation, window/surface state, runtime bootstrap, Java/Kotlin proof, and Self-Healing Android Device diagnostics, then emits a deterministic compatibility report under `sandbox/data/data/<package>/compatibility/compatibility-report.json`, `compatibility-domains.json`, and `compatibility-events.jsonl`. The suite command materializes the same contract across a small locally generated APK-like fixture set and summarizes statuses such as `supported`, `partial`, `blocked`, `missing-runtime`, `missing-surface`, `missing-native-lib`, `needs-real-art`, `recovered`, and `degraded`.
 

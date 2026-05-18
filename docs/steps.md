@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Managed Activity Start Checkpoint GREEN
+  Action: Threaded the real `org.futo.inputmethod.latin/.uix.settings.SettingsActivity` target through `launch-apk --first-app-start-proof`, fixed real-APK DEX string decoding for staged MUTF-8 metadata, resolved `onCreate(Landroid/os/Bundle;)V` plus exact class/method/code-item lookup state from staged DEX, and pinned the keyboard-identity synthetic activity seam with the exact managed framework boundary `framework_boundary_reason: invoke_receiver_missing`.
+  Result: Linuxoid now names the real keyboard managed-start seam and the exact next interpreter blocker instead of collapsing the path into generic `dex_unavailable` or `not_attempted` output, while the end-to-end real APK path still honestly blocks earlier at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start`.
+  Timestamp: 2026-05-18T22:20:00+05:30
+
 - Step: Keyboard APK Intake Checkpoint GREEN
   Action: Hardened the direct APK path so Linuxoid now reads stored and deflated ZIP entries, decodes a useful subset of binary `AndroidManifest.xml`, and pushes those decoded package/component/permission facts through the existing `inspect-apk-resources`, `inspect-apk-permissions`, and `launch-apk` flow without requiring plain-text fixture manifests.
   Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` target now returns trustworthy manifest, launcher, asset, permission, and ABI inventory facts through the direct Linuxoid path, and the next blocker is honestly `libraries_failed_to_load` rather than manifest decoding or large-APK intake hangs.

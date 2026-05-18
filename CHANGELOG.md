@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.119 - 2026-05-18
+
+- Close **Phase 2: Managed Activity Start** around the real keyboard verification target instead of only the synthetic `MainActivity` seam.
+- Fix real-APK DEX string decoding for staged MUTF-8 metadata, add explicit `target_class_lookup_state`, `target_method_lookup_state`, and `code_item_lookup_state` reporting, and keep the direct `launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]` path honest about where real managed startup stops.
+- Linuxoid now resolves `org.futo.inputmethod.latin/.uix.settings.SettingsActivity`, derives `Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;`, resolves `onCreate(Landroid/os/Bundle;)V` from staged DEX metadata, and reports exact managed-start boundaries instead of collapsing the real keyboard APK path into generic `dex_unavailable` or `not_attempted` states.
+- Keep the blocker honest: the real keyboard APK still stops earlier at `launch_status: libraries_failed_to_load` and `surface_not_ready_for_first_app_start`, while the synthetic keyboard-identity execution seam now surfaces the next exact managed-runtime blocker as `framework_boundary_reason: invoke_receiver_missing` with `next_blocker: propagate_framework_invoke_receiver_registers`.
+
 ## v0.1.118 - 2026-05-18
 
 - Harden the direct APK intake path for the real `keyboard-0.1.28.apk` verification target without expanding sideways into new runtime architecture.

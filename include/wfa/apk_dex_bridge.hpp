@@ -43,6 +43,9 @@ struct NativeApkDexExecutionProbeReport {
   std::string parse_state = "not_requested";
   std::string execution_state = "not_attempted";
   std::string class_loading_state = "not_attempted";
+  std::string target_class_lookup_state = "not_attempted";
+  std::string target_method_lookup_state = "not_attempted";
+  std::string code_item_lookup_state = "not_attempted";
   std::string lifecycle_receiver_state = "not_materialized";
   std::string lifecycle_receiver_class_descriptor;
   int lifecycle_receiver_register = -1;
