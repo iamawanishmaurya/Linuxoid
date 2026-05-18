@@ -1,6 +1,7 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_archive.hpp"
 #include "wfa/apk_asset_bridge.hpp"
+#include "wfa/apk_compatibility_bridge.hpp"
 #include "wfa/apk_lifecycle_bridge.hpp"
 #include "wfa/apk_native_launch.hpp"
 #include "wfa/apk_storage_bridge.hpp"
@@ -341,6 +342,11 @@ struct JavaKotlinApkProofFixture {
   std::filesystem::path runtime_root;
 };
 
+struct ThirdPartyCompatibilityFixture {
+  NativeApkLaunchFixture launch;
+  std::filesystem::path runtime_root;
+};
+
 NativeRuntimePackageFixture CreateNativeRuntimePackageFixture(
     const std::string& fixture_name, bool include_classes_dex = true,
     bool include_input_method_service = false) {
@@ -560,6 +566,21 @@ JavaKotlinApkProofFixture CreateJavaKotlinApkProofFixture(
         entries.insert(entries.end(), extra_entries.begin(), extra_entries.end());
         return entries;
       }());
+
+  std::filesystem::path runtime_root;
+  if (include_runtime_root) {
+    runtime_root = CreateArtRuntimeRootFixture(launch.root / "art-runtime");
+  }
+
+  return {.launch = launch, .runtime_root = runtime_root};
+}
+
+ThirdPartyCompatibilityFixture CreateThirdPartyCompatibilityFixture(
+    const std::string& fixture_name, const std::string& manifest_xml,
+    bool include_native_library, bool include_runtime_root,
+    const std::vector<std::pair<std::string, std::string>>& extra_entries = {}) {
+  const auto launch = CreateNativeApkLaunchFixtureWithManifest(
+      fixture_name, manifest_xml, include_native_library, extra_entries);
 
   std::filesystem::path runtime_root;
   if (include_runtime_root) {
@@ -8669,6 +8690,318 @@ void TestLaunchApkJavaProofHealsMalformedFiles() {
   fs::remove_all(fixture.launch.root);
 }
 
+void TestInspectApkCompatibilityCommandReportsNeedsRealArtForJavaFixture() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.thirdparty.java" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.thirdparty.java.App">
+    <activity android:name="com.example.thirdparty.java.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateThirdPartyCompatibilityFixture(
+      "linuxoid-compat-java-proof", manifest, true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/thirdparty/java/App;",
+                                   "Lcom/example/thirdparty/java/MainActivity;"})}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-compatibility " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inspect-apk-compatibility to succeed for valid proof apk");
+  Expect(output.find("\"overall_status\": \"needs-real-art\"") !=
+             std::string::npos,
+         "expected Java-style fixture to be classified as needs-real-art");
+  Expect(output.find("\"domain_name\": \"java_kotlin_proof\"") !=
+             std::string::npos,
+         "expected java_kotlin_proof domain in compatibility json");
+  Expect(output.find("\"self_healing_android_device\": {") !=
+             std::string::npos,
+         "expected Self-Healing Android Device section in compatibility json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestNativeApkCompatibilityClassifiesPermissionHeavyFixtureAsPartial() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.thirdparty.media" android:versionCode="3" android:versionName="3.4.5">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <application android:name="com.example.thirdparty.media.App">
+    <activity android:name="com.example.thirdparty.media.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateThirdPartyCompatibilityFixture(
+      "linuxoid-compat-permissions", manifest, true, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/thirdparty/media/App;",
+                                   "Lcom/example/thirdparty/media/MainActivity;"})},
+       {"assets/docs/guide.txt", "guide\n"},
+       {"res/layout/main.xml", "<layout/>\n"}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+
+  const auto report = wfa::InspectNativeApkCompatibility(
+      fixture.launch.apk_path.string(),
+      {.staging_root = fixture.launch.staging_root.string()});
+
+  Expect(report.ready && report.contract_ready,
+         "expected compatibility report for permission-heavy fixture");
+  Expect(report.overall_status == "partial",
+         "expected permission-heavy fixture to be partial");
+  Expect(report.blocking_reason == "requested_permissions_denied",
+         "expected denied-permission blocking reason");
+  Expect(report.recommended_recovery_action == "safe_mode_launch",
+         "expected safe_mode_launch recommendation for denied permissions");
+  const auto permissions_domain = std::find_if(
+      report.domains.begin(), report.domains.end(),
+      [](const wfa::NativeApkCompatibilityDomainReport& domain) {
+        return domain.domain_name == "permissions_appops";
+      });
+  Expect(permissions_domain != report.domains.end(),
+         "expected permissions_appops domain");
+  Expect(permissions_domain->status == "partial",
+         "expected partial permissions_appops domain");
+  Expect(!report.launch_report.permissions.denied_permissions.empty(),
+         "expected denied permissions in launch report");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestNativeApkCompatibilityClassifiesMissingNativeLibrary() {
+  namespace fs = std::filesystem;
+  const std::string manifest = R"(<manifest package="com.example.thirdparty.nativegap" android:versionCode="5" android:versionName="5.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.thirdparty.nativegap.App">
+    <activity android:name="com.example.thirdparty.nativegap.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)";
+  const auto fixture = CreateThirdPartyCompatibilityFixture(
+      "linuxoid-compat-missing-native-lib", manifest, false, true,
+      {{"classes.dex",
+        BuildResolvableDexPayload(
+            {"Lcom/example/thirdparty/nativegap/App;",
+             "Lcom/example/thirdparty/nativegap/MainActivity;"})}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+
+  const auto report = wfa::InspectNativeApkCompatibility(
+      fixture.launch.apk_path.string(),
+      {.staging_root = fixture.launch.staging_root.string()});
+
+  Expect(report.ready, "expected compatibility report for missing-native fixture");
+  Expect(report.overall_status == "missing-native-lib",
+         "expected missing-native-lib classification");
+  Expect(report.recommended_recovery_action ==
+             "stage_abi_matching_native_library",
+         "expected native library staging recommendation");
+  const auto native_domain = std::find_if(
+      report.domains.begin(), report.domains.end(),
+      [](const wfa::NativeApkCompatibilityDomainReport& domain) {
+        return domain.domain_name == "native_jni";
+      });
+  Expect(native_domain != report.domains.end(), "expected native_jni domain");
+  Expect(native_domain->status == "missing-native-lib",
+         "expected missing-native-lib native_jni domain");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestNativeApkCompatibilityClassifiesMissingRuntimeWithRecovery() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-compat-missing-runtime", false);
+  const ScopedEnvironmentVariable disable_host_art_probe(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+
+  const auto report = wfa::InspectNativeApkCompatibility(
+      fixture.launch.apk_path.string(),
+      {.staging_root = fixture.launch.staging_root.string()});
+
+  Expect(report.ready && report.contract_ready,
+         "expected compatibility report for missing-runtime fixture");
+  Expect(report.overall_status == "missing-runtime",
+         "expected missing-runtime classification");
+  Expect(report.recommended_recovery_action == "retry_runtime_bootstrap",
+         "expected retry_runtime_bootstrap recommendation");
+  Expect(report.self_healing_ready,
+         "expected Self-Healing Android Device report for missing runtime");
+  Expect(!report.self_healing_journal_path.empty(),
+         "expected self-healing journal path for missing runtime");
+  const auto runtime_domain = std::find_if(
+      report.domains.begin(), report.domains.end(),
+      [](const wfa::NativeApkCompatibilityDomainReport& domain) {
+        return domain.domain_name == "runtime_bootstrap";
+      });
+  Expect(runtime_domain != report.domains.end(), "expected runtime domain");
+  Expect(runtime_domain->status == "missing-runtime",
+         "expected missing-runtime domain status");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestNativeApkCompatibilityReportsRecoveredSurfaceFixture() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-compat-recovered-surface", true);
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+
+  const auto report = wfa::InspectNativeApkCompatibility(
+      fixture.launch.apk_path.string(),
+      {.staging_root = fixture.launch.staging_root.string(),
+       .simulate_blocked_surface_proof = true});
+
+  Expect(report.ready && report.contract_ready,
+         "expected compatibility report for recovered-surface fixture");
+  Expect(report.overall_status == "recovered",
+         "expected recovered classification after surface replay");
+  Expect(report.self_healing_ready,
+         "expected Self-Healing Android Device report for recovered surface");
+  Expect(report.self_healing_final_health == "recovered",
+         "expected recovered final watchdog health");
+  const auto window_domain = std::find_if(
+      report.domains.begin(), report.domains.end(),
+      [](const wfa::NativeApkCompatibilityDomainReport& domain) {
+        return domain.domain_name == "window_surface";
+      });
+  Expect(window_domain != report.domains.end(), "expected window_surface domain");
+  Expect(window_domain->status == "recovered",
+         "expected recovered window_surface status");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestInspectApkCompatibilitySuiteCommandReportsFixtureMatrix() {
+  namespace fs = std::filesystem;
+  const fs::path suite_root =
+      fs::temp_directory_path() / "linuxoid-compatibility-suite";
+  fs::remove_all(suite_root);
+  fs::create_directories(suite_root);
+  const fs::path runtime_root = CreateArtRuntimeRootFixture(
+      suite_root / "shared-art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", runtime_root.string());
+
+  const auto java_fixture = CreateThirdPartyCompatibilityFixture(
+      "linuxoid-compat-suite-java",
+      R"(<manifest package="com.example.suite.java" android:versionCode="1" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.suite.java.App">
+    <activity android:name="com.example.suite.java.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)",
+      true, false,
+      {{"classes.dex",
+        BuildResolvableDexPayload({"Lcom/example/suite/java/App;",
+                                   "Lcom/example/suite/java/MainActivity;"})}});
+  const auto permissions_fixture = CreateThirdPartyCompatibilityFixture(
+      "linuxoid-compat-suite-permissions",
+      R"(<manifest package="com.example.suite.permissions" android:versionCode="2" android:versionName="2.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <application android:name="com.example.suite.permissions.App">
+    <activity android:name="com.example.suite.permissions.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)",
+      true, false,
+      {{"classes.dex",
+        BuildResolvableDexPayload(
+            {"Lcom/example/suite/permissions/App;",
+             "Lcom/example/suite/permissions/MainActivity;"})},
+       {"assets/docs/guide.txt", "guide\n"},
+       {"res/layout/main.xml", "<layout/>\n"}});
+  const auto native_fixture = CreateThirdPartyCompatibilityFixture(
+      "linuxoid-compat-suite-native",
+      R"(<manifest package="com.example.suite.nativejni" android:versionCode="7" android:versionName="7.0.0">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+  <application android:name="com.example.suite.nativejni.App">
+    <activity android:name="com.example.suite.nativejni.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+)",
+      true, false,
+      {{"classes.dex",
+        BuildInvalidDexMagicPayload(
+            {"Lcom/example/suite/nativejni/App;",
+             "Lcom/example/suite/nativejni/MainActivity;"})}});
+
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " inspect-apk-compatibility-suite " +
+          suite_root.string() + " " + java_fixture.launch.apk_path.string() +
+          " " + permissions_fixture.launch.apk_path.string() + " " +
+          native_fixture.launch.apk_path.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inspect-apk-compatibility-suite command to succeed");
+  Expect(output.find("\"total_entries\": 3") != std::string::npos,
+         "expected three compatibility suite entries");
+  Expect(output.find("\"needs_real_art_count\": 1") != std::string::npos,
+         "expected one needs-real-art entry");
+  Expect(output.find("\"partial_count\": 1") != std::string::npos,
+         "expected one partial entry");
+  Expect(output.find("\"blocked_count\": 1") != std::string::npos,
+         "expected one blocked entry");
+  Expect(output.find("com.example.suite.java") != std::string::npos,
+         "expected Java suite package in output");
+  Expect(output.find("com.example.suite.permissions") !=
+             std::string::npos,
+         "expected permissions suite package in output");
+  Expect(output.find("com.example.suite.nativejni") != std::string::npos,
+         "expected native suite package in output");
+
+  fs::remove_all(java_fixture.launch.root);
+  fs::remove_all(permissions_fixture.launch.root);
+  fs::remove_all(native_fixture.launch.root);
+  fs::remove_all(suite_root);
+}
+
 void TestRuntimeBridgeOutputParsers() {
   Expect(wfa::OutputContainsInstalledPackage("package:org.futo.inputmethod.latin\n",
                                              "org.futo.inputmethod.latin"),
@@ -12971,6 +13304,12 @@ int main() {
     TestLaunchApkJavaProofBlocksWhenRuntimeUnavailable();
     TestLaunchApkJavaProofBlocksWhenDexInvalid();
     TestLaunchApkJavaProofHealsMalformedFiles();
+    TestInspectApkCompatibilityCommandReportsNeedsRealArtForJavaFixture();
+    TestNativeApkCompatibilityClassifiesPermissionHeavyFixtureAsPartial();
+    TestNativeApkCompatibilityClassifiesMissingNativeLibrary();
+    TestNativeApkCompatibilityClassifiesMissingRuntimeWithRecovery();
+    TestNativeApkCompatibilityReportsRecoveredSurfaceFixture();
+    TestInspectApkCompatibilitySuiteCommandReportsFixtureMatrix();
     TestLaunchApkPermissionsProofEmitsDeniedAudioCaptureDiagnostics();
   TestRuntimeBridgeOutputParsers();
     TestActivityLaunchReportRendering();

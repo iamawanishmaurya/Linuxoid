@@ -1,5 +1,6 @@
 #include "wfa/apk_host_integration.hpp"
 #include "wfa/apk_loader.hpp"
+#include "wfa/apk_compatibility_bridge.hpp"
 #include "wfa/apk_native_launch.hpp"
 #include "wfa/art_activity_bootstrap_fixture.hpp"
 #include "wfa/art_bootstrap_execution_fixture.hpp"
@@ -53,6 +54,8 @@ void PrintUsage() {
       << "  compatctl launch-apk --activity-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --self-heal-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk-surface <apk-path> [staging-root]\n"
+      << "  compatctl inspect-apk-compatibility <apk-path> [staging-root]\n"
+      << "  compatctl inspect-apk-compatibility-suite <suite-root> <apk-path> [apk-path...]\n"
       << "  compatctl inspect-apk-java <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-permissions <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-process <apk-path> [staging-root]\n"
@@ -419,6 +422,36 @@ int main(int argc, char** argv) {
       const auto report = wfa::LaunchNativeApk(argv[2], options);
       std::cout << wfa::RenderNativeApkLaunchJson(report);
       return report.java_apk_proof.ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "inspect-apk-compatibility") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const auto report = wfa::InspectNativeApkCompatibility(
+          argv[2],
+          {.staging_root = argc == 4 ? argv[3] : "/tmp/linuxoid-apk-compatibility"});
+      std::cout << wfa::RenderNativeApkCompatibilityJson(report);
+      return report.contract_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "inspect-apk-compatibility-suite") {
+      if (argc < 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      std::vector<std::string> apk_paths;
+      for (int index = 3; index < argc; ++index) {
+        apk_paths.push_back(argv[index]);
+      }
+      const auto report = wfa::InspectNativeApkCompatibilitySuite(
+          apk_paths, argv[2],
+          {.staging_root = "/tmp/linuxoid-apk-compatibility"});
+      std::cout << wfa::RenderNativeApkCompatibilitySuiteJson(report);
+      return report.ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "inspect-apk-permissions") {

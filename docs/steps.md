@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: P15 Third-Party APK Compatibility Sprint GREEN
+  Action: Added `inspect-apk-compatibility` and `inspect-apk-compatibility-suite`, created a deterministic compatibility-report bridge that reuses the real package/activity/storage/permission/native/process/window/runtime/java-proof contracts, classified three locally generated third-party-style APK fixtures across `supported`, `partial`, `blocked`, `missing-runtime`, `missing-surface`, `missing-native-lib`, `needs-real-art`, `recovered`, and `degraded`, and hardened post-watchdog report refresh so the Self-Healing Android Device compatibility layer reads healed runtime/process/window/Java contract state instead of stale pre-recovery snapshots.
+  Result: Linuxoid now has a Linuxoid-owned third-party APK compatibility matrix/report that stays no-Waydroid, no-emulator, no-ADB, no-Android-SDK, no-Gradle, no-network, and headless-safe in tests, while giving the next managed-runtime phase a truthful admission surface instead of a disconnected mock.
+  Timestamp: 2026-05-19T07:30:00+05:30
+
 - Step: P14 Java/Kotlin APK Proof Contract GREEN
   Action: Added `launch-apk --java-proof` and `inspect-apk-java`, persisted deterministic sandbox-backed `java-proof-state.json`, `java-proof-session-map.json`, and `java-proof-events.jsonl` artifacts, wired package/activity/process/window/runtime bootstrap-and-lifecycle proof through a Java/Kotlin-style APK fixture path, validated or healed missing, malformed, incomplete, stale, or incompatible Java proof state, and threaded `java_proof_health` plus deterministic recovery recommendations back into the Self-Healing Android Device watchdog without claiming real Java/Kotlin bytecode execution.
   Result: Linuxoid now has a Linuxoid-owned Java/Kotlin APK proof contract for direct APK sessions, plus an honest Self-Healing Android Device repair loop that can diagnose blocked runtime/bootstrap wiring, rebuild persisted proof state, and keep the no-Waydroid, no-emulator, no-ADB, no-Android-SDK, no-Gradle test path intact while the next handoff moves toward real managed bytecode invocation.

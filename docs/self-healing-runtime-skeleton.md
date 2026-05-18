@@ -6,6 +6,8 @@ Separate from that Self-Healing Android Device work, Linuxoid now also has a dir
 
 Linuxoid now also exposes **P14 Java/Kotlin APK Proof Contract** through `launch-apk --java-proof [--package <package>] [--component <component>] <apk-path> [staging-root]` and `inspect-apk-java <apk-path> [staging-root]`. That proof path persists `sandbox/data/data/<package>/java-proof/java-proof-state.json`, `java-proof-session-map.json`, and `java-proof-events.jsonl`, wires package plus activity plus process plus window plus runtime readiness into a deterministic Java/Kotlin-style APK session report, and keeps the Self-Healing Android Device diagnostics honest about the boundary: bootstrap and lifecycle wiring are proved, but full ART-owned Java/Kotlin bytecode execution is still future work.
 
+Linuxoid now also exposes **P15 Third-Party APK Compatibility Sprint** through `inspect-apk-compatibility <apk-path> [staging-root]` and `inspect-apk-compatibility-suite <suite-root> <apk-path> [apk-path...]`. That compatibility path reuses the real direct-session contracts rather than a mock: it drives package inspection, activity/intent resolution, storage sandboxing, permissions/AppOps, native/JNI loading, process/session state, window/surface state, runtime bootstrap, Java/Kotlin proof, and Self-Healing Android Device diagnostics into deterministic compatibility artifacts under `sandbox/data/data/<package>/compatibility/compatibility-report.json`, `compatibility-domains.json`, and `compatibility-events.jsonl`, plus a suite-level `suite-compatibility-report.json`. The contract stays explicit that this is current readiness classification for third-party-style APKs, not a claim of full Java/Kotlin bytecode execution or broad production APK compatibility yet.
+
 Git/GitHub update path: use normal git remotes from this environment; if direct authentication is unavailable in a later environment, record `GitHub update blocked: direct GitHub authentication not available from this environment`.
 
 What that means **today**:
@@ -24,7 +26,7 @@ What that means **today**:
   - Binder/service readiness
   - DEX/classloader readiness
 - Linuxoid can now hang Binder/service readiness off a deterministic Linuxoid-owned service-registry foundation with session-bound `package_manager`, `activity_manager`, and app-local placeholder services, explicit missing-service lookup artifacts, and honest `local_foundation_only` limitations instead of pretending kernel Binder or `system_server` already exist.
-- Linuxoid now also has enough direct-session contract surface to hand off cleanly into **P15 Managed Bytecode Invocation + ActivityThread Contract**:
+- Linuxoid now also has enough direct-session contract surface to hand off cleanly into **P16 Managed Bytecode Invocation + ActivityThread Contract**:
   - sandbox-backed `package_manager`
   - `intent_resolution`
   - `activity_launch`
@@ -36,6 +38,7 @@ What that means **today**:
   - `window_manager`
   - `runtime_bridge`
   - `java_apk_proof`
+  - `compatibility` report artifacts and suite summaries
   - Self-Healing Android Device health gates for storage, sandbox, permission, AppOps, Binder, DEX, activity, activity-manager, process, window, and runtime readiness
 - Linuxoid can select deterministic recovery actions for:
   - missing artifact
@@ -282,7 +285,7 @@ What remains blocked after this phase:
 - real Java/Kotlin ART execution
 - real ActivityThread-style application bootstrap, managed class loading, and bytecode invocation beyond the current Java/Kotlin proof contract
 
-Next phase: **P15 Managed Bytecode Invocation + ActivityThread Contract**
+Next phase: **P16 Managed Bytecode Invocation + ActivityThread Contract**
 
 The practical command-level contract today is:
 

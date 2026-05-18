@@ -28,6 +28,7 @@ flowchart TB
     Compatctl --> NativeApkDex["P6 APK DEX/ART Bootstrap Probe"]
     Compatctl --> NativeApkActivity["P7 PackageManager / Intent / Activity Launch Contract"]
     Compatctl --> NativeApkJava["P14 Java/Kotlin APK Proof Contract"]
+    Compatctl --> NativeApkCompat["P15 Third-Party APK Compatibility Sprint"]
     Compatctl --> NativePlanner["Native Spike Planner"]
     Compatctl --> NativeBootstrap["Native Activity Bootstrap"]
     Compatctl --> NativeExecute["P1 Native Execute Bootstrap"]
@@ -113,6 +114,7 @@ flowchart TB
     NativeApkDex --> NativeApkDexArtifact["dex/classes*.dex / art/dex-proof.json / art/art-bootstrap.json"]
     NativeApkActivity --> NativeApkActivityArtifact["activity-launch/package-record.json / intent-resolution.json / activity-launch.json"]
     NativeApkJava --> NativeApkJavaArtifact["java-proof/java-proof-state.json / java-proof-session-map.json / java-proof-events.jsonl"]
+    NativeApkCompat --> NativeApkCompatArtifact["compatibility/compatibility-report.json / compatibility-domains.json / compatibility-events.jsonl / suite-compatibility-report.json"]
     NativeBinder --> NativeBinderTransportArtifact["binder/transport-messages.jsonl"]
     NativeLifecycle --> NativeStubRunner["Linuxoid-owned Native Entrypoint Stub"]
     NativeExecute --> NativeSession["Truthful Session / Runner Logs / JSON Reports"]
@@ -250,6 +252,8 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 
 `--java-proof` now implements **P14 Java/Kotlin APK Proof Contract** on top of the existing package, activity, process, window, and runtime seams. It does not claim real Java/Kotlin bytecode execution yet. Instead, it proves that a Java/Kotlin-style APK can be inspected, resolved through `MAIN`/`LAUNCHER`, mapped onto deterministic process plus window plus runtime session artifacts, and persisted as a Linuxoid-owned `java_apk_proof` contract under `sandbox/data/data/<package>/java-proof/java-proof-state.json`, `java-proof-session-map.json`, and `java-proof-events.jsonl`. `inspect-apk-java` exposes that same proof contract directly, and the diagnostics stay explicit about current limits: this is bootstrap-and-lifecycle wiring proof for the Self-Healing Android Device path, not full ART-owned bytecode execution yet.
 
+`inspect-apk-compatibility` and `inspect-apk-compatibility-suite` now implement **P15 Third-Party APK Compatibility Sprint** on top of those same direct-session seams. They do not invent a disconnected mock matrix. Instead, Linuxoid launches the real staged APK session through package inspection, intent/activity resolution, storage sandboxing, permissions/AppOps, native/JNI load, process/session creation, window/surface state, runtime bootstrap, Java/Kotlin proof, and Self-Healing Android Device diagnostics, then emits a deterministic compatibility report under `sandbox/data/data/<package>/compatibility/compatibility-report.json`, `compatibility-domains.json`, and `compatibility-events.jsonl`. The suite command materializes the same contract across a small locally generated APK-like fixture set and summarizes statuses such as `supported`, `partial`, `blocked`, `missing-runtime`, `missing-surface`, `missing-native-lib`, `needs-real-art`, `recovered`, and `degraded`.
+
 `--self-heal-proof` now runs the existing Self-Healing Android Device watchdog on top of that same staged APK session, and **P13 Real ART Runtime Path / Java VM Bootstrap Contract** extends the inputs it consumes with `runtime_health` alongside `window_health`, `activity_manager_health`, and `process_health`. The watchdog can now record and replay deterministic `retry_runtime_bootstrap` attempts for blocked or failed runtime-bridge sessions and `rebuild_window_manager_state` attempts for missing, malformed, incomplete, stale, or incompatible sandbox-backed window-manager files alongside `rebuild_process_manager_state`, `rebuild_permission_state`, `repair_app_storage`, `restage_assets`, `restart_surface`, `refresh_binder_services`, `rebuild_dex_bootstrap`, and `rerun_intent_resolution`, without pretending real Android framework recovery already exists.
 
 Current P10 inspection flow:
@@ -281,7 +285,19 @@ Current P14 inspection flow:
   - `sandbox/data/data/<package>/java-proof/java-proof-session-map.json`
   - `sandbox/data/data/<package>/java-proof/java-proof-events.jsonl`
 
-What remains blocked after P14:
+Current P15 inspection flow:
+
+- `compatctl inspect-apk-compatibility <apk-path> [staging-root]`
+- `compatctl inspect-apk-compatibility-suite <suite-root> <apk-path> [apk-path...]`
+- inspect compact compatibility JSON in stdout
+- inspect persisted sandbox-backed artifacts under:
+  - `sandbox/data/data/<package>/compatibility/compatibility-report.json`
+  - `sandbox/data/data/<package>/compatibility/compatibility-domains.json`
+  - `sandbox/data/data/<package>/compatibility/compatibility-events.jsonl`
+- inspect the suite-level summary under:
+  - `<suite-root>/suite-compatibility-report.json`
+
+What remains blocked after P15:
 
 - real host-side process creation and liveness beyond the current Linuxoid placeholder process identity
 - real Java/Kotlin ART bytecode execution
@@ -289,12 +305,14 @@ What remains blocked after P14:
 - full Android `ActivityManagerService` / `ProcessList` behavior
 - full Android framework permission manager and AppOps service semantics
 - real ART/dex2oat/classloader execution against a discovered runtime root
+- broad third-party APK execution beyond the current deterministic compatibility-report fixtures and bootstrap proof wiring
 
-Next phase: **P15 Managed Bytecode Invocation + ActivityThread Contract**
+Next phase: **P16 Managed Bytecode Invocation + ActivityThread Contract**
 
-P15 handoff from P14:
+P16 handoff from P15:
 
 - reuse the existing sandbox-backed `package_manager`, `intent_resolution`, `activity_launch`, `storage`, `permissions`, `app_ops`, `activity_manager`, `process_manager`, `window_manager`, `runtime_bridge`, and `java_apk_proof` session contracts as the stable inputs for managed bytecode invocation and ActivityThread-style bootstrap sequencing
+- reuse the new `compatibility` report layer as the admission gate for which third-party APK profiles are currently `supported`, `partial`, `blocked`, `missing-runtime`, `missing-surface`, `missing-native-lib`, `needs-real-art`, `recovered`, or `degraded`
 - treat `runtime_health`, `java_proof_health`, `activity_manager_health`, `process_health`, `window_health`, `permission_health`, `app_ops_health`, `storage_health`, `sandbox_health`, `binder_health`, `dex_health`, and `activity_health` as first-class gating signals for Linuxoid runtime start, stop, retry, and eventual managed-thread ownership decisions
 - keep the current Self-Healing Android Device recovery loop honest by distinguishing:
   - contract-ready package plus activity plus process plus window plus runtime wiring

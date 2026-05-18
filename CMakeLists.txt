@@ -44,6 +44,7 @@ target_include_directories(wfa_core PUBLIC include)
 
 add_library(
   linuxoid_p1
+  src/apk_compatibility_bridge.cpp
   src/apk_activity_launch_bridge.cpp
   src/apk_asset_bridge.cpp
   src/apk_dex_bridge.cpp

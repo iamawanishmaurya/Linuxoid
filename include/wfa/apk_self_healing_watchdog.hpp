@@ -23,7 +23,7 @@ struct SelfHealingAndroidDeviceRecoveryAction {
 struct SelfHealingAndroidDeviceReport {
   bool ready = false;
   std::string phase_name =
-      "P14 Java/Kotlin APK Proof Contract";
+      "P15 Third-Party APK Compatibility Sprint";
   std::string session_id;
   std::string artifact_root;
   std::string report_json_path;

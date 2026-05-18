@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.108 - 2026-05-18
+
+- Implement **P15 Third-Party APK Compatibility Sprint** through `compatctl inspect-apk-compatibility <apk-path> [staging-root]` and `compatctl inspect-apk-compatibility-suite <suite-root> <apk-path> [apk-path...]`, extending the direct staged APK session into a Linuxoid-owned compatibility-report contract instead of a disconnected mock matrix.
+- Add a deterministic compatibility bridge that classifies manifest, package metadata, activity/intent resolution, permissions/AppOps, storage sandbox, native/JNI load, assets/resources, process/session, window/surface, runtime bootstrap, Java/Kotlin proof, and Self-Healing Android Device diagnostics across statuses such as `supported`, `partial`, `blocked`, `missing-runtime`, `missing-surface`, `missing-native-lib`, `needs-real-art`, `recovered`, and `degraded`.
+- Persist deterministic compatibility artifacts under `sandbox/data/data/<package>/compatibility/compatibility-report.json`, `compatibility-domains.json`, and `compatibility-events.jsonl`, plus a suite-level `suite-compatibility-report.json`, and add regression coverage for three locally generated third-party-style APK fixtures: a Java/Kotlin activity app, a permission-heavy asset/resource/storage app, and a native/JNI app with broken DEX/bootstrap metadata.
+- Harden direct `launch-apk --self-heal-proof` finalization so the post-watchdog report rehydrates repaired storage, permissions/AppOps, process manager, window manager, runtime bridge, Java proof, and related health fields before compatibility classification, keeping the Self-Healing Android Device output authoritative after recovery.
+- Update repo docs and status output to make **P15 Third-Party APK Compatibility Sprint** the current direct-runtime slice and point the next handoff at **P16 Managed Bytecode Invocation + ActivityThread Contract**.
+
 ## v0.1.107 - 2026-05-18
 
 - Implement **P14 Java/Kotlin APK Proof Contract** on the direct `launch-apk` path through `--java-proof` and `inspect-apk-java`, extending the staged APK session into a Linuxoid-owned `java_apk_proof` contract that wires package inspection, intent/activity resolution, process/session identity, window/surface state, runtime bootstrap state, and Self-Healing Android Device diagnostics together without claiming full Java/Kotlin bytecode execution.

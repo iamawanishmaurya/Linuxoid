@@ -231,6 +231,16 @@ void WriteTextFile(const fs::path& path, const std::string& contents) {
   output << contents;
 }
 
+std::string ReadTextFile(const fs::path& path) {
+  std::ifstream input(path);
+  if (!input) {
+    return "";
+  }
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  return buffer.str();
+}
+
 void AppendError(std::vector<std::string>* errors, const std::string& value) {
   if (value.empty()) {
     return;
@@ -1449,20 +1459,208 @@ void RefreshAggregateLaunchHealth(NativeApkLaunchReport* report) {
       DetermineRecommendedRecoveryAction(*report);
 }
 
+NativeApkSurfaceSession RunNativeApkSurfaceProof(
+    const NativeApkLaunchReport& report,
+    const NativeApkLaunchOptions& options);
+
+ParsedManifestMetadata RehydratePersistedManifestMetadata(
+    const NativeApkLaunchReport& report) {
+  ParsedManifestMetadata manifest;
+  manifest.manifest_present = report.manifest_present;
+  manifest.metadata_ready = report.manifest_metadata_ready;
+  manifest.manifest_source = report.manifest_source;
+  manifest.package_name = report.package_name;
+  manifest.version_name = report.version_name;
+  manifest.version_code = report.version_code;
+  manifest.launcher_component = report.launcher_component;
+  manifest.activity_names = report.declared_activities;
+  if (!report.manifest_path.empty()) {
+    manifest.manifest_contents = ReadTextFile(report.manifest_path);
+  }
+  if (manifest.manifest_contents.empty()) {
+    manifest.errors.push_back("manifest_contents_unavailable");
+  }
+  return manifest;
+}
+
+void RefreshRequestedProofContractsAfterSelfHeal(
+    NativeApkLaunchReport* report, const NativeApkLaunchOptions& options) {
+  const auto manifest = RehydratePersistedManifestMetadata(*report);
+
+  if (report->storage_proof_requested) {
+    report->storage = BuildStorageBridgeSession(*report).RunStorageProof();
+    report->storage_health = report->storage.ready ? "ready" : "blocked";
+    report->sandbox_health =
+        (report->storage.ready &&
+         report->storage.isolation_level == "path_sandbox_only")
+            ? "ready"
+            : "blocked";
+    for (const auto& error : report->storage.errors) {
+      AppendError(&report->errors, error);
+    }
+  }
+
+  if (report->asset_proof_requested) {
+    const auto asset_session = BuildAssetBridgeSession(*report);
+    report->asset_bridge = ProveNativeApkAssetBridge(
+        asset_session, options.preferred_asset_path);
+    report->resource_bridge = asset_session.InspectResources();
+    report->asset_health = report->asset_bridge.ready ? "ready" : "blocked";
+    report->resource_health =
+        report->resource_bridge.ready ? "ready" : "blocked";
+    for (const auto& error : report->asset_bridge.errors) {
+      AppendError(&report->errors, error);
+    }
+    for (const auto& error : report->resource_bridge.errors) {
+      AppendError(&report->errors, error);
+    }
+  }
+
+  if (report->surface_proof_requested && report->launch_ready) {
+    NativeApkLaunchOptions refreshed_options = options;
+    refreshed_options.simulate_blocked_surface_proof = false;
+    report->surface = RunNativeApkSurfaceProof(*report, refreshed_options);
+    report->surface_proof_ready = report->surface.first_frame_presented;
+    report->surface_health = report->surface_proof_ready ? "ready" : "blocked";
+  }
+
+  if (report->lifecycle_proof_requested) {
+    if (report->launch_ready) {
+      const auto lifecycle_report =
+          BuildLifecycleBridgeSession(*report, options).RunDeterministicProof();
+      report->lifecycle = lifecycle_report.lifecycle;
+      report->looper = lifecycle_report.looper;
+      report->input_queue = lifecycle_report.input_queue;
+      report->lifecycle_health = report->lifecycle.ready ? "ready" : "blocked";
+      report->looper_health = report->looper.ready ? "ready" : "blocked";
+      report->input_health = report->input_queue.ready ? "ready" : "blocked";
+      for (const auto& error : lifecycle_report.errors) {
+        AppendError(&report->errors, error);
+      }
+    } else {
+      report->lifecycle_health = "blocked";
+      report->looper_health = "blocked";
+      report->input_health = "blocked";
+    }
+  }
+
+  if (report->dex_proof_requested) {
+    try {
+      const auto archive = OpenApkArchive(report->apk_path);
+      const auto dex_session = BuildDexBridgeSession(*report);
+      report->dex = dex_session.RunDexProof(archive);
+      report->art_bootstrap = dex_session.BuildArtBootstrap(report->dex);
+      report->dex_health = report->dex.ready ? "ready" : "blocked";
+      report->art_health = report->art_bootstrap.ready ? "ready" : "blocked";
+      for (const auto& error : report->dex.errors) {
+        AppendError(&report->errors, error);
+      }
+      for (const auto& error : report->art_bootstrap.errors) {
+        AppendError(&report->errors, error);
+      }
+    } catch (const std::exception& error) {
+      report->dex_health = "blocked";
+      report->art_health = "blocked";
+      AppendError(&report->errors,
+                  "dex_archive_unavailable:" + std::string(error.what()));
+    }
+  }
+
+  if (report->activity_proof_requested) {
+    const auto binder_report = MaterializeBinderFoundation(*report);
+    report->binder_health = binder_report.manager_ready ? "ready" : "blocked";
+    if (!binder_report.manager_ready) {
+      AppendError(&report->errors, "binder_service_manager_unavailable");
+    }
+    if (!manifest.manifest_contents.empty()) {
+      const auto activity_session =
+          BuildActivityLaunchBridgeSession(*report, manifest);
+      report->package_manager = activity_session.BuildPackageManagerRecord();
+      report->intent_resolution =
+          activity_session.ResolveActivityIntent(report->package_manager);
+      report->activity_launch = activity_session.BuildActivityLaunchRecord(
+          report->package_manager, report->intent_resolution);
+      report->activity_health =
+          report->activity_launch.ready ? "ready" : "blocked";
+      for (const auto& error : report->package_manager.errors) {
+        AppendError(&report->errors, error);
+      }
+      for (const auto& error : report->intent_resolution.errors) {
+        AppendError(&report->errors, error);
+      }
+      for (const auto& error : report->activity_launch.errors) {
+        AppendError(&report->errors, error);
+      }
+    }
+  }
+
+  if (report->permissions_proof_requested && !manifest.manifest_contents.empty()) {
+    const auto permission_session = BuildPermissionBridgeSession(*report, manifest);
+    report->permissions = permission_session.BuildPermissionsReport();
+    report->app_ops = permission_session.BuildAppOpsReport(report->permissions);
+    report->permission_health = report->permissions.ready ? "ready" : "blocked";
+    report->app_ops_health = report->app_ops.ready ? "ready" : "blocked";
+    for (const auto& error : report->permissions.errors) {
+      AppendError(&report->errors, error);
+    }
+    for (const auto& error : report->app_ops.errors) {
+      AppendError(&report->errors, error);
+    }
+  }
+
+  if (report->process_proof_requested) {
+    const auto process_session =
+        BuildProcessManagerBridgeSession(*report, true);
+    report->activity_manager = process_session.BuildActivityManagerReport();
+    report->process_manager =
+        process_session.BuildProcessManagerReport(report->activity_manager);
+    report->activity_manager_health =
+        report->activity_manager.ready ? "ready" : "blocked";
+    report->process_health =
+        report->process_manager.ready ? "ready" : "blocked";
+    for (const auto& error : report->activity_manager.errors) {
+      AppendError(&report->errors, error);
+    }
+    for (const auto& error : report->process_manager.errors) {
+      AppendError(&report->errors, error);
+    }
+  }
+
+  if (report->window_proof_requested) {
+    report->window_manager =
+        BuildWindowManagerBridgeSession(*report, true).BuildReport();
+    report->window_health = report->window_manager.ready ? "ready" : "blocked";
+    for (const auto& error : report->window_manager.errors) {
+      AppendError(&report->errors, error);
+    }
+  }
+
+  if (report->runtime_proof_requested) {
+    report->runtime_bridge =
+        BuildRuntimeBridgeSession(*report, true, false, false).BuildReport();
+    report->runtime_health = report->runtime_bridge.ready ? "ready" : "blocked";
+    for (const auto& error : report->runtime_bridge.errors) {
+      AppendError(&report->errors, error);
+    }
+  }
+
+  if (report->java_proof_requested) {
+    report->java_apk_proof =
+        BuildJavaProofBridgeSession(*report, true).BuildReport();
+    report->java_proof_health =
+        report->java_apk_proof.ready ? "ready" : "blocked";
+    for (const auto& error : report->java_apk_proof.errors) {
+      AppendError(&report->errors, error);
+    }
+  }
+}
+
 NativeApkLaunchReport FinalizeNativeApkLaunchReport(
     NativeApkLaunchReport report, const NativeApkLaunchOptions& options) {
   if (options.self_heal_proof_requested) {
     report.self_healing_android_device =
         SelfHealingAndroidDeviceWatchdog(report).Run();
-  }
-  if (report.java_proof_requested && options.self_heal_proof_requested) {
-    report.java_apk_proof = BuildJavaProofBridgeSession(
-                                report, !report.self_heal_proof_requested)
-                                .BuildReport();
-    report.java_proof_health = report.java_apk_proof.ready ? "ready" : "blocked";
-    for (const auto& error : report.java_apk_proof.errors) {
-      AppendError(&report.errors, error);
-    }
+    RefreshRequestedProofContractsAfterSelfHeal(&report, options);
   }
   RefreshAggregateLaunchHealth(&report);
   if (!report.report_json_path.empty()) {
