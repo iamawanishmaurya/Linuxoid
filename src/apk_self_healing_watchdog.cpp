@@ -309,8 +309,8 @@ bool HasUpstreamNativeLaunchBlocker(const NativeApkLaunchReport& report) {
   }
   return report.native_loading_state == "dlopen_failed" ||
          report.native_loading_state == "staging_failed" ||
-         report.native_jni_state == "jni_onload_failed" ||
-         report.native_jni_state == "jni_onload_missing";
+         report.native_jni_state == "crashed" ||
+         report.native_jni_state == "missing";
 }
 
 std::string DescribeUpstreamNativeLaunchBlocker(
@@ -327,11 +327,11 @@ std::string DescribeUpstreamNativeLaunchBlocker(
     return "native_library_staging_failed:" +
            report.native_loading_library_name;
   }
-  if (report.native_jni_state == "jni_onload_failed" &&
+  if (report.native_jni_state == "crashed" &&
       !report.native_loading_library_name.empty()) {
-    return "jni_onload_failed:" + report.native_loading_library_name;
+    return "jni_onload_crashed:" + report.native_loading_library_name;
   }
-  if (report.native_jni_state == "jni_onload_missing" &&
+  if (report.native_jni_state == "missing" &&
       !report.native_loading_library_name.empty()) {
     return "jni_onload_missing:" + report.native_loading_library_name;
   }

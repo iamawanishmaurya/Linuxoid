@@ -1659,13 +1659,20 @@ std::string SanitizeExecutionToken(std::string value) {
 
 const NativeLibraryLoadAttempt* FindPrimaryNativeLoadAttempt(
     const NativeExecuteReport& report) {
+  if (!report.selected_library_path.empty()) {
+    for (const auto& attempt : report.library_load_attempts) {
+      if (attempt.library_path == report.selected_library_path) {
+        return &attempt;
+      }
+    }
+  }
   for (const auto& attempt : report.library_load_attempts) {
     if (attempt.load_state == "dlopen_failed") {
       return &attempt;
     }
   }
   for (const auto& attempt : report.library_load_attempts) {
-    if (attempt.jni_state == "missing") {
+    if (attempt.jni_state == "crashed" || attempt.jni_state == "missing") {
       return &attempt;
     }
   }
@@ -1711,6 +1718,11 @@ std::string DetermineNativeJniState(const NativeApkLaunchReport& report) {
   }
   if (report.jni_onload_called) {
     return "called";
+  }
+  for (const auto& attempt : report.native_execute.library_load_attempts) {
+    if (attempt.jni_state == "crashed") {
+      return "crashed";
+    }
   }
   for (const auto& attempt : report.native_execute.library_load_attempts) {
     if (attempt.jni_state == "missing") {
@@ -1767,6 +1779,9 @@ std::string DetermineFirstAppStartNativeBlockingReason(
   }
   if (report.launch_status == "jni_onload_missing_or_failed" &&
       attempt != nullptr) {
+    if (attempt->jni_state == "crashed") {
+      return "jni_onload_crashed_for_first_app_start:" + attempt->library_name;
+    }
     return "jni_onload_missing_for_first_app_start:" + attempt->library_name;
   }
   if (report.launch_status == "native_activity_entrypoint_missing" &&
@@ -2001,6 +2016,13 @@ std::string DetermineFirstAppStartNextBlocker(
            SanitizeExecutionToken(
                blocking_reason.substr(std::string(
                                           "jni_onload_missing_for_first_app_start:")
+                                          .size()));
+  }
+  if (blocking_reason.rfind("jni_onload_crashed_for_first_app_start:", 0) == 0) {
+    return "stabilize_jni_onload_for_" +
+           SanitizeExecutionToken(
+               blocking_reason.substr(std::string(
+                                          "jni_onload_crashed_for_first_app_start:")
                                           .size()));
   }
   if (blocking_reason.rfind(
@@ -2406,6 +2428,10 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
     proof.diagnostics.push_back(
         "Self-Healing Android Device first app start checkpoint is blocked because Linuxoid loaded a staged native library but did not reach a usable JNI_OnLoad seam");
   } else if (proof.blocking_reason.rfind(
+                 "jni_onload_crashed_for_first_app_start:", 0) == 0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint is blocked because Linuxoid reached JNI_OnLoad and the staged native library crashed inside that boundary");
+  } else if (proof.blocking_reason.rfind(
                  "native_activity_entrypoint_missing_for_first_app_start:", 0) ==
              0) {
     proof.diagnostics.push_back(
@@ -2435,6 +2461,8 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
       proof.blocking_reason.rfind("native_dlopen_failed_for_first_app_start:",
                                   0) == 0 ||
       proof.blocking_reason.rfind("jni_onload_missing_for_first_app_start:",
+                                  0) == 0 ||
+      proof.blocking_reason.rfind("jni_onload_crashed_for_first_app_start:",
                                   0) == 0 ||
       proof.blocking_reason.rfind(
           "native_activity_entrypoint_missing_for_first_app_start:", 0) == 0 ||
@@ -3256,7 +3284,10 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
                      "jni_onload_missing_or_failed" &&
                  attempt != nullptr && !attempt->library_name.empty()) {
         AppendError(&report.errors,
-                    "native_jni_onload_missing:" + attempt->library_name);
+                    (attempt->jni_state == "crashed"
+                         ? "native_jni_onload_crashed:"
+                         : "native_jni_onload_missing:") +
+                        attempt->library_name);
       } else if (report.native_execute.exit_reason ==
                      "native_activity_entrypoint_missing" &&
                  attempt != nullptr && !attempt->library_name.empty()) {
@@ -5146,6 +5177,17 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << ",\n"
          << "    \"execution_engine_ready\": "
          << (report.native_execute.execution_engine_ready ? "true" : "false")
+         << ",\n"
+         << "    \"android_compat_state\": \""
+         << EscapeJson(report.native_execute.android_compat_state)
+         << "\",\n"
+         << "    \"elf_undefined_versions_normalized\": "
+         << report.native_execute.elf_undefined_versions_normalized << ",\n"
+         << "    \"android_compat_preloaded_paths\": "
+         << RenderJsonArray(report.native_execute.android_compat_preloaded_paths)
+         << ",\n"
+         << "    \"android_compat_diagnostics\": "
+         << RenderJsonArray(report.native_execute.android_compat_diagnostics)
          << ",\n"
          << "    \"candidate_library_paths\": "
          << RenderJsonArray(report.native_execute.candidate_library_paths)

@@ -322,6 +322,7 @@ bool IsNativeBlockingReason(const std::string& blocking_reason) {
   return blocking_reason == "no_native_libraries_found" ||
          blocking_reason == "unsupported_host_abi" ||
          blocking_reason.rfind("native_dlopen_failed:", 0) == 0 ||
+         blocking_reason.rfind("jni_onload_crashed:", 0) == 0 ||
          blocking_reason.rfind("jni_onload_missing:", 0) == 0 ||
          blocking_reason.rfind("native_activity_entrypoint_missing:", 0) ==
              0;
@@ -336,6 +337,9 @@ std::string DetermineWindowBlockingReason(
     }
     if (context.native_loading_state == "jni_onload_missing_or_failed" &&
         !context.native_loading_library_name.empty()) {
+      if (context.native_jni_state == "crashed") {
+        return "jni_onload_crashed:" + context.native_loading_library_name;
+      }
       return "jni_onload_missing:" + context.native_loading_library_name;
     }
     if (context.native_loading_state == "native_activity_entrypoint_missing" &&

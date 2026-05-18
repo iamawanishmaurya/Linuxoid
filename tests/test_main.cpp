@@ -1150,6 +1150,57 @@ NativeApkLaunchFixture CreateNativeApkLaunchFixture(
           .launcher_component = "com.example.launchapk/.MainActivity"};
 }
 
+NativeApkLaunchFixture CreateNativeApkLaunchFixtureWithLibraryPath(
+    const std::string& fixture_name, const std::filesystem::path& fixture_library,
+    const std::string& staged_library_path = "lib/x86_64/libcalculator.so",
+    const std::vector<std::pair<std::string, std::string>>& extra_entries = {}) {
+  namespace fs = std::filesystem;
+  fs::path root = fs::temp_directory_path() / fixture_name;
+  const fs::path shared_memory_root = fs::path("/dev/shm") / fixture_name;
+  if (fs::exists("/dev/shm")) {
+    root = shared_memory_root;
+  }
+  fs::remove_all(root);
+  fs::create_directories(root);
+
+  Expect(fs::exists(fixture_library),
+         "expected requested native fixture library to exist");
+
+  std::ostringstream manifest;
+  manifest << "<manifest package=\"com.example.launchapk\""
+           << " android:versionCode=\"1\" android:versionName=\"1.0.0\""
+           << ">\n"
+           << "  <uses-sdk android:minSdkVersion=\"24\" android:targetSdkVersion=\"35\"/>\n"
+           << "  <application android:name=\"com.example.launchapk.App\">\n"
+           << "    <activity android:name=\"com.example.launchapk.MainActivity\">\n"
+           << "      <intent-filter>\n"
+           << "        <action android:name=\"android.intent.action.MAIN\"/>\n"
+           << "        <category android:name=\"android.intent.category.LAUNCHER\"/>\n"
+           << "      </intent-filter>\n"
+           << "    </activity>\n"
+           << "  </application>\n"
+           << "</manifest>\n";
+
+  std::vector<std::pair<std::string, std::string>> archive_entries = {
+      {"AndroidManifest.xml", manifest.str()},
+      {"assets/config/hello.txt", "hello launch apk\n"},
+      {"res/raw/payload.txt", "payload\n"},
+      {"resources.arsc", "arsc"},
+      {staged_library_path, ReadBinaryFile(fixture_library)},
+  };
+  archive_entries.insert(archive_entries.end(), extra_entries.begin(),
+                         extra_entries.end());
+
+  const fs::path apk_path = root / "native-launch.apk";
+  WriteStoredZipFixture(apk_path, archive_entries);
+
+  return {.root = root,
+          .apk_path = apk_path,
+          .staging_root = root / "staging",
+          .package_name = "com.example.launchapk",
+          .launcher_component = "com.example.launchapk/.MainActivity"};
+}
+
 NativeApkLaunchFixture CreateNativeApkLaunchFixtureWithManifest(
     const std::string& fixture_name, const std::string& manifest_xml,
     bool include_native_library = true,
@@ -6468,6 +6519,46 @@ void TestNativeExecuteStubRunsFixtureNativeActivity() {
   fs::remove_all(root);
 }
 
+void TestLaunchApkSkipsJniOnLoadForNonEntrypointLibrary() {
+  namespace fs = std::filesystem;
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path compatctl = build_dir / "compatctl";
+  const fs::path main_library = build_dir / "liblinuxoid_p1_fixture.so";
+  const fs::path sidecar_library =
+      build_dir / "liblinuxoid_p1_sidecar_jni_fixture.so";
+  Expect(fs::exists(main_library),
+         "expected main native fixture library to exist");
+  Expect(fs::exists(sidecar_library),
+         "expected sidecar JNI fixture library to exist");
+
+  const auto fixture = CreateNativeApkLaunchFixtureWithLibraryPath(
+      "linuxoid-launch-apk-sidecar-jni-fixture", main_library,
+      "lib/x86_64/libmain.so",
+      {{"lib/x86_64/libsidecar.so", ReadBinaryFile(sidecar_library)}});
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk " + fixture.apk_path.string() + " " +
+          fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected launch-apk success with sidecar JNI-only helper library");
+  Expect(output.find("\"launch_ready\": true") != std::string::npos,
+         "expected ready launch with sidecar JNI-only helper library");
+  Expect(output.find("\"selected_library_path\":") != std::string::npos &&
+             output.find("libmain.so") != std::string::npos,
+         "expected libmain.so to remain the selected entrypoint library");
+  Expect(output.find("\"library_name\": \"libsidecar.so\"") !=
+             std::string::npos,
+         "expected sidecar library attempt to be reported");
+  Expect(output.find("\"load_state\": \"skipped_after_primary_selection\"") !=
+             std::string::npos,
+         "expected sidecar library to be skipped once the primary library is selected");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestLaunchApkCommandRunsNativeOnlyFixture() {
   namespace fs = std::filesystem;
   const auto fixture = CreateNativeApkLaunchFixture(
@@ -6599,6 +6690,125 @@ void TestLaunchApkReportsExactNativeLoadFailureDetails() {
                    "native_dlopen_failed:libbroken.so") !=
              report.errors.end(),
          "expected exact broken-library error in launch report");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkLoadsAndroidCompatFixtureThroughLinuxoidShims() {
+  namespace fs = std::filesystem;
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path compatctl = build_dir / "compatctl";
+  const fs::path fixture_library =
+      build_dir / "liblinuxoid_android_compat_fixture.so";
+  const auto fixture = CreateNativeApkLaunchFixtureWithLibraryPath(
+      "linuxoid-launch-apk-android-compat-fixture", fixture_library,
+      "lib/x86_64/libjni_latinime.so");
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk " + fixture.apk_path.string() + " " +
+          fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected compatctl launch-apk command success for android compat fixture");
+  Expect(output.find("\"launch_ready\": true") != std::string::npos,
+         "expected android compat fixture launch readiness");
+  Expect(output.find("\"native_loading_state\": \"ready\"") !=
+             std::string::npos,
+         "expected ready native loading state for android compat fixture");
+  Expect(output.find("\"native_jni_state\": \"called\"") !=
+             std::string::npos,
+         "expected called JNI state for android compat fixture");
+  Expect(output.find("\"android_compat_state\": "
+                     "\"preloaded_and_version_normalized\"") !=
+             std::string::npos ||
+             output.find("\"android_compat_state\": \"preloaded\"") !=
+                 std::string::npos,
+         "expected compat shim state in native execute report");
+  Expect(output.find("\"entrypoint_found\": true") != std::string::npos,
+         "expected entrypoint discovery for android compat fixture");
+  Expect(output.find("\"activity_called\": true") != std::string::npos,
+         "expected native activity callback for android compat fixture");
+  Expect(output.find("\"exit_reason\": \"native_activity_completed\"") !=
+             std::string::npos,
+         "expected compat fixture native activity completion");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkReportsJniOnlyLibraryBoundaryPrecisely() {
+  namespace fs = std::filesystem;
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path compatctl = build_dir / "compatctl";
+  const fs::path fixture_library =
+      build_dir / "liblinuxoid_p1_jni_only_fixture.so";
+  const auto fixture = CreateNativeApkLaunchFixtureWithLibraryPath(
+      "linuxoid-launch-apk-jni-only-fixture", fixture_library,
+      "lib/x86_64/libjni_latinime.so");
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk " + fixture.apk_path.string() + " " +
+          fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected blocked launch for JNI-only library fixture");
+  Expect(output.find("\"launch_ready\": false") != std::string::npos,
+         "expected blocked launch readiness for JNI-only library fixture");
+  Expect(output.find("\"launch_status\": \"native_activity_entrypoint_missing\"") !=
+             std::string::npos,
+         "expected native activity entrypoint boundary for JNI-only library");
+  Expect(output.find("\"native_loading_state\": \"native_activity_entrypoint_missing\"") !=
+             std::string::npos,
+         "expected native loading state to preserve missing entrypoint");
+  Expect(output.find("\"native_jni_state\": \"called\"") !=
+             std::string::npos,
+         "expected JNI_OnLoad to be called for JNI-only library");
+  Expect(output.find("\"native_loading_library_name\": \"libjni_latinime.so\"") !=
+             std::string::npos,
+         "expected selected JNI-only library name in blocked report");
+  Expect(output.find("\"selected_library_path\":") != std::string::npos &&
+             output.find("libjni_latinime.so") != std::string::npos,
+         "expected selected library path to point at JNI-only library");
+  Expect(output.find("\"status\": \"called\"") != std::string::npos,
+         "expected JNI_OnLoad result surface for JNI-only library");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkReportsUnshimmedAndroidSymbolBlockerPrecisely() {
+  namespace fs = std::filesystem;
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path compatctl = build_dir / "compatctl";
+  const fs::path fixture_library =
+      build_dir / "liblinuxoid_android_compat_missing_symbol_fixture.so";
+  const auto fixture = CreateNativeApkLaunchFixtureWithLibraryPath(
+      "linuxoid-launch-apk-android-compat-missing-symbol-fixture",
+      fixture_library, "lib/x86_64/libjni_latinime.so");
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk " + fixture.apk_path.string() + " " +
+          fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected compatctl launch-apk failure for missing-symbol android fixture");
+  Expect(output.find("\"launch_ready\": false") != std::string::npos,
+         "expected blocked launch for missing-symbol android fixture");
+  Expect(output.find("\"launch_status\": \"libraries_failed_to_load\"") !=
+             std::string::npos,
+         "expected library load failure launch status for missing-symbol fixture");
+  Expect(output.find("\"native_loading_state\": \"dlopen_failed\"") !=
+             std::string::npos,
+         "expected precise dlopen failure state for missing-symbol fixture");
+  Expect(output.find("\"native_loading_library_name\": \"libjni_latinime.so\"") !=
+             std::string::npos,
+         "expected blocked library name for missing-symbol fixture");
+  Expect(output.find("__android_log_buf_write") != std::string::npos,
+         "expected exact missing android symbol in loader detail");
 
   fs::remove_all(fixture.root);
 }
@@ -15365,6 +15575,10 @@ int main() {
     TestImeProvisioningDetectsIncompleteActivation();
     TestImeProvisioningRejectsWrongApkPackagePairing();
     TestImeProvisioningKeepsPartialEvidenceOnReadbackFailure();
+    TestLaunchApkSkipsJniOnLoadForNonEntrypointLibrary();
+    TestLaunchApkLoadsAndroidCompatFixtureThroughLinuxoidShims();
+    TestLaunchApkReportsJniOnlyLibraryBoundaryPrecisely();
+    TestLaunchApkReportsUnshimmedAndroidSymbolBlockerPrecisely();
   } catch (const std::exception& error) {
     std::cerr << "Test failure: " << error.what() << '\n';
     return EXIT_FAILURE;

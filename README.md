@@ -206,6 +206,20 @@ Linuxoid now treats the phased execution plan as the repo-facing source of truth
 Plan document: [docs/phased-build-plan.md](/home/astra/codex/wine-for-android/docs/phased-build-plan.md)
 Detailed gap research: [docs/15-track-research-wave-2026-05-16.md](/home/astra/codex/wine-for-android/docs/15-track-research-wave-2026-05-16.md)
 
+## Current Keyboard APK Blocker
+
+Linuxoid still does **not** launch `/home/astra/Downloads/keyboard-0.1.28.apk` as a working app on Linux yet. The current narrow native blocker is no longer the earlier helper-library `JNI_OnLoad` crash. After the Android-compat preload slice and deferred `JNI_OnLoad` selection logic, the real keyboard path now reports:
+
+- `native_execute.android_compat_state: preloaded_and_version_normalized`
+- `native_execute.execution_engine_ready: true`
+- `native_loading_state: native_activity_entrypoint_missing`
+- `native_jni_state: called`
+- `native_loading_library_name: libjni_latinime.so`
+- `native_execute.jni_onload_results[0].return_code: 11`
+- `native_loading_detail: native_activity_entrypoint_missing`
+
+That is progress, but it is still not a working launch. Linuxoid now gets the real entry library loaded, calls `JNI_OnLoad`, writes the blocked report cleanly, and stops at the honest next native seam: `libjni_latinime.so` is JNI-shaped and does not expose `ANativeActivity_onCreate`. The managed checkpoint remains honest too: `launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity ...` now gets far enough to keep staged DEX/class lookup truth and reports the next exact blocker as `provide_native_activity_entrypoint_for_libjni_latinime_so`, while the deeper framework-owned boundary after that remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+
 ## Direct APK Proof Modes
 
 Linuxoid's direct `launch-apk` path now supports these session-bound proof modes:
@@ -302,11 +316,11 @@ Linuxoid now narrows the real keyboard APK visible-launch seam instead of collap
     - `focus_state`
     - `focus_owned`
     - `focus_owner`
-    - `interaction_state`
-    - `interaction_target_component`
-    - `interaction_target_window_id`
+  - `interaction_state`
+  - `interaction_target_component`
+  - `interaction_target_window_id`
   - keeps the real upstream blocker explicit through:
-    - `blocking_reason: "native_dlopen_failed:libandroidx.graphics.path.so"`
+    - `blocking_reason: "native_activity_entrypoint_missing:libjni_latinime.so"`
     - `recommended_recovery_action: "inspect_native_launch_diagnostics"`
   - still records best-effort live-host truth when available through:
     - `backing_mode`
@@ -323,7 +337,7 @@ What it still does **not** prove:
 
 - this is still not a visibly rendered, usable keyboard app on Linux
 - this is still not full Android framework window dispatch or input ownership
-- the next real blocker on the keyboard APK path is still resolving the upstream native `dlopen` failure for `libandroidx.graphics.path.so`
+- the next real blocker on the keyboard APK path is still bridging the JNI-shaped `libjni_latinime.so` boundary into a real app-start entry strategy
 
 ## Recovery and Runtime Hardening Checkpoint
 
@@ -337,9 +351,9 @@ Linuxoid now makes the real keyboard verification path repeatable and quieter wi
   - `continuity_state`
   - `continuity_diagnostics`
 - on the real keyboard APK path, `launch-apk --self-heal-proof --window-proof --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity ...` now keeps the earliest native blocker authoritative through:
-  - `primary_blocker_reason: "native_dlopen_failed:libandroidx.graphics.path.so"`
+  - `primary_blocker_reason: "native_activity_entrypoint_missing"`
   - `recovery_gating_state: "upstream_native_blocker_gated"`
-  - `recovery_gating_reason: "native_dlopen_failed:libandroidx.graphics.path.so"`
+  - `recovery_gating_reason: "native_activity_entrypoint_missing"`
   - `recommended_next_action: "inspect_native_launch_diagnostics"`
 - downstream launch-dependent repairs are now journaled as `skipped_upstream_blocker` instead of being noisily attempted behind a known native `dlopen` failure
 

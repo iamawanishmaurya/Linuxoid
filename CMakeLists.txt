@@ -93,7 +93,54 @@ add_executable(
 )
 target_link_libraries(wfa_tests PRIVATE wfa_core linuxoid_p1)
 
+add_library(linuxoid_android_compat_libc SHARED src/android_bionic_libc_compat.cpp)
+target_link_libraries(linuxoid_android_compat_libc PRIVATE dl m pthread)
+target_link_options(linuxoid_android_compat_libc PRIVATE "-Wl,-soname,libc.so")
+set_target_properties(linuxoid_android_compat_libc PROPERTIES OUTPUT_NAME "c")
+
+add_library(linuxoid_android_compat_liblog SHARED src/android_log_compat.cpp)
+target_link_libraries(linuxoid_android_compat_liblog PRIVATE dl m pthread)
+target_link_options(linuxoid_android_compat_liblog PRIVATE "-Wl,-soname,liblog.so")
+set_target_properties(linuxoid_android_compat_liblog PROPERTIES OUTPUT_NAME "log")
+
+add_library(linuxoid_android_compat_libm SHARED src/android_passthrough_compat.cpp)
+target_link_libraries(linuxoid_android_compat_libm PRIVATE m)
+target_link_options(linuxoid_android_compat_libm PRIVATE "-Wl,-soname,libm.so")
+set_target_properties(linuxoid_android_compat_libm PROPERTIES OUTPUT_NAME "m")
+
+add_library(linuxoid_android_compat_libdl SHARED src/android_passthrough_compat.cpp)
+target_link_libraries(linuxoid_android_compat_libdl PRIVATE dl)
+target_link_options(linuxoid_android_compat_libdl PRIVATE "-Wl,-soname,libdl.so")
+set_target_properties(linuxoid_android_compat_libdl PROPERTIES OUTPUT_NAME "dl")
+
 add_library(linuxoid_p1_fixture SHARED tests/p1_fixture_native_activity.cpp)
 set_target_properties(linuxoid_p1_fixture PROPERTIES PREFIX "lib")
+
+add_library(linuxoid_p1_sidecar_jni_fixture SHARED tests/p1_fixture_sidecar_jni.cpp)
+set_target_properties(linuxoid_p1_sidecar_jni_fixture PROPERTIES PREFIX "lib")
+
+add_library(linuxoid_p1_jni_only_fixture SHARED tests/p1_fixture_jni_only.cpp)
+set_target_properties(linuxoid_p1_jni_only_fixture PROPERTIES PREFIX "lib")
+
+add_library(linuxoid_android_compat_fixture SHARED tests/p1_fixture_android_compat.cpp)
+target_link_libraries(linuxoid_android_compat_fixture
+  PRIVATE
+    linuxoid_android_compat_libc
+    linuxoid_android_compat_liblog
+    linuxoid_android_compat_libm
+    linuxoid_android_compat_libdl)
+set_target_properties(linuxoid_android_compat_fixture PROPERTIES PREFIX "lib")
+
+add_library(
+  linuxoid_android_compat_missing_symbol_fixture
+  SHARED
+  tests/p1_fixture_android_compat_missing_symbol.cpp)
+target_link_libraries(linuxoid_android_compat_missing_symbol_fixture
+  PRIVATE
+    linuxoid_android_compat_libc
+    linuxoid_android_compat_liblog
+    linuxoid_android_compat_libm
+    linuxoid_android_compat_libdl)
+set_target_properties(linuxoid_android_compat_missing_symbol_fixture PROPERTIES PREFIX "lib")
 
 add_test(NAME wfa_tests COMMAND wfa_tests)

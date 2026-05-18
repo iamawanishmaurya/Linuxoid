@@ -1,5 +1,15 @@
 # Steps Log
 
+- Step: Native libc Compatibility and Entry Bridge Checkpoint GREEN
+  Action: Extended the tiny Android-compat shim slice so Linuxoid now gets the real keyboard entry library `libjni_latinime.so` loaded, calls `JNI_OnLoad`, records deterministic per-library `library_load_attempts[]` plus `jni_onload_results`, and flushes blocked CLI reports cleanly instead of letting teardown noise blur the true seam.
+  Result: The real keyboard APK path no longer stops at `__strchr_chk`. Linuxoid now reports `native_loading_state: native_activity_entrypoint_missing`, `native_jni_state: called`, `native_loading_library_name: libjni_latinime.so`, `native_execute.execution_engine_ready: true`, and `next_blocker: provide_native_activity_entrypoint_for_libjni_latinime_so`, while the deeper managed seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+  Timestamp: 2026-05-19T23:58:00+05:30
+
+- Step: Android Compat JNI Deferral Checkpoint GREEN
+  Action: Added tiny Android soname compatibility-shim reporting to the nested `native_execute` launch JSON, then deferred `JNI_OnLoad` so Linuxoid now only invokes it on the selected entry library instead of eagerly calling it on every loaded helper library. Added focused regression coverage for a non-entrypoint sidecar JNI library and kept the Android-compat fixture plus missing-symbol fixture deterministic.
+  Result: The real keyboard APK path no longer disappears at the earlier helper-library `JNI_OnLoad` crash. Linuxoid now reports the narrower blocker as `native_loading_state: native_activity_entrypoint_missing`, `native_loading_library_name: libjni_latinime.so`, `native_loading_detail: ... undefined symbol: __strchr_chk`, `native_execute.android_compat_state: preloaded_and_version_normalized`, and `next_blocker: provide_native_activity_entrypoint_for_libjni_latinime_so`.
+  Timestamp: 2026-05-19T22:35:00+05:30
+
 - Step: Recovery and Runtime Hardening Checkpoint GREEN
   Action: Extended repeated `launch-apk --storage-proof` and `launch-apk --permissions-proof` runs so Linuxoid now preserves and validates deterministic sandbox, permission, and AppOps artifacts under the same app-data root, then tightened the Self-Healing Android Device watchdog so blocked keyboard APK launches keep the exact native seam authoritative and journal downstream launch-dependent repairs as `skipped_upstream_blocker` instead of attempting noisy retries.
   Result: Linuxoid now gives repeated keyboard-style verification runs one stable persistence and recovery story: `continuity_state: validated_existing_state` for sandbox-backed state, `primary_blocker_reason: native_dlopen_failed:libandroidx.graphics.path.so`, `recovery_gating_state: upstream_native_blocker_gated`, and `recommended_next_action: inspect_native_launch_diagnostics`.

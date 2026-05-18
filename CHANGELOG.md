@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.125 - 2026-05-19
+
+- Close **Phase 7: Native libc Compatibility and Entry Bridge** around the real keyboard APK entry library instead of widening the runtime sideways again.
+- Extend the Android-compat shim slice so Linuxoid now gets `/home/astra/Downloads/keyboard-0.1.28.apk` past the earlier `__strchr_chk` seam, selects `libjni_latinime.so` as the authoritative entry library, calls `JNI_OnLoad`, records deterministic `jni_onload_results`, and preserves later libraries as `skipped_after_primary_selection`.
+- Tighten the direct CLI exit path so blocked `launch-apk` and `native-execute-stub` reports flush and exit cleanly after emitting JSON, which keeps the new blocker stable and honest: `native_loading_state: native_activity_entrypoint_missing`, `native_jni_state: called`, `native_loading_library_name: libjni_latinime.so`, and `next_blocker: provide_native_activity_entrypoint_for_libjni_latinime_so`.
+
+## v0.1.124 - 2026-05-19
+
+- Tighten the direct keyboard APK native seam instead of widening the runtime: `launch-apk` now surfaces Android-compat preload details inside the nested `native_execute` report and no longer eagerly calls `JNI_OnLoad` on every loaded helper library before Linuxoid knows which library owns the activity entry boundary.
+- Defer `JNI_OnLoad` to the selected entry library, add regression coverage for a non-entrypoint sidecar library with its own `JNI_OnLoad`, and keep the Android-compat fixture plus missing-symbol fixture coverage green.
+- Move the real `/home/astra/Downloads/keyboard-0.1.28.apk` blocker forward from a crash in `libandroidx.graphics.path.so` to a sharper native seam: Linuxoid now reports `android_compat_state: preloaded_and_version_normalized`, `native_loading_state: native_activity_entrypoint_missing`, and `native_loading_detail: ...libjni_latinime.so: undefined symbol: __strchr_chk` while the managed first-app-start path still reaches staged DEX/class lookup and stops honestly with `next_blocker: provide_native_activity_entrypoint_for_libjni_latinime_so`.
+
 ## v0.1.123 - 2026-05-19
 
 - Close **Phase 6: Recovery and Runtime Hardening** around repeated keyboard APK state continuity and exact watchdog gating instead of widening the runtime sideways again.

@@ -23,6 +23,7 @@
 #include "wfa/wayland_surface_fixture.hpp"
 #include "wfa/waydroid_integration.hpp"
 
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -196,6 +197,13 @@ MatrixPackageSpec ParseMatrixPackageSpec(const std::string& value) {
 
   return {.package_name = value.substr(0, separator),
           .component = value.substr(separator + 1)};
+}
+
+[[noreturn]] void FlushAndExit(int code) {
+  std::cout.flush();
+  std::cerr.flush();
+  std::fflush(nullptr);
+  std::_Exit(code);
 }
 
 }  // namespace
@@ -405,7 +413,7 @@ int main(int argc, char** argv) {
               ? report.first_android_app_start.ready
               : (report.self_heal_proof_requested ? self_heal_converged
                                                   : proof_ready_without_self_heal);
-      return success ? EXIT_SUCCESS : EXIT_FAILURE;
+      FlushAndExit(success ? EXIT_SUCCESS : EXIT_FAILURE);
     }
 
     if (command == "inspect-apk-resources") {
@@ -434,7 +442,8 @@ int main(int argc, char** argv) {
       };
       const auto report = wfa::LaunchNativeApk(argv[2], options);
       std::cout << wfa::RenderNativeApkLaunchJson(report);
-      return report.first_android_app_start.ready ? EXIT_SUCCESS : EXIT_FAILURE;
+      FlushAndExit(report.first_android_app_start.ready ? EXIT_SUCCESS
+                                                        : EXIT_FAILURE);
     }
 
     if (command == "inspect-apk-java") {
@@ -450,7 +459,7 @@ int main(int argc, char** argv) {
       };
       const auto report = wfa::LaunchNativeApk(argv[2], options);
       std::cout << wfa::RenderNativeApkLaunchJson(report);
-      return report.java_apk_proof.ready ? EXIT_SUCCESS : EXIT_FAILURE;
+      FlushAndExit(report.java_apk_proof.ready ? EXIT_SUCCESS : EXIT_FAILURE);
     }
 
     if (command == "inspect-apk-compatibility") {
@@ -499,7 +508,7 @@ int main(int argc, char** argv) {
       std::cout << wfa::RenderNativeApkLaunchJson(report);
       const bool success =
           report.storage.ready && report.permissions.ready && report.app_ops.ready;
-      return success ? EXIT_SUCCESS : EXIT_FAILURE;
+      FlushAndExit(success ? EXIT_SUCCESS : EXIT_FAILURE);
     }
 
     if (command == "inspect-apk-process") {
@@ -517,7 +526,7 @@ int main(int argc, char** argv) {
       std::cout << wfa::RenderNativeApkLaunchJson(report);
       const bool success = report.activity_manager.ready &&
                            report.process_manager.ready;
-      return success ? EXIT_SUCCESS : EXIT_FAILURE;
+      FlushAndExit(success ? EXIT_SUCCESS : EXIT_FAILURE);
     }
 
     if (command == "inspect-apk-window") {
@@ -533,7 +542,7 @@ int main(int argc, char** argv) {
       };
       const auto report = wfa::LaunchNativeApk(argv[2], options);
       std::cout << wfa::RenderNativeApkLaunchJson(report);
-      return report.window_manager.ready ? EXIT_SUCCESS : EXIT_FAILURE;
+      FlushAndExit(report.window_manager.ready ? EXIT_SUCCESS : EXIT_FAILURE);
     }
 
     if (command == "inspect-apk-runtime") {
@@ -549,7 +558,7 @@ int main(int argc, char** argv) {
       };
       const auto report = wfa::LaunchNativeApk(argv[2], options);
       std::cout << wfa::RenderNativeApkLaunchJson(report);
-      return report.runtime_bridge.ready ? EXIT_SUCCESS : EXIT_FAILURE;
+      FlushAndExit(report.runtime_bridge.ready ? EXIT_SUCCESS : EXIT_FAILURE);
     }
 
     if (command == "plan-native-spike") {
@@ -767,7 +776,7 @@ int main(int argc, char** argv) {
       } else {
         std::cout << json;
       }
-      return report.exit_code;
+      FlushAndExit(report.exit_code);
     }
 
     if (command == "native-first-pixel-fixture") {

@@ -17,7 +17,7 @@ This roadmap turns Linuxoid's existing proof-oriented runtime into a first real 
 - [x] **Phase 4: JNI and Native Loading** - Bring x86_64 native libraries and JNI boundaries into the verification path
 - [x] **Phase 5: Visible Wayland Interaction** - Make the verification app visibly launch and accept meaningful interaction on Linux
 - [x] **Phase 6: Recovery and Runtime Hardening** - Stabilize app state, permissions, and recovery diagnostics around the first real app path
-- [ ] **Phase 7: Native libc Compatibility and Entry Bridge** - Get the real keyboard APK past the current `libjni_latinime.so` Android-libc/native-entry blocker and into the first true native startup boundary
+- [x] **Phase 7: Native libc Compatibility and Entry Bridge** - Get the real keyboard APK past the current `libjni_latinime.so` Android-libc/native-entry blocker and into the first true native startup boundary
 
 ## Phase Details
 
@@ -182,15 +182,15 @@ Plans:
 
 **Wave 1**
 
-- [ ] 07-01: Close the first Android-libc symbol gap for `libjni_latinime.so`
+- [x] 07-01: Close the first Android-libc symbol gap for `libjni_latinime.so`
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-02: Expose the first true native entry boundary for the keyboard APK
+- [x] 07-02: Expose the first true native entry boundary for the keyboard APK
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 07-03: Lock the native-entry seam into first-app-start, recovery, and regression truth
+- [x] 07-03: Lock the native-entry seam into first-app-start, recovery, and regression truth
 
 ## Progress
 
@@ -205,4 +205,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 4. JNI and Native Loading | 2/2 | Complete | Exact native load/JNI blockers now propagate through `launch-apk` and `--first-app-start-proof` |
 | 5. Visible Wayland Interaction | 3/3 | Complete | Real keyboard `SettingsActivity` now owns a concrete window/focus target while preserving the exact native `dlopen` blocker |
 | 6. Recovery and Runtime Hardening | 2/2 | Complete | Repeated keyboard-state continuity is validated and watchdog recovery now stays gated on the earliest native blocker |
-| 7. Native libc Compatibility and Entry Bridge | 0/3 | Planned | Current real blocker: `libjni_latinime.so` fails at `__strchr_chk` / native entrypoint boundary even after Android-compat preloading |
+| 7. Native libc Compatibility and Entry Bridge | 3/3 | Complete | `libjni_latinime.so` now loads, `JNI_OnLoad` runs, and the remaining blocker is the missing native activity entrypoint plus later managed `Activity.onCreate(Bundle)` dispatch |

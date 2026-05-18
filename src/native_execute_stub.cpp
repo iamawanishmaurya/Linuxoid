@@ -6,14 +6,18 @@
 #include "wfa/signal_handler.hpp"
 
 #include <dlfcn.h>
+#include <elf.h>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <limits.h>
 #include <sstream>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 namespace wfa {
@@ -28,6 +32,10 @@ struct LoadedLibraryHandle {
   std::string path;
   void* handle = nullptr;
 };
+
+#ifndef SHT_GNU_versym
+#define SHT_GNU_versym 0x6fffffff
+#endif
 
 std::string EscapeJson(const std::string& value) {
   std::string escaped;
@@ -61,20 +69,31 @@ bool IsEntrypointLibraryName(const std::string& file_name) {
          preferred.end();
 }
 
+bool IsPreferredJniLibraryName(const std::string& file_name) {
+  return file_name == "libjni_latinime.so" || file_name == "libmain.so" ||
+         file_name == "libcalculator.so" || file_name == "libapp.so";
+}
+
 int DetermineLibraryOrderRank(const std::string& file_name) {
   if (file_name == "libc++_shared.so") {
     return 0;
   }
   if (file_name == "libmain.so") {
-    return 20;
+    return 10;
   }
   if (file_name == "libcalculator.so") {
-    return 21;
+    return 11;
   }
   if (file_name == "libapp.so") {
-    return 22;
+    return 12;
   }
-  return 10;
+  if (file_name == "libjni_latinime.so") {
+    return 13;
+  }
+  if (file_name.find("jni") != std::string::npos) {
+    return 14;
+  }
+  return 20;
 }
 
 void CloseLoadedLibraries(const std::vector<LoadedLibraryHandle>& libraries) {
@@ -115,7 +134,9 @@ std::string BuildJniOnLoadResultsJson(
            << "\"call_succeeded\": "
            << (result.call_succeeded ? "true" : "false") << ", "
            << "\"return_code\": " << result.return_code << ", "
-           << "\"status\": \"" << EscapeJson(result.status) << "\""
+           << "\"status\": \"" << EscapeJson(result.status) << "\", "
+           << "\"error_detail\": \"" << EscapeJson(result.error_detail)
+           << "\""
            << "}";
   }
   output << "]";
@@ -140,6 +161,309 @@ std::string ResolveWorkingDirectory() {
     return "<unavailable>";
   }
   return working_directory.string();
+}
+
+std::string ResolveExecutableDirectory() {
+  char buffer[PATH_MAX] = {};
+  const ssize_t size = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+  if (size <= 0) {
+    return {};
+  }
+  buffer[size] = '\0';
+  return fs::path(buffer).parent_path().string();
+}
+
+std::vector<std::string> BuildAndroidCompatibilityShimPaths() {
+  const std::string executable_directory = ResolveExecutableDirectory();
+  if (executable_directory.empty()) {
+    return {};
+  }
+  return {
+      (fs::path(executable_directory) / "libc.so").string(),
+      (fs::path(executable_directory) / "liblog.so").string(),
+      (fs::path(executable_directory) / "libm.so").string(),
+      (fs::path(executable_directory) / "libdl.so").string(),
+  };
+}
+
+std::vector<std::string> ReadElfNeededSharedLibraries(
+    const std::string& library_path) {
+  std::ifstream input(library_path, std::ios::binary);
+  if (!input) {
+    return {};
+  }
+
+  std::vector<char> payload((std::istreambuf_iterator<char>(input)),
+                            std::istreambuf_iterator<char>());
+  if (payload.size() < sizeof(Elf64_Ehdr)) {
+    return {};
+  }
+
+  const auto* header =
+      reinterpret_cast<const Elf64_Ehdr*>(payload.data());
+  if (!(header->e_ident[EI_MAG0] == ELFMAG0 &&
+        header->e_ident[EI_MAG1] == ELFMAG1 &&
+        header->e_ident[EI_MAG2] == ELFMAG2 &&
+        header->e_ident[EI_MAG3] == ELFMAG3) ||
+      header->e_ident[EI_CLASS] != ELFCLASS64 ||
+      header->e_ident[EI_DATA] != ELFDATA2LSB ||
+      header->e_shoff == 0 || header->e_shentsize < sizeof(Elf64_Shdr) ||
+      header->e_shnum == 0) {
+    return {};
+  }
+
+  const std::size_t section_table_end =
+      static_cast<std::size_t>(header->e_shoff) +
+      static_cast<std::size_t>(header->e_shentsize) *
+          static_cast<std::size_t>(header->e_shnum);
+  if (section_table_end > payload.size()) {
+    return {};
+  }
+
+  const auto* sections = reinterpret_cast<const Elf64_Shdr*>(
+      payload.data() + header->e_shoff);
+  const Elf64_Shdr* dynamic_section = nullptr;
+  const Elf64_Shdr* string_section = nullptr;
+  for (int index = 0; index < header->e_shnum; ++index) {
+    if (sections[index].sh_type == SHT_DYNAMIC) {
+      dynamic_section = &sections[index];
+      if (sections[index].sh_link < static_cast<Elf64_Word>(header->e_shnum)) {
+        string_section = &sections[sections[index].sh_link];
+      }
+      break;
+    }
+  }
+
+  if (dynamic_section == nullptr || string_section == nullptr ||
+      dynamic_section->sh_entsize < sizeof(Elf64_Dyn)) {
+    return {};
+  }
+
+  const std::size_t dynamic_end =
+      static_cast<std::size_t>(dynamic_section->sh_offset) +
+      static_cast<std::size_t>(dynamic_section->sh_size);
+  const std::size_t string_end =
+      static_cast<std::size_t>(string_section->sh_offset) +
+      static_cast<std::size_t>(string_section->sh_size);
+  if (dynamic_end > payload.size() || string_end > payload.size()) {
+    return {};
+  }
+
+  const auto* dynamic_entries = reinterpret_cast<const Elf64_Dyn*>(
+      payload.data() + dynamic_section->sh_offset);
+  const std::size_t dynamic_count =
+      dynamic_section->sh_size / sizeof(Elf64_Dyn);
+  const char* string_table = payload.data() + string_section->sh_offset;
+
+  std::vector<std::string> needed_libraries;
+  for (std::size_t index = 0; index < dynamic_count; ++index) {
+    if (dynamic_entries[index].d_tag != DT_NEEDED) {
+      continue;
+    }
+    const auto offset =
+        static_cast<std::size_t>(dynamic_entries[index].d_un.d_val);
+    if (offset >= string_section->sh_size) {
+      continue;
+    }
+    needed_libraries.emplace_back(string_table + offset);
+  }
+  return needed_libraries;
+}
+
+bool RequiresAndroidCompatibilityShims(const std::string& library_path) {
+  const auto needed_libraries = ReadElfNeededSharedLibraries(library_path);
+  return std::any_of(
+      needed_libraries.begin(), needed_libraries.end(),
+      [](const std::string& library_name) {
+        return library_name == "libc.so" || library_name == "liblog.so" ||
+               library_name == "libm.so" || library_name == "libdl.so";
+      });
+}
+
+int NormalizeElfUndefinedVersionBindings(const std::string& library_path,
+                                         std::string* error_detail) {
+  std::ifstream input(library_path, std::ios::binary);
+  if (!input) {
+    if (error_detail != nullptr) {
+      *error_detail = "open_failed";
+    }
+    return -1;
+  }
+
+  std::vector<char> payload((std::istreambuf_iterator<char>(input)),
+                            std::istreambuf_iterator<char>());
+  if (payload.size() < sizeof(Elf64_Ehdr)) {
+    return 0;
+  }
+
+  auto* header = reinterpret_cast<Elf64_Ehdr*>(payload.data());
+  if (!(header->e_ident[EI_MAG0] == ELFMAG0 &&
+        header->e_ident[EI_MAG1] == ELFMAG1 &&
+        header->e_ident[EI_MAG2] == ELFMAG2 &&
+        header->e_ident[EI_MAG3] == ELFMAG3) ||
+      header->e_ident[EI_CLASS] != ELFCLASS64 ||
+      header->e_ident[EI_DATA] != ELFDATA2LSB ||
+      header->e_shoff == 0 || header->e_shentsize < sizeof(Elf64_Shdr) ||
+      header->e_shnum == 0) {
+    return 0;
+  }
+
+  const std::size_t section_table_end =
+      static_cast<std::size_t>(header->e_shoff) +
+      static_cast<std::size_t>(header->e_shentsize) *
+          static_cast<std::size_t>(header->e_shnum);
+  if (section_table_end > payload.size()) {
+    if (error_detail != nullptr) {
+      *error_detail = "section_table_out_of_bounds";
+    }
+    return -1;
+  }
+
+  auto* sections =
+      reinterpret_cast<Elf64_Shdr*>(payload.data() + header->e_shoff);
+  const Elf64_Shdr* dynsym_section = nullptr;
+  Elf64_Shdr* versym_section = nullptr;
+  for (int index = 0; index < header->e_shnum; ++index) {
+    if (sections[index].sh_type == SHT_DYNSYM) {
+      dynsym_section = &sections[index];
+    } else if (sections[index].sh_type == SHT_GNU_versym) {
+      versym_section = &sections[index];
+    }
+  }
+  if (dynsym_section == nullptr || versym_section == nullptr ||
+      dynsym_section->sh_entsize < sizeof(Elf64_Sym) ||
+      versym_section->sh_entsize < sizeof(Elf64_Half)) {
+    return 0;
+  }
+
+  const std::size_t dynsym_end =
+      static_cast<std::size_t>(dynsym_section->sh_offset) +
+      static_cast<std::size_t>(dynsym_section->sh_size);
+  const std::size_t versym_end =
+      static_cast<std::size_t>(versym_section->sh_offset) +
+      static_cast<std::size_t>(versym_section->sh_size);
+  if (dynsym_end > payload.size() || versym_end > payload.size()) {
+    if (error_detail != nullptr) {
+      *error_detail = "dynamic_symbol_sections_out_of_bounds";
+    }
+    return -1;
+  }
+
+  const auto* symbols = reinterpret_cast<const Elf64_Sym*>(
+      payload.data() + dynsym_section->sh_offset);
+  auto* versions = reinterpret_cast<Elf64_Half*>(
+      payload.data() + versym_section->sh_offset);
+  const std::size_t symbol_count =
+      dynsym_section->sh_size / sizeof(Elf64_Sym);
+  const std::size_t version_count =
+      versym_section->sh_size / sizeof(Elf64_Half);
+  const std::size_t count = std::min(symbol_count, version_count);
+
+  int rewritten = 0;
+  for (std::size_t index = 0; index < count; ++index) {
+    if (symbols[index].st_shndx != SHN_UNDEF) {
+      continue;
+    }
+    const Elf64_Half current = versions[index];
+    const Elf64_Half current_index =
+        static_cast<Elf64_Half>(current & 0x7fffu);
+    if (current_index <= 1u) {
+      continue;
+    }
+    versions[index] = static_cast<Elf64_Half>((current & 0x8000u) | 1u);
+    ++rewritten;
+  }
+
+  if (rewritten == 0) {
+    return 0;
+  }
+
+  std::ofstream output(library_path, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    if (error_detail != nullptr) {
+      *error_detail = "rewrite_open_failed";
+    }
+    return -1;
+  }
+  output.write(payload.data(),
+               static_cast<std::streamsize>(payload.size()));
+  if (!output.good()) {
+    if (error_detail != nullptr) {
+      *error_detail = "rewrite_failed";
+    }
+    return -1;
+  }
+
+  return rewritten;
+}
+
+void PreloadAndroidCompatibilityShims(
+    NativeExecuteReport& report,
+    std::vector<LoadedLibraryHandle>& preloaded_libraries) {
+  report.android_compat_state = "not_attempted";
+  bool requires_android_compat = false;
+  for (const auto& candidate_library : report.candidate_library_paths) {
+    if (RequiresAndroidCompatibilityShims(candidate_library)) {
+      requires_android_compat = true;
+      break;
+    }
+  }
+  if (!requires_android_compat) {
+    report.android_compat_state = "not_required";
+    return;
+  }
+
+  const auto shim_paths = BuildAndroidCompatibilityShimPaths();
+  if (shim_paths.empty()) {
+    report.android_compat_state = "executable_directory_unavailable";
+    report.android_compat_diagnostics.push_back(
+        "android_compat_shim_directory_unavailable");
+    return;
+  }
+
+  for (const auto& candidate_library :
+       report.candidate_library_paths) {
+    std::string rewrite_error;
+    const int rewritten =
+        NormalizeElfUndefinedVersionBindings(candidate_library, &rewrite_error);
+    if (rewritten < 0) {
+      report.android_compat_diagnostics.push_back(
+          "elf_version_normalization_failed:" + fs::path(candidate_library).filename().string() +
+          ":" + rewrite_error);
+      continue;
+    }
+    report.elf_undefined_versions_normalized += rewritten;
+  }
+
+  for (const auto& shim_path : shim_paths) {
+    if (!fs::exists(shim_path)) {
+      report.android_compat_diagnostics.push_back(
+          "android_compat_shim_missing:" + shim_path);
+      report.android_compat_state = "shim_missing";
+      continue;
+    }
+    dlerror();
+    void* handle = dlopen(shim_path.c_str(), RTLD_NOW | RTLD_GLOBAL);
+    const char* error = dlerror();
+    if (handle == nullptr) {
+      report.android_compat_diagnostics.push_back(
+          "android_compat_shim_preload_failed:" + shim_path + ":" +
+          (error == nullptr ? "unknown_dlopen_error" : std::string(error)));
+      report.android_compat_state = "preload_failed";
+      continue;
+    }
+    preloaded_libraries.push_back({shim_path, handle});
+    report.android_compat_preloaded_paths.push_back(shim_path);
+  }
+
+  if (!report.android_compat_preloaded_paths.empty() &&
+      report.android_compat_state != "preload_failed") {
+    report.android_compat_state = report.elf_undefined_versions_normalized > 0
+                                      ? "preloaded_and_version_normalized"
+                                      : "preloaded";
+  } else if (report.android_compat_state == "not_attempted") {
+    report.android_compat_state = "no_shims_preloaded";
+  }
 }
 
 }  // namespace
@@ -212,6 +536,15 @@ std::vector<std::string> BuildNativeLibraryCandidates(
   return candidates;
 }
 
+std::string BuildSignalTrapDetail(const NativeSignalTrapInfo& trap) {
+  if (!trap.trapped) {
+    return {};
+  }
+  std::ostringstream output;
+  output << "signal_" << trap.signal_number << "_at_" << trap.address;
+  return output.str();
+}
+
 NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
   NativeExecuteReport report;
   report.package_name = request.package_name;
@@ -257,7 +590,18 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
 
   std::vector<LoadedLibraryHandle> loaded_libraries;
   loaded_libraries.reserve(report.candidate_library_paths.size());
-  bool any_jni_onload_success = false;
+  std::vector<LoadedLibraryHandle> preloaded_compatibility_libraries;
+  PreloadAndroidCompatibilityShims(report, preloaded_compatibility_libraries);
+  output << "[p1] android compat state: " << report.android_compat_state
+         << "\n";
+  if (report.elf_undefined_versions_normalized > 0) {
+    output << "[p1] normalized undefined ELF version bindings: "
+           << report.elf_undefined_versions_normalized << "\n";
+  }
+  for (const auto& diagnostic : report.android_compat_diagnostics) {
+    output << "[p1] android compat diagnostic: " << diagnostic << "\n";
+  }
+  bool primary_library_selected = false;
   for (std::size_t candidate_index = 0;
        candidate_index < report.candidate_library_paths.size();
        ++candidate_index) {
@@ -266,6 +610,13 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
     attempt.library_path = candidate;
     attempt.library_name = fs::path(candidate).filename().string();
     attempt.candidate_index = static_cast<int>(candidate_index);
+    if (primary_library_selected) {
+      attempt.load_state = "skipped_after_primary_selection";
+      attempt.failure_reason = "skipped_after_primary_selection";
+      output << "[p1] skipping after primary selection: " << candidate << "\n";
+      report.library_load_attempts.push_back(attempt);
+      continue;
+    }
     output << "[p1] trying: " << candidate << "\n";
     void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (handle == nullptr) {
@@ -287,33 +638,17 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
     attempt.load_state = "loaded";
     output << "[p1] dlopen OK: " << candidate << "\n";
 
-    JniOnLoadResult jni_result;
-    jni_result.library_path = candidate;
     dlerror();
-    auto jni_onload =
-        reinterpret_cast<JniOnLoadFn>(dlsym(handle, "JNI_OnLoad"));
-    const char* symbol_error = dlerror();
-    if (jni_onload == nullptr || symbol_error != nullptr) {
-      attempt.jni_state = "missing";
-      attempt.failure_reason = "jni_onload_missing";
-      jni_result.status = "missing";
-      output << "[p1] JNI_OnLoad missing: " << candidate << "\n";
-      report.jni_onload_results.push_back(jni_result);
-      report.library_load_attempts.push_back(attempt);
-      continue;
+    const bool has_entrypoint =
+        dlsym(handle, "ANativeActivity_onCreate") != nullptr &&
+        dlerror() == nullptr;
+    dlerror();
+    const bool has_jni_onload =
+        dlsym(handle, "JNI_OnLoad") != nullptr && dlerror() == nullptr;
+    if (has_entrypoint || has_jni_onload) {
+      primary_library_selected = true;
     }
 
-    jni_result.symbol_present = true;
-    output << "[p1] calling JNI_OnLoad: " << candidate << "\n";
-    jni_result.return_code = jni_onload(MakeStubJavaVm(), nullptr);
-    jni_result.call_succeeded = true;
-    jni_result.status = "called";
-    any_jni_onload_success = true;
-    attempt.jni_state = "called";
-    attempt.jni_return_code = jni_result.return_code;
-    output << "[p1] JNI_OnLoad OK: " << candidate
-           << " returned " << jni_result.return_code << "\n";
-    report.jni_onload_results.push_back(jni_result);
     report.library_load_attempts.push_back(attempt);
   }
 
@@ -324,15 +659,8 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
     return report;
   }
 
-  report.execution_engine_ready =
-      !report.libraries_loaded.empty() && any_jni_onload_success;
-  if (!any_jni_onload_success) {
-    report.exit_reason = "jni_onload_missing_or_failed";
-  } else {
-    report.exit_reason = "jni_onload_attempts_completed";
-  }
-
   ANativeActivityCreateFn entrypoint = nullptr;
+  const LoadedLibraryHandle* selected_jni_library = nullptr;
   for (const auto& library : loaded_libraries) {
     dlerror();
     auto* candidate = reinterpret_cast<ANativeActivityCreateFn>(
@@ -363,12 +691,118 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
     }
   }
 
+  for (const auto& library : loaded_libraries) {
+    dlerror();
+    auto* jni_onload =
+        reinterpret_cast<JniOnLoadFn>(dlsym(library.handle, "JNI_OnLoad"));
+    const char* symbol_error = dlerror();
+    if (jni_onload == nullptr || symbol_error != nullptr) {
+      continue;
+    }
+    if (selected_jni_library == nullptr) {
+      selected_jni_library = &library;
+    } else {
+      const std::string candidate_name = fs::path(library.path).filename().string();
+      const std::string selected_name =
+          fs::path(selected_jni_library->path).filename().string();
+      if (IsPreferredJniLibraryName(candidate_name) &&
+          !IsPreferredJniLibraryName(selected_name)) {
+        selected_jni_library = &library;
+      }
+    }
+  }
+
+  if (entrypoint == nullptr && selected_jni_library != nullptr) {
+    report.selected_library_path = selected_jni_library->path;
+  }
+
+  bool any_jni_onload_success = false;
+  bool jni_onload_crashed = false;
+  if (selected_jni_library != nullptr) {
+    for (const auto& library : loaded_libraries) {
+      const std::size_t attempt_index =
+          FindLibraryLoadAttemptIndex(report.library_load_attempts,
+                                      library.path);
+      if (attempt_index >= report.library_load_attempts.size()) {
+        continue;
+      }
+
+      auto& attempt = report.library_load_attempts[attempt_index];
+      if (library.path != selected_jni_library->path) {
+        attempt.jni_state = "skipped_non_entrypoint";
+        output << "[p1] skipping JNI_OnLoad for non-entrypoint library: "
+               << library.path << "\n";
+        continue;
+      }
+
+      JniOnLoadResult jni_result;
+      jni_result.library_path = library.path;
+      dlerror();
+      auto jni_onload =
+          reinterpret_cast<JniOnLoadFn>(dlsym(library.handle, "JNI_OnLoad"));
+      const char* symbol_error = dlerror();
+      if (jni_onload == nullptr || symbol_error != nullptr) {
+        attempt.jni_state = "missing";
+        attempt.failure_reason = "jni_onload_missing";
+        jni_result.status = "missing";
+        output << "[p1] JNI_OnLoad missing: " << library.path << "\n";
+        report.jni_onload_results.push_back(jni_result);
+        continue;
+      }
+
+      jni_result.symbol_present = true;
+      output << "[p1] calling JNI_OnLoad: " << library.path << "\n";
+      sigjmp_buf signal_environment;
+      const int trapped_signal = BeginSignalTrap(&signal_environment);
+      if (trapped_signal != 0) {
+        const NativeSignalTrapInfo trap = GetLastSignalTrapInfo();
+        attempt.jni_state = "crashed";
+        attempt.failure_reason = "jni_onload_crashed";
+        attempt.error_detail = BuildSignalTrapDetail(trap);
+        jni_result.status = "crashed";
+        jni_result.error_detail = attempt.error_detail;
+        jni_onload_crashed = true;
+        output << "[p1] JNI_OnLoad crashed: " << library.path << " "
+               << attempt.error_detail << "\n";
+        report.jni_onload_results.push_back(jni_result);
+        EndSignalTrap();
+        continue;
+      }
+      jni_result.return_code = jni_onload(MakeStubJavaVm(), nullptr);
+      EndSignalTrap();
+      jni_result.call_succeeded = true;
+      jni_result.status = "called";
+      any_jni_onload_success = true;
+      attempt.jni_state = "called";
+      attempt.jni_return_code = jni_result.return_code;
+      output << "[p1] JNI_OnLoad OK: " << library.path
+             << " returned " << jni_result.return_code << "\n";
+      report.jni_onload_results.push_back(jni_result);
+      break;
+    }
+  }
+
+  report.execution_engine_ready =
+      !report.libraries_loaded.empty() && any_jni_onload_success;
+  if (jni_onload_crashed) {
+    report.exit_reason = "jni_onload_missing_or_failed";
+  } else if (!any_jni_onload_success && selected_jni_library != nullptr) {
+    report.exit_reason = "jni_onload_missing_or_failed";
+  } else if (!any_jni_onload_success) {
+    report.exit_reason = "native_entry_library_not_selected";
+  } else {
+    report.exit_reason = "jni_onload_attempts_completed";
+  }
+
   if (entrypoint == nullptr) {
-    output << "[p1] entrypoint not found in loaded libraries\n";
-    report.exit_reason = "native_activity_entrypoint_missing";
+    if (jni_onload_crashed) {
+      output << "[p1] entrypoint not evaluated further because JNI_OnLoad crashed\n";
+    } else {
+      output << "[p1] entrypoint not found in loaded libraries\n";
+      report.exit_reason = "native_activity_entrypoint_missing";
+    }
     report.exit_code = 0;
     report.output = output.str();
-    CloseLoadedLibraries(loaded_libraries);
     return report;
   }
 
@@ -405,7 +839,9 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
                            : "native_activity_completed_without_jni_ready";
   report.exit_code = 0;
   report.output = output.str();
-  CloseLoadedLibraries(loaded_libraries);
+  if (!jni_onload_crashed) {
+    CloseLoadedLibraries(loaded_libraries);
+  }
   return report;
 }
 
@@ -444,6 +880,15 @@ std::string RenderNativeExecuteReportJson(const NativeExecuteReport& report) {
          << "  \"library_load_attempts\": "
          << RenderNativeLibraryLoadAttemptsJson(report.library_load_attempts)
          << ",\n"
+         << "  \"android_compat_state\": \""
+         << EscapeJson(report.android_compat_state) << "\",\n"
+         << "  \"elf_undefined_versions_normalized\": "
+         << report.elf_undefined_versions_normalized << ",\n"
+         << "  \"android_compat_preloaded_paths\": "
+         << BuildJsonStringArray(report.android_compat_preloaded_paths)
+         << ",\n"
+         << "  \"android_compat_diagnostics\": "
+         << BuildJsonStringArray(report.android_compat_diagnostics) << ",\n"
          << "  \"jni_onload_results\": "
          << BuildJniOnLoadResultsJson(report.jni_onload_results) << ",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
