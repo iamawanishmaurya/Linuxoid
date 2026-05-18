@@ -29,6 +29,8 @@ Requirements for the first real Android app execution milestone centered on `key
 - [ ] **JNI-06**: Linuxoid reports exact JNI registration, native app-start, or managed bootstrap blockers after `JNI_OnLoad` instead of collapsing back to generic missing-entrypoint failure
 - [ ] **JNI-07**: Linuxoid can move the real keyboard APK past the `linuxoid_managed_app_start_bridge_required` seam into a deterministic managed app-start dispatch or JNI registration boundary
 - [ ] **JNI-08**: Linuxoid keeps JNI registration, managed app-start dispatch, and later framework bootstrap seams distinct in launch and first-app-start reporting
+- [ ] **JNI-09**: Linuxoid can execute or precisely attempt the `libjni_latinime.so` JNI registration-helper boundary and report the exact registration outcome
+- [ ] **JNI-10**: Linuxoid keeps JNI registration dispatch, registration outcome, and later managed bootstrap seams distinct in launch and first-app-start reporting
 
 ### Window and Input
 
@@ -49,6 +51,7 @@ Requirements for the first real Android app execution milestone centered on `key
 - [ ] **VER-04**: User can push the real verification APK one step past generic native-library load failure and see the next exact native or managed startup blocker on the same direct Linuxoid path
 - [ ] **VER-05**: User can push the real verification APK one step past the current `native_activity_entrypoint_missing` seam and see the next exact native, JNI registration, or managed startup blocker on the same direct Linuxoid path
 - [ ] **VER-06**: User can push the real verification APK one step past the current `linuxoid_managed_app_start_bridge_required` seam and see the first exact post-bridge dispatch, registration, or managed bootstrap blocker
+- [ ] **VER-07**: User can push the real verification APK one step past the current `jni_registration_dispatch_required` seam and see the first exact post-registration managed or framework startup blocker
 
 ## v2 Requirements
 
@@ -97,6 +100,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JNI-06 | Phase 8 | Pending |
 | JNI-07 | Phase 9 | Pending |
 | JNI-08 | Phase 9 | Pending |
+| JNI-09 | Phase 10 | Pending |
+| JNI-10 | Phase 10 | Pending |
 | WIN-01 | Phase 5 | Pending |
 | WIN-02 | Phase 5 | Pending |
 | APP-01 | Phase 6 | Pending |
@@ -108,10 +113,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VER-04 | Phase 7 | Pending |
 | VER-05 | Phase 8 | Pending |
 | VER-06 | Phase 9 | Pending |
+| VER-07 | Phase 10 | Pending |
 
 **Coverage:**
-- v1 requirements: 25 total
-- Mapped to phases: 25
+- v1 requirements: 28 total
+- Mapped to phases: 28
 - Unmapped: 0 ✓
 
 ---

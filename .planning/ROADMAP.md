@@ -2,7 +2,7 @@
 
 ## Overview
 
-This roadmap turns Linuxoid's existing proof-oriented runtime into a first real Android app execution path on Linux. The journey starts with real-world APK intake for `keyboard-0.1.28.apk`, then pushes managed execution, native/JNI loading, and Wayland interaction far enough that the verification app can start and be meaningfully used on a Linux desktop, while keeping every missing Android-runtime seam explicit. The newest live seam is now narrower again: `libjni_latinime.so` now loads, runs `JNI_OnLoad`, and reaches a real JNI registration dispatch boundary. Linuxoid still needs to dispatch that registration path before the later `Activity.onCreate(Bundle)` seam can move. The next planning slice should stay just as narrow: implement JNI registration dispatch without widening into broad framework recreation.
+This roadmap turns Linuxoid's existing proof-oriented runtime into a first real Android app execution path on Linux. The journey starts with real-world APK intake for `keyboard-0.1.28.apk`, then pushes managed execution, native/JNI loading, and Wayland interaction far enough that the verification app can start and be meaningfully used on a Linux desktop, while keeping every missing Android-runtime seam explicit. The newest live seam is now narrower again: `libjni_latinime.so` now loads, runs `JNI_OnLoad`, and reaches a real JNI registration dispatch boundary. Linuxoid still needs to execute that registration path before the later `Activity.onCreate(Bundle)` seam can move. The next planning slice should stay just as narrow: dispatch JNI registration without widening into broad framework recreation.
 
 ## Phases
 
@@ -20,6 +20,7 @@ This roadmap turns Linuxoid's existing proof-oriented runtime into a first real 
 - [x] **Phase 7: Native libc Compatibility and Entry Bridge** - Get the real keyboard APK past the current `libjni_latinime.so` Android-libc/native-entry blocker and into the first true native startup boundary
 - [x] **Phase 8: Native App-Start Bridge** - Turn the JNI-shaped `libjni_latinime.so` boundary into a Linuxoid-owned app-start strategy and expose the next exact startup seam
 - [x] **Phase 9: Managed App-Start Dispatch** - Turn the Linuxoid-managed app-start bridge candidate into the first real post-bridge dispatch seam for the keyboard APK path
+- [ ] **Phase 10: JNI Registration Dispatch** - Execute the registration-helper boundary for `libjni_latinime.so` and expose the first post-registration managed bootstrap seam
 
 ## Phase Details
 
@@ -197,7 +198,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -210,6 +211,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 7. Native libc Compatibility and Entry Bridge | 3/3 | Complete | `libjni_latinime.so` now loads, `JNI_OnLoad` runs, and the remaining blocker is the missing native activity entrypoint plus later managed `Activity.onCreate(Bundle)` dispatch |
 | 8. Native App-Start Bridge | 3/3 | Complete | `libjni_latinime.so` now loads, runs `JNI_OnLoad`, and is reported as `linuxoid_managed_app_start_bridge_required`, while the next blockers are the Linuxoid-managed app-start bridge implementation and the later managed `Activity.onCreate(Bundle)` seam |
 | 9. Managed App-Start Dispatch | 3/3 | Complete | `libjni_latinime.so` now reaches `jni_registration_dispatch_required`, exposes the registration-helper symbol boundary, and keeps the later managed `Activity.onCreate(Bundle)` seam distinct |
+| 10. JNI Registration Dispatch | 0/3 | Planned | Next real blocker: dispatch `_ZN8latinime21registerNativeMethodsEP7_JNIEnvPKcPK15JNINativeMethodi` and expose the first post-registration managed bootstrap seam |
 
 ### Phase 8: Native App-Start Bridge
 
@@ -266,3 +268,31 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 09-03: Lock the post-bridge dispatch seam into first-app-start, recovery, and regression truth
+
+### Phase 10: JNI Registration Dispatch
+
+**Goal**: Linuxoid executes the `libjni_latinime.so` registration-helper boundary and exposes the first post-registration managed bootstrap seam for the real keyboard APK path, while keeping the later `Activity.onCreate(Bundle)` bootstrap truth explicit.
+**Mode:** mvp
+**Depends on**: Phase 9
+**Requirements**: JNI-09, JNI-10, VER-07
+**Success Criteria** (what must be TRUE):
+
+  1. `compatctl launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>` no longer stops at `jni_registration_dispatch_required`; it executes or precisely attempts the registration-helper boundary and reaches the first exact post-registration managed bootstrap seam
+  2. Launch JSON keeps `JNI_OnLoad`, registration-helper selection, registration dispatch, registration outcome, and later framework bootstrap seams distinct instead of collapsing them into one generic native failure
+  3. The later managed blocker `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context` stays visible as the next seam once registration dispatch advances
+
+**Plans**: 3 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 10-01: Research and bind a Linuxoid-owned JNI registration dispatch strategy for `libjni_latinime.so`
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 10-02: Expose the first post-registration managed bootstrap boundary exactly
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 10-03: Lock the post-registration seam into first-app-start, recovery, and regression truth
