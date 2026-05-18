@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Phase 4 complete; next action is to plan Phase 5 around visible Wayland interaction while preserving the narrowed native blocker truth
-last_updated: "2026-05-18T22:05:00.000Z"
-last_activity: 2026-05-18 -- Phase 4 JNI and Native Loading executed and closed
+stopped_at: Phase 5 planned; next action is to execute 05-01 around the real keyboard visible-launch target while preserving the exact native blocker truth
+last_updated: "2026-05-18T22:45:00.000Z"
+last_activity: 2026-05-18 -- Phase 5 Visible Wayland Interaction planned
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 11
+  total_plans: 14
   completed_plans: 11
   percent: 67
 ---
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 5 of 6 (Visible Wayland Interaction)
-Plan: Planning not started
-Status: Phase 4 complete - Linuxoid now reports exact upstream native-load/JNI blockers for the real keyboard APK and preserves the downstream managed Bundle-boundary seam honestly
-Last activity: 2026-05-18 -- Phase 4 completed with per-library native load attempts and first-app-start blocker propagation
+Plan: 05-01 planned
+Status: Phase 5 planned - Linuxoid now needs to turn the resolved keyboard `SettingsActivity` session into a visible window/surface target and focus/input contract without losing the exact upstream native blocker
+Last activity: 2026-05-18 -- Phase 5 planned around real window target binding, focus/input continuity, and visible-launch regression truth
 
 Progress: [███████░░░] 67%
 
@@ -52,17 +52,17 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Plan Phase 5 around the real keyboard APK's visible Wayland interaction path
+- Execute 05-01 to bind the real keyboard `SettingsActivity` session to a concrete window/surface target
 - Preserve the exact upstream native-load blocker and the downstream managed `SettingsActivity.onCreate(Landroid/os/Bundle;)V` seam while Linuxoid tackles visible app interaction
 
 ### Blockers/Concerns
 
-- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, stages six `x86_64` native libraries, and reports an exact upstream native blocker through `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, and `native_execute.library_load_attempts`, but the direct launch path still stops before visible app startup can continue
+- Current project blocker: the real keyboard APK now resolves `org.futo.inputmethod.latin.uix.settings.SettingsActivity`, stages six `x86_64` native libraries, and reports an exact upstream native blocker through `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, and `native_execute.library_load_attempts`, while the visible-launch path still needs a stronger window/surface target and focus contract tied to that same session
 - Next managed-runtime seam after lookup: `framework_boundary_reason: android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint` with `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
 - Phase 5 target outcome: move the real keyboard verification path from exact native/JNI truth toward visible surface interaction without losing the narrowed blocker story
 
 ## Session Continuity
 
 Last session: 2026-05-18 19:54
-Stopped at: Phase 4 complete; next action is to plan Phase 5 around the visible Wayland interaction seam
+Stopped at: Phase 5 planned; next action is to execute 05-01 around the real keyboard visible-launch seam
 Resume file: .planning/ROADMAP.md

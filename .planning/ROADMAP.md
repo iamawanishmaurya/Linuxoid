@@ -127,8 +127,16 @@ Plans:
 
 Plans:
 
+**Wave 1**
+
 - [ ] 05-01: Bind the real settings activity launch to the Wayland window/surface path
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 05-02: Make focus and interaction meaningful for the verification app
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 05-03: Add visible-launch regression coverage around the target APK
 
 ### Phase 6: Recovery and Runtime Hardening
