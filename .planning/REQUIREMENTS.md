@@ -74,27 +74,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| APK-01 | Phase TBD | Pending |
-| APK-02 | Phase TBD | Pending |
-| APK-03 | Phase TBD | Pending |
-| DEX-01 | Phase TBD | Pending |
-| DEX-02 | Phase TBD | Pending |
-| DEX-03 | Phase TBD | Pending |
-| JNI-01 | Phase TBD | Pending |
-| JNI-02 | Phase TBD | Pending |
-| WIN-01 | Phase TBD | Pending |
-| WIN-02 | Phase TBD | Pending |
-| APP-01 | Phase TBD | Pending |
-| APP-02 | Phase TBD | Pending |
-| APP-03 | Phase TBD | Pending |
-| VER-01 | Phase TBD | Pending |
-| VER-02 | Phase TBD | Pending |
-| VER-03 | Phase TBD | Pending |
+| APK-01 | Phase 1 | Pending |
+| APK-02 | Phase 1 | Pending |
+| APK-03 | Phase 2 | Pending |
+| DEX-01 | Phase 2 | Pending |
+| DEX-02 | Phase 3 | Pending |
+| DEX-03 | Phase 2 | Pending |
+| JNI-01 | Phase 4 | Pending |
+| JNI-02 | Phase 4 | Pending |
+| WIN-01 | Phase 5 | Pending |
+| WIN-02 | Phase 5 | Pending |
+| APP-01 | Phase 6 | Pending |
+| APP-02 | Phase 6 | Pending |
+| APP-03 | Phase 1 | Pending |
+| VER-01 | Phase 5 | Pending |
+| VER-02 | Phase 3 | Pending |
+| VER-03 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16 ⚠️
+- Mapped to phases: 16
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-05-18*
