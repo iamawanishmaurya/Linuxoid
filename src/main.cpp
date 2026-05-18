@@ -42,6 +42,7 @@ void PrintUsage() {
       << "  compatctl assess-manifest <decoded-manifest.xml>\n"
       << "  compatctl load-apk <apk-path> [compat-root]\n"
       << "  compatctl launch-apk <apk-path> [staging-root]\n"
+      << "  compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --surface-proof <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --asset-proof <apk-path> [staging-root]\n"
       << "  compatctl launch-apk --lifecycle-proof <apk-path> [staging-root]\n"
@@ -56,6 +57,7 @@ void PrintUsage() {
       << "  compatctl launch-apk-surface <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-compatibility <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-compatibility-suite <suite-root> <apk-path> [apk-path...]\n"
+      << "  compatctl inspect-apk-first-start <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-java <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-permissions <apk-path> [staging-root]\n"
       << "  compatctl inspect-apk-process <apk-path> [staging-root]\n"
@@ -246,6 +248,7 @@ int main(int argc, char** argv) {
 
     if (command == "launch-apk" || command == "launch-apk-surface") {
       const bool command_requests_surface = command == "launch-apk-surface";
+      bool first_app_start_proof_requested = false;
       bool surface_proof_requested = command_requests_surface;
       bool asset_proof_requested = false;
       bool lifecycle_proof_requested = false;
@@ -265,6 +268,11 @@ int main(int argc, char** argv) {
         const std::string argument = argv[apk_arg_index];
         if (argument == "--surface-proof") {
           surface_proof_requested = true;
+          ++apk_arg_index;
+          continue;
+        }
+        if (argument == "--first-app-start-proof") {
+          first_app_start_proof_requested = true;
           ++apk_arg_index;
           continue;
         }
@@ -349,6 +357,7 @@ int main(int argc, char** argv) {
           .requested_package_name = requested_package_name,
           .requested_component = requested_component,
           .watchdog_seconds = 1,
+          .first_app_start_proof_requested = first_app_start_proof_requested,
           .surface_proof_requested = surface_proof_requested,
           .asset_proof_requested = asset_proof_requested,
           .lifecycle_proof_requested = lifecycle_proof_requested,
@@ -366,6 +375,8 @@ int main(int argc, char** argv) {
       std::cout << wfa::RenderNativeApkLaunchJson(report);
       const bool proof_ready_without_self_heal =
           report.launch_ready &&
+          (!report.first_app_start_proof_requested ||
+           report.first_android_app_start.ready) &&
           (!report.surface_proof_requested || report.surface_proof_ready) &&
           (!report.asset_proof_requested ||
            (report.asset_bridge.ready && report.resource_bridge.ready)) &&
@@ -389,9 +400,11 @@ int main(int argc, char** argv) {
           report.self_healing_android_device.ready &&
           (report.self_healing_android_device.final_health == "healthy" ||
            report.self_healing_android_device.final_health == "recovered");
-      const bool success = report.self_heal_proof_requested
-                               ? self_heal_converged
-                               : proof_ready_without_self_heal;
+      const bool success =
+          report.first_app_start_proof_requested
+              ? report.first_android_app_start.ready
+              : (report.self_heal_proof_requested ? self_heal_converged
+                                                  : proof_ready_without_self_heal);
       return success ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
@@ -406,6 +419,22 @@ int main(int argc, char** argv) {
       const auto report = wfa::InspectApkResourceReadiness(argv[2], resource_root);
       std::cout << wfa::RenderApkResourceReadinessJson(report);
       return report.manifest.manifest_ready ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (command == "inspect-apk-first-start") {
+      if (argc < 3 || argc > 4) {
+        PrintUsage();
+        return EXIT_FAILURE;
+      }
+
+      const wfa::NativeApkLaunchOptions options{
+          .staging_root = argc == 4 ? argv[3] : "/tmp/linuxoid-apk-launch",
+          .watchdog_seconds = 1,
+          .first_app_start_proof_requested = true,
+      };
+      const auto report = wfa::LaunchNativeApk(argv[2], options);
+      std::cout << wfa::RenderNativeApkLaunchJson(report);
+      return report.first_android_app_start.ready ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (command == "inspect-apk-java") {

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.109 - 2026-05-18
+
+- Add **First Android App Start Checkpoint** through `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]` and `compatctl inspect-apk-first-start <apk-path> [staging-root]`, wiring one deterministic Java/Kotlin-style fixture through APK inspection, launcher intent resolution, storage/sandbox setup, process/window/runtime proof, DEX staging, Java proof, and Self-Healing Android Device diagnostics.
+- Persist a focused first-start artifact under `sandbox/data/data/<package>/first-app-start/first-app-start.json` and make the report explicit about the current managed-runtime boundary with fields such as `runtime_state`, `dex_state`, `class_loader_ready`, `java_art_bytecode_execution_requested`, `java_art_bytecode_executed`, `blocking_reason`, and `next_blocker`.
+- Keep the checkpoint honest: the healthy fixture path now reports `blocking_reason: needs-real-art-execution` and `next_blocker: implement_real_art_activity_bytecode_invocation` instead of pretending real Java/Kotlin bytecode already executes.
+- Add hard checkpoint regression coverage for the healthy ART-boundary path plus invalid-runtime and invalid-DEX blockers, while keeping the existing P1 through P15 behavior green.
+
 ## v0.1.108 - 2026-05-18
 
 - Implement **P15 Third-Party APK Compatibility Sprint** through `compatctl inspect-apk-compatibility <apk-path> [staging-root]` and `compatctl inspect-apk-compatibility-suite <suite-root> <apk-path> [apk-path...]`, extending the direct staged APK session into a Linuxoid-owned compatibility-report contract instead of a disconnected mock matrix.

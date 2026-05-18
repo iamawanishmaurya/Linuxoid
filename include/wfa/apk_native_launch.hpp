@@ -25,6 +25,7 @@ struct NativeApkLaunchOptions {
   std::string requested_package_name;
   std::string requested_component;
   int watchdog_seconds = 1;
+  bool first_app_start_proof_requested = false;
   bool surface_proof_requested = false;
   bool asset_proof_requested = false;
   bool lifecycle_proof_requested = false;
@@ -82,6 +83,50 @@ struct NativeApkSurfaceSession {
   std::vector<std::string> errors;
 };
 
+struct NativeApkFirstAppStartProof {
+  bool ready = false;
+  bool contract_ready = false;
+  bool checkpoint_boundary_reached = false;
+  bool app_started = false;
+  std::string schema_version = "linuxoid.first_android_app_start.contract.v1";
+  std::string session_id;
+  std::string artifact_root;
+  std::string report_json_path;
+  std::string package_name;
+  std::string activity_name;
+  std::string activity_component;
+  std::string entrypoint_class_descriptor;
+  std::string process_session_id;
+  std::string process_identity;
+  std::string process_name;
+  int pid_value = 0;
+  std::string pid_source = "linuxoid_placeholder";
+  std::string runtime_session_id;
+  std::string runtime_handle;
+  std::string runtime_state = "unavailable";
+  std::string runtime_root;
+  std::string dex_state = "unavailable";
+  int dex_files_count = 0;
+  bool class_loader_ready = false;
+  bool art_runtime_available = false;
+  bool java_execution_supported = false;
+  bool java_art_bytecode_execution_requested = false;
+  bool java_art_bytecode_execution_attempted = false;
+  bool java_art_bytecode_executed = false;
+  std::string activity_lifecycle_state = "not_requested";
+  std::vector<std::string> activity_states_visited;
+  std::string surface_window_state = "not_requested";
+  std::string self_healing_state = "not_requested";
+  bool self_healing_ready = false;
+  bool recoverable = false;
+  std::string checkpoint_state = "blocked";
+  std::string blocking_reason = "none";
+  std::string recommended_recovery_action = "none";
+  std::string next_blocker = "none";
+  std::vector<std::string> diagnostics;
+  std::vector<std::string> errors;
+};
+
 struct NativeApkLaunchReport {
   std::string apk_path;
   std::string package_name;
@@ -107,6 +152,7 @@ struct NativeApkLaunchReport {
   std::string requested_package_name;
   std::string requested_component;
   std::string launch_status;
+  std::string first_app_start_health = "not_requested";
   std::string surface_health = "not_requested";
   std::string window_health = "not_requested";
   std::string asset_health = "not_requested";
@@ -135,6 +181,7 @@ struct NativeApkLaunchReport {
   bool jni_onload_called = false;
   int jni_onload_result = 0;
   bool launch_ready = false;
+  bool first_app_start_proof_requested = false;
   bool surface_proof_requested = false;
   bool asset_proof_requested = false;
   bool lifecycle_proof_requested = false;
@@ -157,6 +204,7 @@ struct NativeApkLaunchReport {
   std::vector<std::string> diagnostics;
   std::vector<std::string> errors;
   std::vector<std::string> limitations;
+  NativeApkFirstAppStartProof first_android_app_start;
   NativeApkSurfaceSession surface;
   NativeApkAssetBridgeReport asset_bridge;
   NativeApkResourceBridgeReport resource_bridge;

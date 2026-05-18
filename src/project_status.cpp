@@ -69,8 +69,9 @@ std::string RenderProjectStatusReport() {
   output << "Scaffold Readiness: " << RenderLoadingBar(phase_progress) << "\n";
   output << "Native Execution Readiness: " << RenderLoadingBar(98) << "\n";
   output << "Execution Focus: P0 Freeze & Triage -> P1 NDK Execution Core -> P2 Window + Graphics\n";
-  output << "Current Direct Runtime Phase: P15 Third-Party APK Compatibility Sprint\n";
-  output << "Next Phase: P16 Managed Bytecode Invocation + ActivityThread Contract (build on package/activity/process/window/runtime/java-proof/compatibility session contracts)\n";
+  output << "Current Direct Runtime Phase: P15 Third-Party APK Compatibility Sprint + First Android App Start Checkpoint\n";
+  output << "Next Phase: P16 Managed Bytecode Invocation + ActivityThread Contract (implement real ART activity bytecode invocation on top of package/activity/process/window/runtime/java-proof contracts)\n";
+  output << "First App Start Checkpoint: `launch-apk --first-app-start-proof` now reaches the honest `needs-real-art-execution` boundary on the deterministic Java/Kotlin fixture and reports the next blocker as `implement_real_art_activity_bytecode_invocation`.\n";
   output << "Legacy Scaffold Phases:\n";
 
   for (const auto& phase : phases) {

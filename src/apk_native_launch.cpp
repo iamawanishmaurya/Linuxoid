@@ -1483,6 +1483,382 @@ ParsedManifestMetadata RehydratePersistedManifestMetadata(
   return manifest;
 }
 
+std::string ToDexDescriptor(const std::string& class_name) {
+  if (class_name.empty()) {
+    return "";
+  }
+  std::string descriptor = "L";
+  descriptor.reserve(class_name.size() + 2);
+  for (const char character : class_name) {
+    descriptor.push_back(character == '.' ? '/' : character);
+  }
+  descriptor.push_back(';');
+  return descriptor;
+}
+
+std::string DetermineFirstAppStartBlockingReason(
+    const NativeApkLaunchReport& report) {
+  if (!report.manifest_metadata_ready) {
+    return "manifest_metadata_unavailable_for_first_app_start";
+  }
+  if (!report.package_manager.ready) {
+    return "package_manager_not_ready_for_first_app_start";
+  }
+  if (!report.intent_resolution.ready) {
+    if (!report.intent_resolution.blocking_reason.empty() &&
+        report.intent_resolution.blocking_reason != "none") {
+      return report.intent_resolution.blocking_reason +
+             "_for_first_app_start";
+    }
+    return "intent_resolution_not_ready_for_first_app_start";
+  }
+  if (!report.storage.ready) {
+    return "storage_not_ready_for_first_app_start";
+  }
+  if (!report.permissions.ready || !report.app_ops.ready) {
+    return "permissions_not_ready_for_first_app_start";
+  }
+  if (!report.surface_proof_ready) {
+    return "surface_not_ready_for_first_app_start";
+  }
+  if (!report.lifecycle.ready || !report.looper.ready ||
+      !report.input_queue.ready) {
+    return "lifecycle_not_ready_for_first_app_start";
+  }
+  if (!report.dex.ready || !report.art_bootstrap.ready) {
+    return "dex_bootstrap_not_ready_for_first_app_start";
+  }
+  if (!report.runtime_bridge.art_runtime_available) {
+    return "art_runtime_unavailable_for_first_app_start";
+  }
+  if (!report.runtime_bridge.ready) {
+    return "runtime_bridge_not_ready_for_first_app_start";
+  }
+  if (report.runtime_bridge.bootstrap_state != "ready") {
+    return "runtime_bootstrap_not_ready_for_first_app_start";
+  }
+  if (!report.runtime_bridge.class_loader_ready) {
+    return "class_loader_not_ready_for_first_app_start";
+  }
+  if (!report.activity_manager.ready || !report.process_manager.ready) {
+    return "process_manager_not_ready_for_first_app_start";
+  }
+  if (!report.window_manager.ready) {
+    return "window_manager_not_ready_for_first_app_start";
+  }
+  if (!report.runtime_bridge.java_execution_supported ||
+      !report.runtime_bridge.bytecode_execution_ready) {
+    return "needs-real-art-execution";
+  }
+  return "none";
+}
+
+std::string DetermineFirstAppStartRecoveryAction(
+    const NativeApkLaunchReport& report, const std::string& blocking_reason) {
+  if (blocking_reason == "none" ||
+      blocking_reason == "needs-real-art-execution") {
+    return "none";
+  }
+  if (blocking_reason == "dex_bootstrap_not_ready_for_first_app_start") {
+    return "rebuild_dex_bootstrap";
+  }
+  if (blocking_reason == "art_runtime_unavailable_for_first_app_start" ||
+      blocking_reason == "runtime_bridge_not_ready_for_first_app_start" ||
+      blocking_reason == "runtime_bootstrap_not_ready_for_first_app_start" ||
+      blocking_reason == "class_loader_not_ready_for_first_app_start") {
+    return "retry_runtime_bootstrap";
+  }
+  if (blocking_reason == "surface_not_ready_for_first_app_start" ||
+      blocking_reason == "window_manager_not_ready_for_first_app_start") {
+    return "recreate_native_surface_session";
+  }
+  if (blocking_reason == "lifecycle_not_ready_for_first_app_start") {
+    return "rebuild_lifecycle_controller";
+  }
+  if (blocking_reason == "storage_not_ready_for_first_app_start") {
+    return "repair_app_storage";
+  }
+  if (blocking_reason == "permissions_not_ready_for_first_app_start") {
+    return "rebuild_permission_state";
+  }
+  if (blocking_reason == "process_manager_not_ready_for_first_app_start") {
+    return "rebuild_process_manager_state";
+  }
+  if (blocking_reason == "package_manager_not_ready_for_first_app_start") {
+    return "rebuild_package_record";
+  }
+  if (blocking_reason == "intent_resolution_not_ready_for_first_app_start") {
+    return "rerun_intent_resolution";
+  }
+  if (blocking_reason.find("no_launcher_activity") == 0 ||
+      blocking_reason.find("ambiguous_launcher_activities") == 0 ||
+      blocking_reason.find("component_disabled") == 0 ||
+      blocking_reason.find("component_not_exported") == 0 ||
+      blocking_reason.find("unsupported_component_type") == 0 ||
+      blocking_reason.find("unresolved_activity_class") == 0) {
+    return report.intent_resolution.recommended_recovery_action.empty()
+               ? "rerun_intent_resolution"
+               : report.intent_resolution.recommended_recovery_action;
+  }
+  return report.recommended_recovery_action.empty()
+             ? "inspect_native_launch_diagnostics"
+             : report.recommended_recovery_action;
+}
+
+std::string DetermineFirstAppStartNextBlocker(
+    const std::string& blocking_reason) {
+  if (blocking_reason == "needs-real-art-execution") {
+    return "implement_real_art_activity_bytecode_invocation";
+  }
+  if (blocking_reason == "art_runtime_unavailable_for_first_app_start") {
+    return "provide_discoverable_art_runtime_root";
+  }
+  if (blocking_reason == "dex_bootstrap_not_ready_for_first_app_start") {
+    return "repair_or_stage_valid_dex_payload";
+  }
+  if (blocking_reason == "surface_not_ready_for_first_app_start" ||
+      blocking_reason == "window_manager_not_ready_for_first_app_start") {
+    return "rebuild_window_surface_attachment";
+  }
+  if (blocking_reason == "lifecycle_not_ready_for_first_app_start") {
+    return "rebuild_activity_lifecycle_loop";
+  }
+  if (blocking_reason == "permissions_not_ready_for_first_app_start") {
+    return "repair_permission_and_appops_contract";
+  }
+  if (blocking_reason == "process_manager_not_ready_for_first_app_start") {
+    return "repair_process_manager_contract";
+  }
+  if (blocking_reason == "package_manager_not_ready_for_first_app_start" ||
+      blocking_reason == "intent_resolution_not_ready_for_first_app_start") {
+    return "repair_activity_resolution_contract";
+  }
+  if (blocking_reason == "none") {
+    return "none";
+  }
+  return "inspect_first_app_start_diagnostics";
+}
+
+std::string DetermineFirstAppStartDexState(
+    const NativeApkLaunchReport& report) {
+  if (!report.dex.ready) {
+    return "dex_unavailable";
+  }
+  if (!report.art_bootstrap.ready) {
+    return "dex_bootstrap_blocked";
+  }
+  if (!report.runtime_bridge.class_loader_ready) {
+    return "class_loader_blocked";
+  }
+  return "class_loader_ready";
+}
+
+std::string RenderFirstAppStartJson(
+    const NativeApkFirstAppStartProof& proof) {
+  std::ostringstream output;
+  output << "{\n"
+         << "  \"schema_version\": \"" << EscapeJson(proof.schema_version)
+         << "\",\n"
+         << "  \"ready\": " << (proof.ready ? "true" : "false") << ",\n"
+         << "  \"contract_ready\": "
+         << (proof.contract_ready ? "true" : "false") << ",\n"
+         << "  \"checkpoint_boundary_reached\": "
+         << (proof.checkpoint_boundary_reached ? "true" : "false") << ",\n"
+         << "  \"app_started\": " << (proof.app_started ? "true" : "false")
+         << ",\n"
+         << "  \"session_id\": \"" << EscapeJson(proof.session_id)
+         << "\",\n"
+         << "  \"artifact_root\": \"" << EscapeJson(proof.artifact_root)
+         << "\",\n"
+         << "  \"report_json_path\": \"" << EscapeJson(proof.report_json_path)
+         << "\",\n"
+         << "  \"package_name\": \"" << EscapeJson(proof.package_name)
+         << "\",\n"
+         << "  \"activity_name\": \"" << EscapeJson(proof.activity_name)
+         << "\",\n"
+         << "  \"activity_component\": \""
+         << EscapeJson(proof.activity_component) << "\",\n"
+         << "  \"entrypoint_class_descriptor\": \""
+         << EscapeJson(proof.entrypoint_class_descriptor) << "\",\n"
+         << "  \"process_session_id\": \""
+         << EscapeJson(proof.process_session_id) << "\",\n"
+         << "  \"process_identity\": \""
+         << EscapeJson(proof.process_identity) << "\",\n"
+         << "  \"process_name\": \"" << EscapeJson(proof.process_name)
+         << "\",\n"
+         << "  \"pid_value\": " << proof.pid_value << ",\n"
+         << "  \"pid_source\": \"" << EscapeJson(proof.pid_source)
+         << "\",\n"
+         << "  \"runtime_session_id\": \""
+         << EscapeJson(proof.runtime_session_id) << "\",\n"
+         << "  \"runtime_handle\": \"" << EscapeJson(proof.runtime_handle)
+         << "\",\n"
+         << "  \"runtime_state\": \"" << EscapeJson(proof.runtime_state)
+         << "\",\n"
+         << "  \"runtime_root\": \"" << EscapeJson(proof.runtime_root)
+         << "\",\n"
+         << "  \"dex_state\": \"" << EscapeJson(proof.dex_state) << "\",\n"
+         << "  \"dex_files_count\": " << proof.dex_files_count << ",\n"
+         << "  \"class_loader_ready\": "
+         << (proof.class_loader_ready ? "true" : "false") << ",\n"
+         << "  \"art_runtime_available\": "
+         << (proof.art_runtime_available ? "true" : "false") << ",\n"
+         << "  \"java_execution_supported\": "
+         << (proof.java_execution_supported ? "true" : "false") << ",\n"
+         << "  \"java_art_bytecode_execution_requested\": "
+         << (proof.java_art_bytecode_execution_requested ? "true" : "false")
+         << ",\n"
+         << "  \"java_art_bytecode_execution_attempted\": "
+         << (proof.java_art_bytecode_execution_attempted ? "true" : "false")
+         << ",\n"
+         << "  \"java_art_bytecode_executed\": "
+         << (proof.java_art_bytecode_executed ? "true" : "false") << ",\n"
+         << "  \"activity_lifecycle_state\": \""
+         << EscapeJson(proof.activity_lifecycle_state) << "\",\n"
+         << "  \"activity_states_visited\": "
+         << RenderJsonArray(proof.activity_states_visited) << ",\n"
+         << "  \"surface_window_state\": \""
+         << EscapeJson(proof.surface_window_state) << "\",\n"
+         << "  \"self_healing_state\": \""
+         << EscapeJson(proof.self_healing_state) << "\",\n"
+         << "  \"self_healing_ready\": "
+         << (proof.self_healing_ready ? "true" : "false") << ",\n"
+         << "  \"recoverable\": "
+         << (proof.recoverable ? "true" : "false") << ",\n"
+         << "  \"checkpoint_state\": \""
+         << EscapeJson(proof.checkpoint_state) << "\",\n"
+         << "  \"blocking_reason\": \""
+         << EscapeJson(proof.blocking_reason) << "\",\n"
+         << "  \"recommended_recovery_action\": \""
+         << EscapeJson(proof.recommended_recovery_action) << "\",\n"
+         << "  \"next_blocker\": \"" << EscapeJson(proof.next_blocker)
+         << "\",\n"
+         << "  \"diagnostics\": " << RenderJsonArray(proof.diagnostics)
+         << ",\n"
+         << "  \"errors\": " << RenderJsonArray(proof.errors) << "\n"
+         << "}\n";
+  return output.str();
+}
+
+NativeApkFirstAppStartProof BuildFirstAppStartProof(
+    const NativeApkLaunchReport& report) {
+  NativeApkFirstAppStartProof proof;
+  const bool has_sandbox_identity =
+      !report.package_name.empty() && !report.sandbox_root.empty();
+  const fs::path app_data_dir =
+      !report.storage.app_data_dir.empty()
+          ? fs::path(report.storage.app_data_dir)
+          : (has_sandbox_identity
+                 ? (fs::path(report.sandbox_root) / "data" / "data" /
+                    report.package_name)
+                 : fs::path());
+  proof.session_id =
+      report.package_name.empty()
+          ? "linuxoid:first-app-start"
+          : report.package_name + ":" + report.install_id + ":first-app-start";
+  if (has_sandbox_identity) {
+    proof.artifact_root = (app_data_dir / "first-app-start").string();
+    proof.report_json_path =
+        (fs::path(proof.artifact_root) / "first-app-start.json").string();
+  }
+  proof.package_name = report.package_name;
+  proof.activity_name = report.intent_resolution.resolved_activity_class;
+  proof.activity_component = report.intent_resolution.resolved_component;
+  proof.entrypoint_class_descriptor =
+      ToDexDescriptor(report.intent_resolution.resolved_activity_class);
+  proof.process_session_id = report.activity_manager.session_id;
+  proof.process_identity = report.process_manager.process_identity;
+  proof.process_name = report.process_manager.process_name;
+  proof.pid_value = report.process_manager.pid_value;
+  proof.pid_source = report.process_manager.pid_source;
+  proof.runtime_session_id = report.runtime_bridge.session_id;
+  proof.runtime_handle = report.runtime_bridge.runtime_handle;
+  proof.runtime_state = report.runtime_bridge.bootstrap_state;
+  proof.runtime_root = report.runtime_bridge.runtime_root;
+  proof.dex_state = DetermineFirstAppStartDexState(report);
+  proof.dex_files_count = report.dex.files_count;
+  proof.class_loader_ready = report.runtime_bridge.class_loader_ready;
+  proof.art_runtime_available = report.runtime_bridge.art_runtime_available;
+  proof.java_execution_supported = report.runtime_bridge.java_execution_supported;
+  proof.java_art_bytecode_execution_requested = report.intent_resolution.ready;
+  proof.activity_lifecycle_state = report.lifecycle.current_state.empty()
+                                       ? report.activity_launch.current_state
+                                       : report.lifecycle.current_state;
+  proof.activity_states_visited = report.lifecycle.states_visited;
+  proof.surface_window_state =
+      !report.window_manager.window_state.empty()
+          ? report.window_manager.window_state
+          : report.surface.state;
+  proof.self_healing_state = report.self_healing_android_device.final_health;
+  proof.self_healing_ready = report.self_healing_android_device.ready;
+  proof.blocking_reason = DetermineFirstAppStartBlockingReason(report);
+  proof.recommended_recovery_action =
+      DetermineFirstAppStartRecoveryAction(report, proof.blocking_reason);
+  proof.next_blocker = DetermineFirstAppStartNextBlocker(proof.blocking_reason);
+  proof.app_started = report.runtime_bridge.java_execution_supported &&
+                      report.runtime_bridge.bytecode_execution_ready;
+  proof.checkpoint_boundary_reached =
+      proof.blocking_reason == "needs-real-art-execution" || proof.app_started;
+  proof.ready = proof.checkpoint_boundary_reached;
+  proof.contract_ready = proof.ready;
+  proof.java_art_bytecode_execution_attempted =
+      proof.checkpoint_boundary_reached;
+  proof.java_art_bytecode_executed = proof.app_started;
+  proof.recoverable = proof.blocking_reason != "needs-real-art-execution" &&
+                      report.recoverable;
+  proof.checkpoint_state =
+      proof.app_started ? "started"
+                        : (proof.checkpoint_boundary_reached
+                               ? "needs_real_art_execution"
+                               : "blocked");
+
+  if (proof.blocking_reason == "needs-real-art-execution") {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint reached the real ART execution boundary");
+    proof.diagnostics.push_back(
+        "Linuxoid resolved the launcher activity, created process and window contracts, and prepared a runtime plus class loader without executing managed bytecode yet");
+  } else if (proof.blocking_reason == "none") {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint completed with managed bytecode execution");
+  } else {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint blocked before managed bytecode execution");
+  }
+
+  if (!report.self_healing_android_device.recommended_next_action.empty() &&
+      report.self_healing_android_device.recommended_next_action != "none" &&
+      proof.blocking_reason != "needs-real-art-execution") {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device recommends " +
+        report.self_healing_android_device.recommended_next_action +
+        " before retrying first app start");
+  }
+  for (const auto& error : report.errors) {
+    AppendError(&proof.errors, error);
+  }
+  for (const auto& error : report.runtime_bridge.errors) {
+    AppendError(&proof.errors, error);
+  }
+  for (const auto& error : report.java_apk_proof.errors) {
+    AppendError(&proof.errors, error);
+  }
+  for (const auto& error : report.dex.errors) {
+    AppendError(&proof.errors, error);
+  }
+  for (const auto& error : report.art_bootstrap.errors) {
+    AppendError(&proof.errors, error);
+  }
+
+  std::error_code ignored;
+  if (!proof.artifact_root.empty()) {
+    fs::create_directories(proof.artifact_root, ignored);
+  }
+  if (!proof.report_json_path.empty()) {
+    WriteTextFile(proof.report_json_path, RenderFirstAppStartJson(proof));
+  }
+  return proof;
+}
+
 void RefreshRequestedProofContractsAfterSelfHeal(
     NativeApkLaunchReport* report, const NativeApkLaunchOptions& options) {
   const auto manifest = RehydratePersistedManifestMetadata(*report);
@@ -1657,12 +2033,19 @@ void RefreshRequestedProofContractsAfterSelfHeal(
 
 NativeApkLaunchReport FinalizeNativeApkLaunchReport(
     NativeApkLaunchReport report, const NativeApkLaunchOptions& options) {
-  if (options.self_heal_proof_requested) {
+  if (report.self_heal_proof_requested) {
     report.self_healing_android_device =
         SelfHealingAndroidDeviceWatchdog(report).Run();
     RefreshRequestedProofContractsAfterSelfHeal(&report, options);
   }
   RefreshAggregateLaunchHealth(&report);
+  if (report.first_app_start_proof_requested) {
+    report.first_android_app_start = BuildFirstAppStartProof(report);
+    report.first_app_start_health =
+        report.first_android_app_start.ready ? "ready" : "blocked";
+  } else {
+    report.first_app_start_health = "not_requested";
+  }
   if (!report.report_json_path.empty()) {
     WriteTextFile(report.report_json_path, RenderNativeApkLaunchJson(report));
   }
@@ -1891,8 +2274,11 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
   report.apk_path = apk_path;
   report.requested_package_name = options.requested_package_name;
   report.requested_component = options.requested_component;
-  report.self_heal_proof_requested = options.self_heal_proof_requested;
-  report.java_proof_requested = options.java_proof_requested;
+  report.first_app_start_proof_requested = options.first_app_start_proof_requested;
+  report.self_heal_proof_requested =
+      options.self_heal_proof_requested || report.first_app_start_proof_requested;
+  report.java_proof_requested =
+      options.java_proof_requested || report.first_app_start_proof_requested;
   report.runtime_proof_requested =
       options.runtime_proof_requested || report.java_proof_requested ||
       options.simulate_failed_runtime_bootstrap;
@@ -1918,6 +2304,7 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       report.window_proof_requested || options.self_heal_proof_requested;
   report.asset_proof_requested =
       options.asset_proof_requested || report.java_proof_requested ||
+      report.first_app_start_proof_requested ||
       options.self_heal_proof_requested;
   report.lifecycle_proof_requested =
       options.lifecycle_proof_requested || report.activity_proof_requested ||
@@ -1935,6 +2322,12 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
   if (report.dex_proof_requested) {
     AppendError(&report.limitations, "dex_header_and_counts_only");
     AppendError(&report.limitations, "full_art_execution_not_supported_yet");
+  }
+  if (report.first_app_start_proof_requested) {
+    AppendError(&report.limitations,
+                "first_android_app_start_checkpoint_only");
+    AppendError(&report.limitations,
+                "real_art_bytecode_invocation_unimplemented");
   }
   if (report.activity_proof_requested) {
     AppendError(&report.limitations, "local_package_manager_contract_only");
@@ -2413,6 +2806,9 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << (report.manifest_metadata_ready ? "true" : "false") << ",\n"
          << "  \"manifest_source\": \"" << EscapeJson(report.manifest_source)
          << "\",\n"
+         << "  \"first_app_start_proof_requested\": "
+         << (report.first_app_start_proof_requested ? "true" : "false")
+         << ",\n"
          << "  \"surface_proof_requested\": "
          << (report.surface_proof_requested ? "true" : "false") << ",\n"
          << "  \"surface_proof_ready\": "
@@ -2475,6 +2871,8 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "  \"launch_ready\": "
          << (report.launch_ready ? "true" : "false") << ",\n"
+         << "  \"first_app_start_health\": \""
+         << EscapeJson(report.first_app_start_health) << "\",\n"
          << "  \"surface_health\": \"" << EscapeJson(report.surface_health)
          << "\",\n"
          << "  \"window_health\": \"" << EscapeJson(report.window_health)
@@ -3485,6 +3883,143 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << RenderJsonArray(report.java_apk_proof.diagnostics) << ",\n"
          << "    \"errors\": "
          << RenderJsonArray(report.java_apk_proof.errors) << "\n"
+         << "  },\n"
+         << "  \"first_android_app_start\": {\n"
+         << "    \"schema_version\": \""
+         << EscapeJson(report.first_android_app_start.schema_version)
+         << "\",\n"
+         << "    \"ready\": "
+         << (report.first_android_app_start.ready ? "true" : "false")
+         << ",\n"
+         << "    \"contract_ready\": "
+         << (report.first_android_app_start.contract_ready ? "true"
+                                                           : "false")
+         << ",\n"
+         << "    \"checkpoint_boundary_reached\": "
+         << (report.first_android_app_start.checkpoint_boundary_reached ? "true"
+                                                                        : "false")
+         << ",\n"
+         << "    \"app_started\": "
+         << (report.first_android_app_start.app_started ? "true" : "false")
+         << ",\n"
+         << "    \"session_id\": \""
+         << EscapeJson(report.first_android_app_start.session_id) << "\",\n"
+         << "    \"artifact_root\": \""
+         << EscapeJson(report.first_android_app_start.artifact_root)
+         << "\",\n"
+         << "    \"report_json_path\": \""
+         << EscapeJson(report.first_android_app_start.report_json_path)
+         << "\",\n"
+         << "    \"package_name\": \""
+         << EscapeJson(report.first_android_app_start.package_name)
+         << "\",\n"
+         << "    \"activity_name\": \""
+         << EscapeJson(report.first_android_app_start.activity_name)
+         << "\",\n"
+         << "    \"activity_component\": \""
+         << EscapeJson(report.first_android_app_start.activity_component)
+         << "\",\n"
+         << "    \"entrypoint_class_descriptor\": \""
+         << EscapeJson(
+                report.first_android_app_start.entrypoint_class_descriptor)
+         << "\",\n"
+         << "    \"process_session_id\": \""
+         << EscapeJson(report.first_android_app_start.process_session_id)
+         << "\",\n"
+         << "    \"process_identity\": \""
+         << EscapeJson(report.first_android_app_start.process_identity)
+         << "\",\n"
+         << "    \"process_name\": \""
+         << EscapeJson(report.first_android_app_start.process_name)
+         << "\",\n"
+         << "    \"pid_value\": "
+         << report.first_android_app_start.pid_value << ",\n"
+         << "    \"pid_source\": \""
+         << EscapeJson(report.first_android_app_start.pid_source)
+         << "\",\n"
+         << "    \"runtime_session_id\": \""
+         << EscapeJson(report.first_android_app_start.runtime_session_id)
+         << "\",\n"
+         << "    \"runtime_handle\": \""
+         << EscapeJson(report.first_android_app_start.runtime_handle)
+         << "\",\n"
+         << "    \"runtime_state\": \""
+         << EscapeJson(report.first_android_app_start.runtime_state)
+         << "\",\n"
+         << "    \"runtime_root\": \""
+         << EscapeJson(report.first_android_app_start.runtime_root)
+         << "\",\n"
+         << "    \"dex_state\": \""
+         << EscapeJson(report.first_android_app_start.dex_state) << "\",\n"
+         << "    \"dex_files_count\": "
+         << report.first_android_app_start.dex_files_count << ",\n"
+         << "    \"class_loader_ready\": "
+         << (report.first_android_app_start.class_loader_ready ? "true"
+                                                               : "false")
+         << ",\n"
+         << "    \"art_runtime_available\": "
+         << (report.first_android_app_start.art_runtime_available ? "true"
+                                                                  : "false")
+         << ",\n"
+         << "    \"java_execution_supported\": "
+         << (report.first_android_app_start.java_execution_supported ? "true"
+                                                                     : "false")
+         << ",\n"
+         << "    \"java_art_bytecode_execution_requested\": "
+         << (report.first_android_app_start
+                     .java_art_bytecode_execution_requested
+                 ? "true"
+                 : "false")
+         << ",\n"
+         << "    \"java_art_bytecode_execution_attempted\": "
+         << (report.first_android_app_start
+                     .java_art_bytecode_execution_attempted
+                 ? "true"
+                 : "false")
+         << ",\n"
+         << "    \"java_art_bytecode_executed\": "
+         << (report.first_android_app_start.java_art_bytecode_executed
+                 ? "true"
+                 : "false")
+         << ",\n"
+         << "    \"activity_lifecycle_state\": \""
+         << EscapeJson(report.first_android_app_start.activity_lifecycle_state)
+         << "\",\n"
+         << "    \"activity_states_visited\": "
+         << RenderJsonArray(
+                report.first_android_app_start.activity_states_visited)
+         << ",\n"
+         << "    \"surface_window_state\": \""
+         << EscapeJson(report.first_android_app_start.surface_window_state)
+         << "\",\n"
+         << "    \"self_healing_state\": \""
+         << EscapeJson(report.first_android_app_start.self_healing_state)
+         << "\",\n"
+         << "    \"self_healing_ready\": "
+         << (report.first_android_app_start.self_healing_ready ? "true"
+                                                               : "false")
+         << ",\n"
+         << "    \"recoverable\": "
+         << (report.first_android_app_start.recoverable ? "true" : "false")
+         << ",\n"
+         << "    \"checkpoint_state\": \""
+         << EscapeJson(report.first_android_app_start.checkpoint_state)
+         << "\",\n"
+         << "    \"blocking_reason\": \""
+         << EscapeJson(report.first_android_app_start.blocking_reason)
+         << "\",\n"
+         << "    \"recommended_recovery_action\": \""
+         << EscapeJson(
+                report.first_android_app_start.recommended_recovery_action)
+         << "\",\n"
+         << "    \"next_blocker\": \""
+         << EscapeJson(report.first_android_app_start.next_blocker)
+         << "\",\n"
+         << "    \"diagnostics\": "
+         << RenderJsonArray(report.first_android_app_start.diagnostics)
+         << ",\n"
+         << "    \"errors\": "
+         << RenderJsonArray(report.first_android_app_start.errors) << "\n"
          << "  },\n"
          << "  \"storage\": {\n"
          << "    \"ready\": " << (report.storage.ready ? "true" : "false")

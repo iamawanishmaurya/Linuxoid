@@ -8690,6 +8690,129 @@ void TestLaunchApkJavaProofHealsMalformedFiles() {
   fs::remove_all(fixture.launch.root);
 }
 
+void TestLaunchApkFirstAppStartCheckpointReachesExactArtBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-ready");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected first app start checkpoint command to succeed at the ART boundary");
+  Expect(output.find("\"first_app_start_proof_requested\": true") !=
+             std::string::npos,
+         "expected first app start proof request flag in json");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health in json");
+  Expect(output.find("\"first_android_app_start\": {") != std::string::npos,
+         "expected first_android_app_start section in json");
+  Expect(output.find("\"ready\": true") != std::string::npos,
+         "expected first app start proof report to be ready");
+  Expect(output.find("\"package_name\": \"com.example.launchapk\"") !=
+             std::string::npos,
+         "expected first app start package in json");
+  Expect(output.find("\"activity_name\": \"com.example.launchapk.MainActivity\"") !=
+             std::string::npos,
+         "expected first app start activity name in json");
+  Expect(output.find("\"runtime_state\": \"ready\"") != std::string::npos,
+         "expected ready runtime state in first app start json");
+  Expect(output.find("\"class_loader_ready\": true") != std::string::npos,
+         "expected class loader readiness in first app start json");
+  Expect(output.find("\"java_art_bytecode_execution_requested\": true") !=
+             std::string::npos,
+         "expected bytecode execution request flag in first app start json");
+  Expect(output.find("\"java_art_bytecode_executed\": false") !=
+             std::string::npos,
+         "expected honest no-bytecode-executed flag in first app start json");
+  Expect(output.find("\"blocking_reason\": \"needs-real-art-execution\"") !=
+             std::string::npos,
+         "expected exact real-art blocker in first app start json");
+  Expect(output.find("\"next_blocker\": "
+                     "\"implement_real_art_activity_bytecode_invocation\"") !=
+             std::string::npos,
+         "expected actionable next blocker in first app start json");
+  Expect(output.find("Self-Healing Android Device") != std::string::npos,
+         "expected Self-Healing Android Device diagnostics in first app start json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointBlocksWithoutRuntimeRoot() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-runtime-missing", false);
+  const ScopedEnvironmentVariable disable_host_art_probe(
+      "LINUXOID_DISABLE_HOST_ART_RUNTIME_PROBE", "1");
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected first app start checkpoint command to fail without runtime root");
+  Expect(output.find("\"first_app_start_health\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked first app start health in json");
+  Expect(output.find(
+             "\"blocking_reason\": \"art_runtime_unavailable_for_first_app_start\"") !=
+             std::string::npos,
+         "expected runtime unavailable blocker in first app start json");
+  Expect(output.find(
+             "\"recommended_recovery_action\": \"retry_runtime_bootstrap\"") !=
+             std::string::npos,
+         "expected retry runtime bootstrap recommendation in first app start json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-invalid-dex", true,
+      {{"classes.dex",
+        BuildInvalidDexMagicPayload({"Lcom/example/launchapk/App;",
+                                     "Lcom/example/launchapk/MainActivity;"})}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected first app start checkpoint command to fail with invalid dex");
+  Expect(output.find("\"first_app_start_health\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked first app start health in invalid-dex json");
+  Expect(output.find(
+             "\"blocking_reason\": \"dex_bootstrap_not_ready_for_first_app_start\"") !=
+             std::string::npos,
+         "expected dex bootstrap blocker in first app start json");
+  Expect(output.find(
+             "\"recommended_recovery_action\": \"rebuild_dex_bootstrap\"") !=
+             std::string::npos,
+         "expected rebuild_dex_bootstrap recommendation in first app start json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
 void TestInspectApkCompatibilityCommandReportsNeedsRealArtForJavaFixture() {
   namespace fs = std::filesystem;
   const std::string manifest = R"(<manifest package="com.example.thirdparty.java" android:versionCode="1" android:versionName="1.0.0">
@@ -13304,6 +13427,9 @@ int main() {
     TestLaunchApkJavaProofBlocksWhenRuntimeUnavailable();
     TestLaunchApkJavaProofBlocksWhenDexInvalid();
     TestLaunchApkJavaProofHealsMalformedFiles();
+    TestLaunchApkFirstAppStartCheckpointReachesExactArtBoundary();
+    TestLaunchApkFirstAppStartCheckpointBlocksWithoutRuntimeRoot();
+    TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid();
     TestInspectApkCompatibilityCommandReportsNeedsRealArtForJavaFixture();
     TestNativeApkCompatibilityClassifiesPermissionHeavyFixtureAsPartial();
     TestNativeApkCompatibilityClassifiesMissingNativeLibrary();
