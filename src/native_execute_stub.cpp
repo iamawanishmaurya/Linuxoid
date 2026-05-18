@@ -714,6 +714,7 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
 
   if (entrypoint == nullptr && selected_jni_library != nullptr) {
     report.selected_library_path = selected_jni_library->path;
+    report.app_start_bridge_state = "jni_primary_library_selected";
   }
 
   bool any_jni_onload_success = false;
@@ -797,14 +798,43 @@ NativeExecuteReport ExecuteNativeStub(const NativeExecuteRequest& request) {
   if (entrypoint == nullptr) {
     if (jni_onload_crashed) {
       output << "[p1] entrypoint not evaluated further because JNI_OnLoad crashed\n";
+      report.post_jni_startup_state = "jni_onload_crashed";
+      report.app_start_bridge_reason = "jni_onload_crashed";
+    } else if (selected_jni_library != nullptr && any_jni_onload_success) {
+      report.app_start_bridge_state =
+          "linuxoid_managed_app_start_bridge_required";
+      report.app_start_bridge_reason =
+          "jni_onload_succeeded_without_native_activity_entrypoint";
+      report.post_jni_startup_state = "managed_activity_dispatch_required";
+      report.exit_reason = "linuxoid_managed_app_start_bridge_required";
+      const std::size_t attempt_index = FindLibraryLoadAttemptIndex(
+          report.library_load_attempts, selected_jni_library->path);
+      if (attempt_index < report.library_load_attempts.size()) {
+        report.library_load_attempts[attempt_index].failure_reason =
+            "linuxoid_managed_app_start_bridge_required";
+        if (report.library_load_attempts[attempt_index].error_detail.empty()) {
+          report.library_load_attempts[attempt_index].error_detail =
+              "jni_onload_succeeded_without_native_activity_entrypoint";
+        }
+      }
+      output << "[p1] JNI-shaped primary library selected for Linuxoid-managed "
+                "app-start bridge: "
+             << selected_jni_library->path << "\n";
+      output << "[p1] next seam: managed activity dispatch is still required "
+                "after JNI_OnLoad\n";
     } else {
       output << "[p1] entrypoint not found in loaded libraries\n";
       report.exit_reason = "native_activity_entrypoint_missing";
+      report.post_jni_startup_state = "native_activity_entrypoint_missing";
     }
     report.exit_code = 0;
     report.output = output.str();
     return report;
   }
+
+  report.app_start_bridge_state = "native_activity_entrypoint_selected";
+  report.app_start_bridge_reason = "native_activity_entrypoint_found";
+  report.post_jni_startup_state = "native_activity_dispatch_ready";
 
   ANativeActivity activity{};
   activity.vm = MakeStubJavaVm();
@@ -891,6 +921,12 @@ std::string RenderNativeExecuteReportJson(const NativeExecuteReport& report) {
          << BuildJsonStringArray(report.android_compat_diagnostics) << ",\n"
          << "  \"jni_onload_results\": "
          << BuildJniOnLoadResultsJson(report.jni_onload_results) << ",\n"
+         << "  \"app_start_bridge_state\": \""
+         << EscapeJson(report.app_start_bridge_state) << "\",\n"
+         << "  \"app_start_bridge_reason\": \""
+         << EscapeJson(report.app_start_bridge_reason) << "\",\n"
+         << "  \"post_jni_startup_state\": \""
+         << EscapeJson(report.post_jni_startup_state) << "\",\n"
          << "  \"exit_reason\": \"" << EscapeJson(report.exit_reason)
          << "\",\n"
          << "  \"working_directory\": \""

@@ -110,6 +110,9 @@ struct NativeApkFirstAppStartProof {
   std::string dex_parse_state = "not_requested";
   std::string native_loading_state = "not_requested";
   std::string native_jni_state = "not_requested";
+  std::string native_app_start_bridge_state = "not_requested";
+  std::string native_app_start_bridge_reason = "none";
+  std::string native_post_jni_startup_state = "not_requested";
   std::string native_loading_library_name;
   std::string native_loading_detail;
   std::string bytecode_execution_state = "not_attempted";
@@ -203,6 +206,9 @@ struct NativeApkLaunchReport {
   std::string launch_status;
   std::string native_loading_state = "not_requested";
   std::string native_jni_state = "not_requested";
+  std::string native_app_start_bridge_state = "not_requested";
+  std::string native_app_start_bridge_reason = "none";
+  std::string native_post_jni_startup_state = "not_requested";
   std::string native_loading_library_name;
   std::string native_loading_library_path;
   std::string native_loading_detail;

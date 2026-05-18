@@ -61,6 +61,9 @@ struct NativeExecuteReport {
   std::vector<std::string> libraries_loaded;
   std::vector<NativeLibraryLoadAttempt> library_load_attempts;
   std::vector<JniOnLoadResult> jni_onload_results;
+  std::string app_start_bridge_state = "not_applicable";
+  std::string app_start_bridge_reason = "none";
+  std::string post_jni_startup_state = "not_applicable";
   std::string android_compat_state;
   int elf_undefined_versions_normalized = 0;
   std::vector<std::string> android_compat_preloaded_paths;

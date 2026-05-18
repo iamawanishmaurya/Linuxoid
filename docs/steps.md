@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Native App-Start Bridge Checkpoint GREEN
+  Action: Extended the direct native execute path so a JNI-shaped primary library that loads and reaches `JNI_OnLoad` is now reported as a Linuxoid-owned managed app-start bridge seam instead of collapsing back to a generic missing `ANativeActivity_onCreate` story. Added focused regressions for the narrowed launch seam and first-app-start blocker propagation.
+  Result: The real keyboard APK path now reports `native_loading_state: linuxoid_managed_app_start_bridge_required`, `native_app_start_bridge_state: linuxoid_managed_app_start_bridge_required`, `native_post_jni_startup_state: managed_activity_dispatch_required`, and `next_blocker: implement_linuxoid_managed_app_start_bridge_for_libjni_latinime_so`, while the deeper managed seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+  Timestamp: 2026-05-20T01:40:00+05:30
+
 - Step: Native libc Compatibility and Entry Bridge Checkpoint GREEN
   Action: Extended the tiny Android-compat shim slice so Linuxoid now gets the real keyboard entry library `libjni_latinime.so` loaded, calls `JNI_OnLoad`, records deterministic per-library `library_load_attempts[]` plus `jni_onload_results`, and flushes blocked CLI reports cleanly instead of letting teardown noise blur the true seam.
   Result: The real keyboard APK path no longer stops at `__strchr_chk`. Linuxoid now reports `native_loading_state: native_activity_entrypoint_missing`, `native_jni_state: called`, `native_loading_library_name: libjni_latinime.so`, `native_execute.execution_engine_ready: true`, and `next_blocker: provide_native_activity_entrypoint_for_libjni_latinime_so`, while the deeper managed seam remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.

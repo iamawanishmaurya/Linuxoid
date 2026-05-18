@@ -6757,15 +6757,33 @@ void TestLaunchApkReportsJniOnlyLibraryBoundaryPrecisely() {
          "expected blocked launch for JNI-only library fixture");
   Expect(output.find("\"launch_ready\": false") != std::string::npos,
          "expected blocked launch readiness for JNI-only library fixture");
-  Expect(output.find("\"launch_status\": \"native_activity_entrypoint_missing\"") !=
+  Expect(output.find(
+             "\"launch_status\": "
+             "\"linuxoid_managed_app_start_bridge_required\"") !=
              std::string::npos,
-         "expected native activity entrypoint boundary for JNI-only library");
-  Expect(output.find("\"native_loading_state\": \"native_activity_entrypoint_missing\"") !=
+         "expected Linuxoid-managed app-start bridge boundary for JNI-only library");
+  Expect(output.find(
+             "\"native_loading_state\": "
+             "\"linuxoid_managed_app_start_bridge_required\"") !=
              std::string::npos,
-         "expected native loading state to preserve missing entrypoint");
+         "expected native loading state to preserve Linuxoid-managed bridge seam");
   Expect(output.find("\"native_jni_state\": \"called\"") !=
              std::string::npos,
          "expected JNI_OnLoad to be called for JNI-only library");
+  Expect(output.find(
+             "\"native_app_start_bridge_state\": "
+             "\"linuxoid_managed_app_start_bridge_required\"") !=
+             std::string::npos,
+         "expected app-start bridge state for JNI-only library");
+  Expect(output.find(
+             "\"native_app_start_bridge_reason\": "
+             "\"jni_onload_succeeded_without_native_activity_entrypoint\"") !=
+             std::string::npos,
+         "expected app-start bridge reason for JNI-only library");
+  Expect(output.find(
+             "\"native_post_jni_startup_state\": "
+             "\"managed_activity_dispatch_required\"") != std::string::npos,
+         "expected precise post-JNI startup state for JNI-only library");
   Expect(output.find("\"native_loading_library_name\": \"libjni_latinime.so\"") !=
              std::string::npos,
          "expected selected JNI-only library name in blocked report");
@@ -6774,6 +6792,55 @@ void TestLaunchApkReportsJniOnlyLibraryBoundaryPrecisely() {
          "expected selected library path to point at JNI-only library");
   Expect(output.find("\"status\": \"called\"") != std::string::npos,
          "expected JNI_OnLoad result surface for JNI-only library");
+  Expect(output.find(
+             "\"app_start_bridge_state\": "
+             "\"linuxoid_managed_app_start_bridge_required\"") !=
+             std::string::npos,
+         "expected native execute bridge state in nested report");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkFirstAppStartReportsManagedAppStartBridgeBoundary() {
+  namespace fs = std::filesystem;
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path compatctl = build_dir / "compatctl";
+  const fs::path fixture_library =
+      build_dir / "liblinuxoid_p1_jni_only_fixture.so";
+  const auto fixture = CreateNativeApkLaunchFixtureWithLibraryPath(
+      "linuxoid-first-app-start-jni-bridge-fixture", fixture_library,
+      "lib/x86_64/libjni_latinime.so");
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected blocked first-app-start proof for JNI-only library fixture");
+  Expect(output.find("\"first_app_start_health\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked first app start health for JNI-only library fixture");
+  Expect(output.find(
+             "\"native_app_start_bridge_state\": "
+             "\"linuxoid_managed_app_start_bridge_required\"") !=
+             std::string::npos,
+         "expected first app start proof to preserve app-start bridge state");
+  Expect(output.find(
+             "\"blocking_reason\": "
+             "\"linuxoid_managed_app_start_bridge_required_for_first_app_start:libjni_latinime.so\"") !=
+             std::string::npos,
+         "expected narrowed first-app-start blocker for JNI-only fixture");
+  Expect(output.find(
+             "\"recommended_recovery_action\": "
+             "\"inspect_native_launch_diagnostics\"") != std::string::npos,
+         "expected native diagnostics recovery action for JNI-only bridge seam");
+  Expect(output.find(
+             "\"next_blocker\": "
+             "\"implement_linuxoid_managed_app_start_bridge_for_libjni_latinime_so\"") !=
+             std::string::npos,
+         "expected next blocker to point at the Linuxoid-managed bridge");
 
   fs::remove_all(fixture.root);
 }
@@ -15578,6 +15645,7 @@ int main() {
     TestLaunchApkSkipsJniOnLoadForNonEntrypointLibrary();
     TestLaunchApkLoadsAndroidCompatFixtureThroughLinuxoidShims();
     TestLaunchApkReportsJniOnlyLibraryBoundaryPrecisely();
+    TestLaunchApkFirstAppStartReportsManagedAppStartBridgeBoundary();
     TestLaunchApkReportsUnshimmedAndroidSymbolBlockerPrecisely();
   } catch (const std::exception& error) {
     std::cerr << "Test failure: " << error.what() << '\n';

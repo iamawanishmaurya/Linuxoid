@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.126 - 2026-05-19
+
+- Close **Phase 8: Native App-Start Bridge** around the real keyboard APK's JNI-shaped entry library instead of widening the runtime sideways again.
+- Extend the direct native execute path so successful `JNI_OnLoad` plus a missing `ANativeActivity_onCreate` no longer collapses into a generic missing-entrypoint story. Linuxoid now surfaces `app_start_bridge_state: linuxoid_managed_app_start_bridge_required`, `app_start_bridge_reason: jni_onload_succeeded_without_native_activity_entrypoint`, and `post_jni_startup_state: managed_activity_dispatch_required`.
+- Tighten `launch-apk --first-app-start-proof`, watchdog gating, and the JNI-only regression fixtures so the current live blocker stays stable and honest: `blocking_reason: linuxoid_managed_app_start_bridge_required_for_first_app_start:libjni_latinime.so`, `next_blocker: implement_linuxoid_managed_app_start_bridge_for_libjni_latinime_so`, and the later managed seam still remains `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+
 ## v0.1.125 - 2026-05-19
 
 - Close **Phase 7: Native libc Compatibility and Entry Bridge** around the real keyboard APK entry library instead of widening the runtime sideways again.

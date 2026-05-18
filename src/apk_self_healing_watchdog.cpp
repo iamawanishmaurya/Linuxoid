@@ -239,7 +239,8 @@ std::string DetermineRecommendedNextAction(
       (report.launch_status == "native_library_staging_failed" ||
        report.launch_status == "libraries_failed_to_load" ||
        report.launch_status == "jni_onload_missing_or_failed" ||
-       report.launch_status == "native_activity_entrypoint_missing")) {
+       report.launch_status == "native_activity_entrypoint_missing" ||
+       report.launch_status == "linuxoid_managed_app_start_bridge_required")) {
     return "inspect_native_launch_diagnostics";
   }
   if (!state.asset_ready) {
@@ -304,11 +305,14 @@ bool HasUpstreamNativeLaunchBlocker(const NativeApkLaunchReport& report) {
   if (report.launch_status == "native_library_staging_failed" ||
       report.launch_status == "libraries_failed_to_load" ||
       report.launch_status == "jni_onload_missing_or_failed" ||
-      report.launch_status == "native_activity_entrypoint_missing") {
+      report.launch_status == "native_activity_entrypoint_missing" ||
+      report.launch_status == "linuxoid_managed_app_start_bridge_required") {
     return true;
   }
   return report.native_loading_state == "dlopen_failed" ||
          report.native_loading_state == "staging_failed" ||
+         report.native_loading_state ==
+             "linuxoid_managed_app_start_bridge_required" ||
          report.native_jni_state == "crashed" ||
          report.native_jni_state == "missing";
 }
@@ -334,6 +338,12 @@ std::string DescribeUpstreamNativeLaunchBlocker(
   if (report.native_jni_state == "missing" &&
       !report.native_loading_library_name.empty()) {
     return "jni_onload_missing:" + report.native_loading_library_name;
+  }
+  if (report.native_loading_state ==
+          "linuxoid_managed_app_start_bridge_required" &&
+      !report.native_loading_library_name.empty()) {
+    return "linuxoid_managed_app_start_bridge_required:" +
+           report.native_loading_library_name;
   }
   if (!report.native_loading_state.empty() &&
       report.native_loading_state != "not_requested") {
