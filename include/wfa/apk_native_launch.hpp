@@ -117,6 +117,9 @@ struct NativeApkFirstAppStartProof {
   std::string lifecycle_receiver_state = "not_materialized";
   std::string lifecycle_receiver_class_descriptor;
   int lifecycle_receiver_register = -1;
+  std::string lifecycle_parameter_state = "not_materialized";
+  std::string lifecycle_parameter_class_descriptor;
+  int lifecycle_parameter_register = -1;
   std::string app_method_invocation_state = "not_reached";
   std::string app_invoked_method_class_descriptor;
   std::string app_invoked_method_name;

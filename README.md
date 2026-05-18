@@ -311,13 +311,13 @@ What actually runs today:
 - Linuxoid now also resolves the real verification target `org.futo.inputmethod.latin/.uix.settings.SettingsActivity` into staged DEX lookup state
 - Linuxoid derives `Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;` and resolves the real lifecycle method `onCreate(Landroid/os/Bundle;)V`
 - Linuxoid records exact class-loading, method-lookup, and code-item-lookup state for that real activity instead of collapsing to generic `dex_unavailable`
-- Linuxoid keeps the first managed framework boundary honest when the keyboard-identity execution fixture reaches it: `framework_boundary_state: "blocked"` with `framework_boundary_reason: "invoke_receiver_missing"`
+- Linuxoid now carries the keyboard-identity lifecycle receiver through the parameter-register window, materializes a deterministic `Landroid/os/Bundle;` placeholder alongside it, and keeps the first managed framework boundary honest as `framework_boundary_state: "framework-stubbed"` with `framework_boundary_reason: "android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint"`
 
 What does **not** run yet:
 
 - real ART-owned `ActivityThread` / application bootstrap
 - managed `SettingsActivity` invocation through a real ART-owned runtime context
-- receiver propagation across the real framework-owned invoke boundary
+- non-stubbed dispatch across the real framework-owned `Activity.onCreate(Landroid/os/Bundle;)V` boundary
 - broad Java/Kotlin APK execution beyond the deterministic lifecycle checkpoint methods
 - general Android framework dispatch or compatibility beyond the single stubbed boundary
 
@@ -369,14 +369,22 @@ On the real keyboard verification path today, Linuxoid now reports:
 - `first_android_app_start.code_item_lookup_state: "code_item_resolved"`
 - `first_android_app_start.lifecycle_method_name: "onCreate"`
 - `first_android_app_start.lifecycle_method_signature: "(Landroid/os/Bundle;)V"`
+- `first_android_app_start.lifecycle_receiver_state: "receiver-placeholder-materialized-in-parameter-register"`
+- `first_android_app_start.lifecycle_receiver_register: 2`
+- `first_android_app_start.lifecycle_parameter_state: "parameter-placeholder-materialized"`
+- `first_android_app_start.lifecycle_parameter_class_descriptor: "Landroid/os/Bundle;"`
+- `first_android_app_start.lifecycle_parameter_register: 3`
+- `first_android_app_start.framework_boundary_state: "framework-stubbed"`
+- `first_android_app_start.framework_boundary_reason: "android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint"`
+- `first_android_app_start.blocking_reason: "framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V"`
 
 So this is a truthful managed-activity start checkpoint for the Self-Healing Android Device path. Linuxoid now resolves the real keyboard `SettingsActivity` class and `onCreate(Bundle)V` seam from staged DEX metadata, while the deterministic execution fixture still proves the minimal interpreter can cross one framework boundary, one constructor boundary, and one object-reference field round-trip to a real `return`. That is still not a claim that Linuxoid already provides a real ART class loader, ActivityThread, heap, or end-to-end Android framework execution.
 
 Immediate next blocker:
 
 - real keyboard APK end-to-end launch still blocks earlier at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start`
-- the next managed-runtime interpreter seam after lookup is `propagate_framework_invoke_receiver_registers`
-- the next larger runtime-context blocker remains `bridge_activity_oncreate_into_real_art_runtime_context`
+- the next managed-runtime interpreter seam after lookup is now the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` bundle boundary
+- the next larger runtime-context blocker is `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
 
 `inspect-apk-compatibility` and `inspect-apk-compatibility-suite` now implement **P15 Third-Party APK Compatibility Sprint** on top of those same direct-session seams. They do not invent a disconnected mock matrix. Instead, Linuxoid launches the real staged APK session through package inspection, intent/activity resolution, storage sandboxing, permissions/AppOps, native/JNI load, process/session creation, window/surface state, runtime bootstrap, Java/Kotlin proof, and Self-Healing Android Device diagnostics, then emits a deterministic compatibility report under `sandbox/data/data/<package>/compatibility/compatibility-report.json`, `compatibility-domains.json`, and `compatibility-events.jsonl`. The suite command materializes the same contract across a small locally generated APK-like fixture set and summarizes statuses such as `supported`, `partial`, `blocked`, `missing-runtime`, `missing-surface`, `missing-native-lib`, `needs-real-art`, `recovered`, and `degraded`.
 

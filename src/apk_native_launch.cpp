@@ -1692,9 +1692,13 @@ std::string DetermineFirstAppStartRecoveryAction(
     return "extend_minimal_dex_interpreter";
   }
   if (blocking_reason == "dex_invoke_receiver_missing" ||
+      blocking_reason == "dex_invoke_argument_placeholder_missing" ||
       blocking_reason == "dex_invoke_register_out_of_range" ||
       blocking_reason == "dex_move_result_without_pending_value") {
     return "extend_minimal_dex_interpreter";
+  }
+  if (blocking_reason.rfind("framework-boundary-stubbed:", 0) == 0) {
+    return "extend_runtime_context_bridge";
   }
   if (blocking_reason == "dex_bootstrap_not_ready_for_first_app_start") {
     return "rebuild_dex_bootstrap";
@@ -1758,11 +1762,18 @@ std::string DetermineFirstAppStartNextBlocker(
   if (blocking_reason == "dex_invoke_receiver_missing") {
     return "propagate_framework_invoke_receiver_registers";
   }
+  if (blocking_reason == "dex_invoke_argument_placeholder_missing") {
+    return "materialize_framework_lifecycle_argument_placeholders";
+  }
   if (blocking_reason == "dex_invoke_register_out_of_range") {
     return "repair_dex_invoke_register_mapping";
   }
   if (blocking_reason == "dex_move_result_without_pending_value") {
     return "preserve_dex_pending_result_state";
+  }
+  if (blocking_reason ==
+      "framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V") {
+    return "bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context";
   }
   if (blocking_reason == "art_runtime_unavailable_for_first_app_start") {
     return "provide_discoverable_art_runtime_root";
@@ -1893,6 +1904,13 @@ std::string RenderFirstAppStartJson(
          << EscapeJson(proof.lifecycle_receiver_class_descriptor) << "\",\n"
          << "  \"lifecycle_receiver_register\": "
          << proof.lifecycle_receiver_register << ",\n"
+         << "  \"lifecycle_parameter_state\": \""
+         << EscapeJson(proof.lifecycle_parameter_state) << "\",\n"
+         << "  \"lifecycle_parameter_class_descriptor\": \""
+         << EscapeJson(proof.lifecycle_parameter_class_descriptor)
+         << "\",\n"
+         << "  \"lifecycle_parameter_register\": "
+         << proof.lifecycle_parameter_register << ",\n"
          << "  \"app_method_invocation_state\": \""
          << EscapeJson(proof.app_method_invocation_state) << "\",\n"
          << "  \"app_invoked_method_class_descriptor\": \""
@@ -2050,6 +2068,12 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
       report.dex.execution_probe.lifecycle_receiver_class_descriptor;
   proof.lifecycle_receiver_register =
       report.dex.execution_probe.lifecycle_receiver_register;
+  proof.lifecycle_parameter_state =
+      report.dex.execution_probe.lifecycle_parameter_state;
+  proof.lifecycle_parameter_class_descriptor =
+      report.dex.execution_probe.lifecycle_parameter_class_descriptor;
+  proof.lifecycle_parameter_register =
+      report.dex.execution_probe.lifecycle_parameter_register;
   proof.app_method_invocation_state =
       report.dex.execution_probe.app_method_invocation_state;
   proof.app_invoked_method_class_descriptor =
@@ -4337,6 +4361,17 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "\",\n"
          << "    \"lifecycle_receiver_register\": "
          << report.first_android_app_start.lifecycle_receiver_register
+         << ",\n"
+         << "    \"lifecycle_parameter_state\": \""
+         << EscapeJson(
+                report.first_android_app_start.lifecycle_parameter_state)
+         << "\",\n"
+         << "    \"lifecycle_parameter_class_descriptor\": \""
+         << EscapeJson(report.first_android_app_start
+                           .lifecycle_parameter_class_descriptor)
+         << "\",\n"
+         << "    \"lifecycle_parameter_register\": "
+         << report.first_android_app_start.lifecycle_parameter_register
          << ",\n"
          << "    \"app_method_invocation_state\": \""
          << EscapeJson(

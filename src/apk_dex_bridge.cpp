@@ -712,6 +712,50 @@ std::string DetermineReturnTypeDescriptor(
   return method_signature.substr(separator + 1);
 }
 
+std::vector<std::string> DetermineParameterTypeDescriptors(
+    const std::string& method_signature) {
+  std::vector<std::string> descriptors;
+  const std::size_t open = method_signature.find('(');
+  const std::size_t close = method_signature.find(')');
+  if (open == std::string::npos || close == std::string::npos ||
+      close <= open + 1u) {
+    return descriptors;
+  }
+
+  std::size_t cursor = open + 1u;
+  while (cursor < close) {
+    const char first = method_signature[cursor];
+    const std::size_t start = cursor;
+    while (cursor < close && method_signature[cursor] == '[') {
+      ++cursor;
+    }
+    if (cursor >= close) {
+      descriptors.clear();
+      return descriptors;
+    }
+    if (method_signature[cursor] == 'L') {
+      const std::size_t terminator = method_signature.find(';', cursor);
+      if (terminator == std::string::npos || terminator >= close + 1u) {
+        descriptors.clear();
+        return descriptors;
+      }
+      cursor = terminator + 1u;
+      descriptors.push_back(method_signature.substr(start, cursor - start));
+      continue;
+    }
+    if (first == '[' ||
+        std::string("ZBCSIFJDV").find(method_signature[cursor]) !=
+            std::string::npos) {
+      ++cursor;
+      descriptors.push_back(method_signature.substr(start, cursor - start));
+      continue;
+    }
+    descriptors.clear();
+    return descriptors;
+  }
+  return descriptors;
+}
+
 struct DexInlineInvocationResult {
   bool ready = false;
   bool reached_return = false;
@@ -1056,8 +1100,11 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
   probe.execution_state = "interpreting";
   const std::string return_type_descriptor =
       DetermineReturnTypeDescriptor(probe.target_method_signature);
+  const std::vector<std::string> parameter_type_descriptors =
+      DetermineParameterTypeDescriptors(probe.target_method_signature);
   const std::uint16_t registers_size =
       ReadLe16(bytes, candidate.code_off + 0u);
+  const std::uint16_t ins_size = ReadLe16(bytes, candidate.code_off + 2u);
   std::vector<DexRegisterValue> registers(
       std::max<std::size_t>(registers_size, 16u));
   std::map<std::uint32_t, PlaceholderObject> objects;
@@ -1070,17 +1117,60 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
       .object_id = lifecycle_receiver_object_id,
       .class_descriptor = candidate.class_descriptor,
       .fields = {}};
-  registers[0] = {.kind = DexRegisterValue::Kind::kObject,
-                  .int_value = 0,
-                  .object_id = lifecycle_receiver_object_id,
-                  .class_descriptor = candidate.class_descriptor};
-  probe.lifecycle_receiver_state = "receiver-placeholder-materialized";
+  const bool parameter_register_window_valid =
+      ins_size != 0u && registers_size >= ins_size;
+  const bool instance_receiver_expected =
+      parameter_register_window_valid &&
+      ins_size > parameter_type_descriptors.size();
+  const std::size_t parameter_register_base =
+      parameter_register_window_valid
+          ? static_cast<std::size_t>(registers_size - ins_size)
+          : 0u;
+  const std::size_t lifecycle_receiver_register =
+      instance_receiver_expected ? parameter_register_base : 0u;
+  registers[lifecycle_receiver_register] = {.kind = DexRegisterValue::Kind::kObject,
+                                            .int_value = 0,
+                                            .object_id = lifecycle_receiver_object_id,
+                                            .class_descriptor = candidate.class_descriptor};
+  probe.lifecycle_receiver_state = instance_receiver_expected
+                                       ? "receiver-placeholder-materialized-in-parameter-register"
+                                       : "receiver-placeholder-materialized";
   probe.lifecycle_receiver_class_descriptor = candidate.class_descriptor;
-  probe.lifecycle_receiver_register = 0;
+  probe.lifecycle_receiver_register =
+      static_cast<int>(lifecycle_receiver_register);
   AppendUnique(&probe.diagnostics,
                "Self-Healing Android Device DEX probe resolved the lifecycle receiver class from staged DEX metadata");
   AppendUnique(&probe.diagnostics,
                "Self-Healing Android Device DEX probe materialized a deterministic lifecycle receiver placeholder");
+  if (parameter_register_window_valid && !parameter_type_descriptors.empty()) {
+    const std::size_t lifecycle_parameter_register =
+        parameter_register_base + (instance_receiver_expected ? 1u : 0u);
+    if (lifecycle_parameter_register < registers.size()) {
+      const std::string& parameter_descriptor =
+          parameter_type_descriptors.front();
+      if (!parameter_descriptor.empty() &&
+          (parameter_descriptor.front() == 'L' ||
+           parameter_descriptor.front() == '[')) {
+        const std::uint32_t lifecycle_parameter_object_id = next_object_id++;
+        objects[lifecycle_parameter_object_id] = {
+            .object_id = lifecycle_parameter_object_id,
+            .class_descriptor = parameter_descriptor,
+            .fields = {}};
+        registers[lifecycle_parameter_register] = {
+            .kind = DexRegisterValue::Kind::kObject,
+            .int_value = 0,
+            .object_id = lifecycle_parameter_object_id,
+            .class_descriptor = parameter_descriptor};
+        probe.lifecycle_parameter_state =
+            "parameter-placeholder-materialized";
+        probe.lifecycle_parameter_class_descriptor = parameter_descriptor;
+        probe.lifecycle_parameter_register =
+            static_cast<int>(lifecycle_parameter_register);
+        AppendUnique(&probe.diagnostics,
+                     "Self-Healing Android Device DEX probe materialized a deterministic lifecycle parameter placeholder");
+      }
+    }
+  }
 
   auto mark_object_field_operation = [&](const std::string& operation,
                                          const std::string& state,
@@ -1587,6 +1677,30 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
           pc += 3u;
           continue;
         }
+        if (invoked_method.class_descriptor == "Landroid/app/Activity;" &&
+            invoked_method.method_name == "onCreate" &&
+            invoked_method.method_signature == "(Landroid/os/Bundle;)V") {
+          if (register_count < 2u ||
+              registers[registers_used[1]].kind !=
+                  DexRegisterValue::Kind::kObject) {
+            probe.framework_boundary_state = "blocked";
+            probe.framework_boundary_reason =
+                "invoke_argument_placeholder_missing";
+            probe.execution_state = "framework_boundary_blocked";
+            probe.exact_blocker = "dex_invoke_argument_placeholder_missing";
+            probe.errors.push_back("dex_invoke_argument_placeholder_missing");
+            return probe;
+          }
+          probe.framework_boundary_state = "framework-stubbed";
+          probe.framework_boundary_reason =
+              "android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint";
+          probe.execution_state = "framework_boundary_stubbed";
+          probe.exact_blocker =
+              "framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V";
+          probe.diagnostics.push_back(
+              "Self-Healing Android Device DEX probe crossed a stubbed Android framework lifecycle boundary with receiver and Bundle parameter placeholders");
+          return probe;
+        }
 
         probe.framework_boundary_state = "blocked";
         probe.framework_boundary_reason =
@@ -1788,6 +1902,13 @@ std::string RenderDexExecutionProbeJson(
          << EscapeJson(probe.lifecycle_receiver_class_descriptor) << "\",\n"
          << "    \"lifecycle_receiver_register\": "
          << probe.lifecycle_receiver_register << ",\n"
+         << "    \"lifecycle_parameter_state\": \""
+         << EscapeJson(probe.lifecycle_parameter_state) << "\",\n"
+         << "    \"lifecycle_parameter_class_descriptor\": \""
+         << EscapeJson(probe.lifecycle_parameter_class_descriptor)
+         << "\",\n"
+         << "    \"lifecycle_parameter_register\": "
+         << probe.lifecycle_parameter_register << ",\n"
          << "    \"app_method_invocation_state\": \""
          << EscapeJson(probe.app_method_invocation_state) << "\",\n"
          << "    \"app_invoked_method_class_descriptor\": \""

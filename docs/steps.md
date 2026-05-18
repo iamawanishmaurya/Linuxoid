@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Runtime Context Bridge Checkpoint GREEN
+  Action: Extended the keyboard-identity `SettingsActivity.onCreate(Landroid/os/Bundle;)V` fixture seam so Linuxoid now places the lifecycle receiver into the parameter-register window, materializes a deterministic `Landroid/os/Bundle;` placeholder, and stops at the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` framework boundary with exact blocker reporting instead of collapsing at `invoke_receiver_missing`.
+  Result: Linuxoid now hands the next phase a smaller runtime-context blocker, `framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V`, while the real keyboard APK still honestly blocks earlier at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start`.
+  Timestamp: 2026-05-19T01:40:00+05:30
+
 - Step: Managed Activity Start Checkpoint GREEN
   Action: Threaded the real `org.futo.inputmethod.latin/.uix.settings.SettingsActivity` target through `launch-apk --first-app-start-proof`, fixed real-APK DEX string decoding for staged MUTF-8 metadata, resolved `onCreate(Landroid/os/Bundle;)V` plus exact class/method/code-item lookup state from staged DEX, and pinned the keyboard-identity synthetic activity seam with the exact managed framework boundary `framework_boundary_reason: invoke_receiver_missing`.
   Result: Linuxoid now names the real keyboard managed-start seam and the exact next interpreter blocker instead of collapsing the path into generic `dex_unavailable` or `not_attempted` output, while the end-to-end real APK path still honestly blocks earlier at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start`.

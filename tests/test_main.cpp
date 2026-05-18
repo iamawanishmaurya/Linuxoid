@@ -254,7 +254,9 @@ std::uint32_t Align4(std::uint32_t value) {
 }
 
 std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions,
-                             std::uint16_t registers_size) {
+                             std::uint16_t registers_size,
+                             std::uint16_t ins_size = 0u,
+                             std::uint16_t outs_size = 0u) {
   std::string code_item;
   auto append_le16 = [&](std::uint16_t value) {
     code_item.push_back(static_cast<char>(value & 0xFFu));
@@ -268,8 +270,8 @@ std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions,
   };
 
   append_le16(registers_size);  // registers_size
-  append_le16(0u);  // ins_size
-  append_le16(0u);  // outs_size
+  append_le16(ins_size);  // ins_size
+  append_le16(outs_size);  // outs_size
   append_le16(0u);  // tries_size
   append_le32(0u);  // debug_info_off
   append_le32(static_cast<std::uint32_t>(instructions.size()));
@@ -287,6 +289,7 @@ struct DexReferencedMethodFixture {
   std::string class_descriptor;
   std::string method_name;
   std::string return_type_descriptor = "V";
+  std::vector<std::string> parameter_type_descriptors;
 };
 
 struct DexReferencedFieldFixture {
@@ -299,10 +302,28 @@ struct DexDefinedMethodFixture {
   std::string class_descriptor;
   std::string method_name;
   std::string return_type_descriptor = "V";
+  std::vector<std::string> parameter_type_descriptors;
   std::vector<std::uint16_t> instructions;
   std::uint16_t registers_size = 0u;
+  std::uint16_t ins_size = 0u;
+  std::uint16_t outs_size = 0u;
   std::uint32_t access_flags = 0x9u;
 };
+
+std::string BuildProtoFixtureKey(
+    const std::string& return_type_descriptor,
+    const std::vector<std::string>& parameter_type_descriptors) {
+  std::ostringstream key;
+  key << return_type_descriptor << "|";
+  for (std::size_t index = 0; index < parameter_type_descriptors.size();
+       ++index) {
+    if (index != 0) {
+      key << ",";
+    }
+    key << parameter_type_descriptors[index];
+  }
+  return key.str();
+}
 
 std::string BuildDexPayloadWithEntrypoint(
     const std::vector<std::string>& class_descriptors,
@@ -311,6 +332,9 @@ std::string BuildDexPayloadWithEntrypoint(
     const std::vector<std::uint16_t>& entrypoint_instructions,
     const std::string& return_type_descriptor = "V",
     std::uint16_t registers_size = 0u,
+    const std::vector<std::string>& entrypoint_parameter_type_descriptors = {},
+    std::uint16_t ins_size = 0u,
+    std::uint16_t outs_size = 0u,
     const std::vector<DexReferencedMethodFixture>& extra_method_references = {},
     const std::vector<DexReferencedFieldFixture>& extra_field_references = {},
     const std::vector<DexDefinedMethodFixture>& extra_defined_methods = {}) {
@@ -332,10 +356,18 @@ std::string BuildDexPayloadWithEntrypoint(
   };
   append_unique(return_type_descriptor);
   append_unique(entrypoint_method_name);
+  for (const auto& parameter_type_descriptor :
+       entrypoint_parameter_type_descriptors) {
+    append_unique(parameter_type_descriptor);
+  }
   for (const auto& method_reference : extra_method_references) {
     append_unique(method_reference.class_descriptor);
     append_unique(method_reference.method_name);
     append_unique(method_reference.return_type_descriptor);
+    for (const auto& parameter_type_descriptor :
+         method_reference.parameter_type_descriptors) {
+      append_unique(parameter_type_descriptor);
+    }
   }
   for (const auto& field_reference : extra_field_references) {
     append_unique(field_reference.class_descriptor);
@@ -346,6 +378,10 @@ std::string BuildDexPayloadWithEntrypoint(
     append_unique(defined_method.class_descriptor);
     append_unique(defined_method.method_name);
     append_unique(defined_method.return_type_descriptor);
+    for (const auto& parameter_type_descriptor :
+         defined_method.parameter_type_descriptors) {
+      append_unique(parameter_type_descriptor);
+    }
   }
 
   std::vector<std::string> type_descriptors = classes;
@@ -356,9 +392,17 @@ std::string BuildDexPayloadWithEntrypoint(
     }
   };
   append_unique_type(return_type_descriptor);
+  for (const auto& parameter_type_descriptor :
+       entrypoint_parameter_type_descriptors) {
+    append_unique_type(parameter_type_descriptor);
+  }
   for (const auto& method_reference : extra_method_references) {
     append_unique_type(method_reference.class_descriptor);
     append_unique_type(method_reference.return_type_descriptor);
+    for (const auto& parameter_type_descriptor :
+         method_reference.parameter_type_descriptors) {
+      append_unique_type(parameter_type_descriptor);
+    }
   }
   for (const auto& field_reference : extra_field_references) {
     append_unique_type(field_reference.class_descriptor);
@@ -367,29 +411,51 @@ std::string BuildDexPayloadWithEntrypoint(
   for (const auto& defined_method : extra_defined_methods) {
     append_unique_type(defined_method.class_descriptor);
     append_unique_type(defined_method.return_type_descriptor);
+    for (const auto& parameter_type_descriptor :
+         defined_method.parameter_type_descriptors) {
+      append_unique_type(parameter_type_descriptor);
+    }
   }
 
   const std::uint32_t string_ids_size =
       static_cast<std::uint32_t>(strings.size());
   const std::uint32_t type_ids_size =
       static_cast<std::uint32_t>(type_descriptors.size());
-  std::vector<std::string> proto_return_types = {return_type_descriptor};
+  struct ProtoFixtureRecord {
+    std::string return_type_descriptor;
+    std::vector<std::string> parameter_type_descriptors;
+  };
+  std::vector<ProtoFixtureRecord> proto_definitions = {
+      {.return_type_descriptor = return_type_descriptor,
+       .parameter_type_descriptors = entrypoint_parameter_type_descriptors}};
+  auto append_unique_proto =
+      [&](const std::string& proto_return_type_descriptor,
+          const std::vector<std::string>& proto_parameter_type_descriptors) {
+        const std::string key = BuildProtoFixtureKey(
+            proto_return_type_descriptor, proto_parameter_type_descriptors);
+        const bool exists = std::any_of(
+            proto_definitions.begin(), proto_definitions.end(),
+            [&](const ProtoFixtureRecord& record) {
+              return BuildProtoFixtureKey(record.return_type_descriptor,
+                                          record.parameter_type_descriptors) ==
+                     key;
+            });
+        if (!exists) {
+          proto_definitions.push_back(
+              {.return_type_descriptor = proto_return_type_descriptor,
+               .parameter_type_descriptors = proto_parameter_type_descriptors});
+        }
+      };
   for (const auto& method_reference : extra_method_references) {
-    if (std::find(proto_return_types.begin(), proto_return_types.end(),
-                  method_reference.return_type_descriptor) ==
-        proto_return_types.end()) {
-      proto_return_types.push_back(method_reference.return_type_descriptor);
-    }
+    append_unique_proto(method_reference.return_type_descriptor,
+                        method_reference.parameter_type_descriptors);
   }
   for (const auto& defined_method : extra_defined_methods) {
-    if (std::find(proto_return_types.begin(), proto_return_types.end(),
-                  defined_method.return_type_descriptor) ==
-        proto_return_types.end()) {
-      proto_return_types.push_back(defined_method.return_type_descriptor);
-    }
+    append_unique_proto(defined_method.return_type_descriptor,
+                        defined_method.parameter_type_descriptors);
   }
   const std::uint32_t proto_ids_size =
-      static_cast<std::uint32_t>(proto_return_types.size());
+      static_cast<std::uint32_t>(proto_definitions.size());
   const std::uint32_t method_ids_size =
       static_cast<std::uint32_t>(1u + extra_method_references.size() +
                                  extra_defined_methods.size());
@@ -438,8 +504,10 @@ std::string BuildDexPayloadWithEntrypoint(
     type_indices[type_descriptors[index]] = static_cast<std::uint32_t>(index);
   }
   std::map<std::string, std::uint32_t> proto_indices;
-  for (std::size_t index = 0; index < proto_return_types.size(); ++index) {
-    proto_indices[proto_return_types[index]] =
+  for (std::size_t index = 0; index < proto_definitions.size(); ++index) {
+    proto_indices[BuildProtoFixtureKey(
+        proto_definitions[index].return_type_descriptor,
+        proto_definitions[index].parameter_type_descriptors)] =
         static_cast<std::uint32_t>(index);
   }
 
@@ -457,18 +525,52 @@ std::string BuildDexPayloadWithEntrypoint(
                string_indices.at(type_descriptors[index]));
   }
 
-  for (std::size_t index = 0; index < proto_return_types.size(); ++index) {
+  std::vector<std::uint32_t> proto_parameter_offsets(proto_definitions.size(),
+                                                     0u);
+  cursor = static_cast<std::uint32_t>(payload.size());
+  for (std::size_t index = 0; index < proto_definitions.size(); ++index) {
+    const auto& proto_definition = proto_definitions[index];
+    if (proto_definition.parameter_type_descriptors.empty()) {
+      continue;
+    }
+    while ((payload.size() & 0x3u) != 0u) {
+      payload.push_back('\0');
+    }
+    proto_parameter_offsets[index] =
+        static_cast<std::uint32_t>(payload.size());
+    payload.resize(payload.size() + 4u);
+    write_le32(proto_parameter_offsets[index], static_cast<std::uint32_t>(
+                                              proto_definition
+                                                  .parameter_type_descriptors
+                                                  .size()));
+    for (const auto& parameter_type_descriptor :
+         proto_definition.parameter_type_descriptors) {
+      const auto type_index_it = type_indices.find(parameter_type_descriptor);
+      Expect(type_index_it != type_indices.end(),
+             "expected parameter type descriptor in dex payload type table");
+      payload.push_back(
+          static_cast<char>(type_index_it->second & 0xFFu));
+      payload.push_back(
+          static_cast<char>((type_index_it->second >> 8u) & 0xFFu));
+    }
+  }
+
+  for (std::size_t index = 0; index < proto_definitions.size(); ++index) {
     const std::size_t offset = proto_ids_off + index * 12u;
-    write_le32(offset + 0u, string_indices.at(proto_return_types[index]));
-    write_le32(offset + 4u, type_indices.at(proto_return_types[index]));
-    write_le32(offset + 8u, 0u);
+    write_le32(offset + 0u,
+               string_indices.at(proto_definitions[index].return_type_descriptor));
+    write_le32(offset + 4u,
+               type_indices.at(proto_definitions[index].return_type_descriptor));
+    write_le32(offset + 8u, proto_parameter_offsets[index]);
   }
 
   write_le16(method_ids_off + 0u,
              static_cast<std::uint16_t>(
                  type_indices.at(entrypoint_class_descriptor)));
   write_le16(method_ids_off + 2u,
-             static_cast<std::uint16_t>(proto_indices.at(return_type_descriptor)));
+             static_cast<std::uint16_t>(proto_indices.at(BuildProtoFixtureKey(
+                 return_type_descriptor,
+                 entrypoint_parameter_type_descriptors))));
   write_le32(method_ids_off + 4u, string_indices.at(entrypoint_method_name));
 
   for (std::size_t index = 0; index < extra_method_references.size(); ++index) {
@@ -479,8 +581,9 @@ std::string BuildDexPayloadWithEntrypoint(
                    type_indices.at(method_reference.class_descriptor)));
     write_le16(
         offset + 2u,
-        static_cast<std::uint16_t>(
-            proto_indices.at(method_reference.return_type_descriptor)));
+        static_cast<std::uint16_t>(proto_indices.at(BuildProtoFixtureKey(
+            method_reference.return_type_descriptor,
+            method_reference.parameter_type_descriptors))));
     write_le32(offset + 4u, string_indices.at(method_reference.method_name));
   }
 
@@ -492,8 +595,9 @@ std::string BuildDexPayloadWithEntrypoint(
                static_cast<std::uint16_t>(
                    type_indices.at(defined_method.class_descriptor)));
     write_le16(offset + 2u,
-               static_cast<std::uint16_t>(
-                   proto_indices.at(defined_method.return_type_descriptor)));
+               static_cast<std::uint16_t>(proto_indices.at(BuildProtoFixtureKey(
+                   defined_method.return_type_descriptor,
+                   defined_method.parameter_type_descriptors))));
     write_le32(offset + 4u, string_indices.at(defined_method.method_name));
   }
 
@@ -521,7 +625,8 @@ std::string BuildDexPayloadWithEntrypoint(
       {.class_descriptor = entrypoint_class_descriptor,
        .method_index = 0u,
        .access_flags = 0x9u,
-       .code_item = BuildDexCodeItem(entrypoint_instructions, registers_size)});
+       .code_item = BuildDexCodeItem(entrypoint_instructions, registers_size,
+                                     ins_size, outs_size)});
   for (std::size_t index = 0; index < extra_defined_methods.size(); ++index) {
     const auto& defined_method = extra_defined_methods[index];
     defined_method_records.push_back(
@@ -530,7 +635,9 @@ std::string BuildDexPayloadWithEntrypoint(
              1u + extra_method_references.size() + index),
          .access_flags = defined_method.access_flags,
          .code_item = BuildDexCodeItem(defined_method.instructions,
-                                       defined_method.registers_size)});
+                                       defined_method.registers_size,
+                                       defined_method.ins_size,
+                                       defined_method.outs_size)});
   }
 
   std::vector<std::uint32_t> class_data_offsets(classes.size(), 0u);
@@ -657,11 +764,13 @@ std::string BuildFrameworkBoundaryLifecycleOnCreateDexPayload(
     const std::string& requested_entrypoint_class_descriptor) {
   return BuildDexPayloadWithEntrypoint(
       class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
-      {0x0012u, 0x106fu, 0x0001u, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {0x206fu, 0x0001u, 0x0032u}, "V", 4u,
+      {"Landroid/os/Bundle;"}, 2u, 0u,
       {DexReferencedMethodFixture{
           .class_descriptor = "Landroid/app/Activity;",
           .method_name = "onCreate",
-          .return_type_descriptor = "V"}});
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {"Landroid/os/Bundle;"}}});
 }
 
 std::string BuildObjectFieldLifecycleOnCreateDexPayload(
@@ -684,7 +793,7 @@ std::string BuildObjectFieldLifecycleOnCreateDexPayload(
       class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
       {0x106fu, 0x0001u, 0x0000u, 0x0022u, state_carrier_type_index, 0x1112u, 0x0159u,
        0x0000u, 0x0252u, 0x0000u, 0x020fu},
-      "I", 3u,
+      "I", 3u, {}, 0u, 0u,
       {DexReferencedMethodFixture{
           .class_descriptor = "Landroid/app/Activity;",
           .method_name = "onCreate",
@@ -718,7 +827,7 @@ std::string BuildInvokeHelperLifecycleOnCreateDexPayload(
       {0x106fu, framework_method_index, 0x0000u, 0x1070u, helper_method_index,
        0x0000u, 0x010au, 0x0222u, state_carrier_type_index, 0x2159u, 0x0000u,
        0x2152u, 0x0000u, 0x010fu},
-      "I", 3u,
+      "I", 3u, {}, 0u, 0u,
       {DexReferencedMethodFixture{
           .class_descriptor = "Landroid/app/Activity;",
           .method_name = "onCreate",
@@ -765,7 +874,7 @@ std::string BuildConstructorObjectReferenceLifecycleOnCreateDexPayload(
        state_carrier_type_index, 0x1070u, constructor_method_index, 0x0002u,
        0x025bu, current_carrier_field_index, 0x0354u,
        current_carrier_field_index, 0x3152u, state_value_field_index, 0x010fu},
-      "I", 4u,
+      "I", 4u, {}, 0u, 0u,
       {DexReferencedMethodFixture{
           .class_descriptor = "Landroid/app/Activity;",
           .method_name = "onCreate",
@@ -813,7 +922,7 @@ std::string BuildUnsupportedConstructorLifecycleOnCreateDexPayload(
       {0x106fu, framework_method_index, 0x0000u, 0x0222u,
        state_carrier_type_index, 0x1070u, constructor_method_index, 0x0002u,
        0x010fu},
-      "I", 3u,
+      "I", 3u, {}, 0u, 0u,
       {DexReferencedMethodFixture{
           .class_descriptor = "Landroid/app/Activity;",
           .method_name = "onCreate",
@@ -10180,23 +10289,46 @@ void TestLaunchApkFirstAppStartProofTargetsKeyboardSettingsActivityFixture() {
   Expect(output.find("\"lifecycle_method_name\": \"onCreate\"") !=
              std::string::npos,
          "expected lifecycle method name in keyboard fixture json");
-  Expect(output.find("\"framework_boundary_state\": \"blocked\"") !=
+  Expect(output.find(
+             "\"lifecycle_method_signature\": \"(Landroid/os/Bundle;)V\"") !=
              std::string::npos,
-         "expected first framework boundary to report the exact blocked state");
+         "expected lifecycle method signature in keyboard fixture json");
+  Expect(output.find(
+             "\"lifecycle_receiver_state\": "
+             "\"receiver-placeholder-materialized-in-parameter-register\"") !=
+             std::string::npos,
+         "expected receiver propagation through parameter register window");
+  Expect(output.find("\"lifecycle_receiver_register\": 2") !=
+             std::string::npos,
+         "expected receiver register index in keyboard fixture json");
+  Expect(output.find(
+             "\"lifecycle_parameter_state\": "
+             "\"parameter-placeholder-materialized\"") != std::string::npos,
+         "expected lifecycle parameter placeholder state in keyboard fixture json");
+  Expect(output.find(
+             "\"lifecycle_parameter_class_descriptor\": "
+             "\"Landroid/os/Bundle;\"") != std::string::npos,
+         "expected lifecycle parameter class descriptor in keyboard fixture json");
+  Expect(output.find("\"lifecycle_parameter_register\": 3") !=
+             std::string::npos,
+         "expected lifecycle parameter register index in keyboard fixture json");
+  Expect(output.find("\"framework_boundary_state\": \"framework-stubbed\"") !=
+             std::string::npos,
+         "expected first framework boundary to report the exact stubbed state");
   Expect(output.find("\"framework_boundary_reason\": "
-                     "\"invoke_receiver_missing\"") !=
+                     "\"android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint\"") !=
              std::string::npos,
          "expected framework boundary reason for keyboard fixture");
   Expect(output.find("\"bytecode_execution_state\": "
-                     "\"framework_boundary_blocked\"") !=
+                     "\"framework_boundary_stubbed\"") !=
              std::string::npos,
          "expected precise framework-boundary execution state for keyboard fixture");
   Expect(output.find("\"blocking_reason\": "
-                     "\"dex_invoke_receiver_missing\"") !=
+                     "\"framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V\"") !=
              std::string::npos,
-         "expected exact invoke-receiver blocker for keyboard fixture");
+         "expected exact framework-stubbed blocker for keyboard fixture");
   Expect(output.find("\"next_blocker\": "
-                     "\"propagate_framework_invoke_receiver_registers\"") !=
+                     "\"bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context\"") !=
              std::string::npos,
          "expected actionable next blocker for keyboard fixture");
 

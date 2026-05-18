@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.120 - 2026-05-18
+
+- Close **Phase 3: Runtime Context Bridge** around the first post-receiver managed-runtime seam instead of widening the interpreter sideways.
+- Extend the synthetic keyboard-identity `SettingsActivity.onCreate(Landroid/os/Bundle;)V` fixture path so Linuxoid now materializes the lifecycle receiver in the parameter-register window, materializes a deterministic `Landroid/os/Bundle;` placeholder alongside it, and reaches the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` framework boundary with exact proof fields instead of collapsing at `invoke_receiver_missing`.
+- Keep the blocker honest: the real keyboard APK still stops earlier at `launch_status: libraries_failed_to_load` and `surface_not_ready_for_first_app_start`, while the managed-runtime seam now reports `framework_boundary_reason: android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint` with `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+
 ## v0.1.119 - 2026-05-18
 
 - Close **Phase 2: Managed Activity Start** around the real keyboard verification target instead of only the synthetic `MainActivity` seam.
