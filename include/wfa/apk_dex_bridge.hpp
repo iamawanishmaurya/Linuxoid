@@ -45,7 +45,13 @@ struct NativeApkDexExecutionProbeReport {
   std::uint32_t instruction_offset = 0;
   std::uint16_t opcode_value = 0;
   std::string opcode_name;
+  std::uint32_t last_instruction_offset = 0;
+  std::uint16_t last_opcode_value = 0;
+  std::string last_opcode_name;
+  int decoded_instruction_count = 0;
   int executed_instruction_count = 0;
+  std::string returned_value_type;
+  std::string returned_value;
   std::string exact_blocker = "none";
   std::vector<std::string> diagnostics;
   std::vector<std::string> errors;

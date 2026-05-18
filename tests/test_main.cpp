@@ -273,7 +273,8 @@ std::string BuildDexCodeItem(const std::vector<std::uint16_t>& instructions) {
 std::string BuildDexPayloadWithEntrypoint(
     const std::vector<std::string>& class_descriptors,
     const std::string& requested_entrypoint_class_descriptor,
-    const std::vector<std::uint16_t>& entrypoint_instructions) {
+    const std::vector<std::uint16_t>& entrypoint_instructions,
+    const std::string& return_type_descriptor = "V") {
   std::vector<std::string> classes = class_descriptors;
   std::sort(classes.begin(), classes.end());
   classes.erase(std::unique(classes.begin(), classes.end()), classes.end());
@@ -290,11 +291,11 @@ std::string BuildDexPayloadWithEntrypoint(
       strings.push_back(value);
     }
   };
-  append_unique("V");
+  append_unique(return_type_descriptor);
   append_unique("linuxoidCheckpoint");
 
   std::vector<std::string> type_descriptors = classes;
-  type_descriptors.push_back("V");
+  type_descriptors.push_back(return_type_descriptor);
 
   const std::uint32_t string_ids_size =
       static_cast<std::uint32_t>(strings.size());
@@ -358,8 +359,8 @@ std::string BuildDexPayloadWithEntrypoint(
                string_indices.at(type_descriptors[index]));
   }
 
-  write_le32(proto_ids_off + 0u, string_indices.at("V"));
-  write_le32(proto_ids_off + 4u, type_indices.at("V"));
+  write_le32(proto_ids_off + 0u, string_indices.at(return_type_descriptor));
+  write_le32(proto_ids_off + 4u, type_indices.at(return_type_descriptor));
   write_le32(proto_ids_off + 8u, 0u);
 
   write_le16(method_ids_off + 0u,
@@ -433,6 +434,12 @@ std::string BuildDexPayloadWithEntrypoint(
 std::string BuildResolvableDexPayload(
     const std::vector<std::string>& class_descriptors) {
   return BuildDexPayloadWithEntrypoint(class_descriptors, "", {0x000eu});
+}
+
+std::string BuildResolvableIntReturningDexPayload(
+    const std::vector<std::string>& class_descriptors) {
+  return BuildDexPayloadWithEntrypoint(class_descriptors, "",
+                                       {0x1012u, 0x000fu}, "I");
 }
 
 std::string BuildUnsupportedOpcodeDexPayload(
@@ -8828,7 +8835,11 @@ void TestLaunchApkJavaProofHealsMalformedFiles() {
 void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
   namespace fs = std::filesystem;
   const auto fixture = CreateJavaKotlinApkProofFixture(
-      "linuxoid-first-app-start-checkpoint-ready");
+      "linuxoid-first-app-start-checkpoint-ready", true,
+      {{"classes.dex",
+        BuildResolvableIntReturningDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"})}});
   const ScopedEnvironmentVariable runtime_root_override(
       "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
   const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
@@ -8876,6 +8887,9 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
   Expect(output.find("\"target_method_name\": \"linuxoidCheckpoint\"") !=
              std::string::npos,
          "expected deterministic target method name in first app start json");
+  Expect(output.find("\"target_method_signature\": \"()I\"") !=
+             std::string::npos,
+         "expected int-returning target method signature in first app start json");
   Expect(output.find("\"java_art_bytecode_execution_requested\": true") !=
              std::string::npos,
          "expected bytecode execution request flag in first app start json");
@@ -8885,14 +8899,25 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
   Expect(output.find("\"java_art_bytecode_executed\": true") !=
              std::string::npos,
          "expected real decoded instruction execution in first app start json");
-  Expect(output.find("\"executed_instruction_count\": 1") !=
+  Expect(output.find("\"decoded_instruction_count\": 2") !=
              std::string::npos,
-         "expected one executed instruction in first app start json");
-  Expect(output.find("\"first_executed_opcode\": \"return-void\"") !=
+         "expected two decoded instructions in first app start json");
+  Expect(output.find("\"executed_instruction_count\": 2") !=
+             std::string::npos,
+         "expected two executed instructions in first app start json");
+  Expect(output.find("\"first_executed_opcode\": \"const/4\"") !=
              std::string::npos,
          "expected first executed opcode in first app start json");
+  Expect(output.find("\"last_executed_opcode\": \"return\"") !=
+             std::string::npos,
+         "expected last executed opcode in first app start json");
   Expect(output.find("\"reached_return\": true") != std::string::npos,
          "expected reached-return marker in first app start json");
+  Expect(output.find("\"returned_value_type\": \"I\"") !=
+             std::string::npos,
+         "expected returned value type in first app start json");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected returned value payload in first app start json");
   Expect(output.find(
              "\"blocking_reason\": \"needs-real-activitythread-context\"") !=
              std::string::npos,

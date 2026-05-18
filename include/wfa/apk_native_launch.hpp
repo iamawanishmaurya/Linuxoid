@@ -119,10 +119,16 @@ struct NativeApkFirstAppStartProof {
   bool java_art_bytecode_execution_attempted = false;
   bool java_art_bytecode_executed = false;
   bool reached_return = false;
+  int decoded_instruction_count = 0;
   int executed_instruction_count = 0;
   std::uint32_t instruction_offset = 0;
   std::uint16_t first_executed_opcode_value = 0;
   std::string first_executed_opcode;
+  std::uint32_t last_instruction_offset = 0;
+  std::uint16_t last_executed_opcode_value = 0;
+  std::string last_executed_opcode;
+  std::string returned_value_type;
+  std::string returned_value;
   std::string activity_lifecycle_state = "not_requested";
   std::vector<std::string> activity_states_visited;
   std::string surface_window_state = "not_requested";

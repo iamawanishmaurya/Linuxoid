@@ -459,6 +459,16 @@ std::string DescribeOpcode(std::uint16_t opcode) {
   return output.str();
 }
 
+std::string DetermineReturnTypeDescriptor(
+    const std::string& method_signature) {
+  const std::size_t separator = method_signature.find(')');
+  if (separator == std::string::npos ||
+      separator + 1 >= method_signature.size()) {
+    return "";
+  }
+  return method_signature.substr(separator + 1);
+}
+
 NativeApkDexExecutionProbeReport RunExecutionProbe(
     const std::string& bytes, const NativeApkDexBridgeSessionConfig& config,
     const NativeApkDexFileReport& file, const ParsedDexTables& tables) {
@@ -520,6 +530,12 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
   probe.execution_attempted = true;
   probe.ready = true;
   probe.execution_state = "interpreting";
+  const std::string return_type_descriptor =
+      DetermineReturnTypeDescriptor(probe.target_method_signature);
+  const std::uint16_t registers_size =
+      ReadLe16(bytes, candidate.code_off + 0u);
+  std::vector<std::int32_t> registers(
+      std::max<std::size_t>(registers_size, 16u), 0);
 
   std::uint32_t pc = 0;
   while (pc < insns_size) {
@@ -532,17 +548,64 @@ NativeApkDexExecutionProbeReport RunExecutionProbe(
       probe.opcode_name = opcode_name;
       probe.decoded_instruction = true;
     }
+    probe.last_instruction_offset = pc * 2u;
+    probe.last_opcode_value = opcode;
+    probe.last_opcode_name = opcode_name;
+    ++probe.decoded_instruction_count;
     ++probe.executed_instruction_count;
 
     switch (opcode) {
       case 0x00:  // nop
-      case 0x12:  // const/4
         ++pc;
         continue;
+      case 0x12: {  // const/4
+        const std::uint32_t destination =
+            static_cast<std::uint32_t>((code_unit >> 8u) & 0x0fu);
+        std::int32_t literal =
+            static_cast<std::int32_t>((code_unit >> 12u) & 0x0fu);
+        if (literal >= 8) {
+          literal -= 16;
+        }
+        if (destination >= registers.size()) {
+          probe.execution_state = "register_out_of_range";
+          probe.exact_blocker = "dex_register_out_of_range";
+          probe.errors.push_back("dex_register_out_of_range");
+          return probe;
+        }
+        registers[destination] = literal;
+        ++pc;
+        continue;
+      }
       case 0x0e:  // return-void
-      case 0x0f:  // return
+        probe.returned_value_type = "V";
+        probe.reached_return = true;
+        probe.execution_state = "returned";
+        probe.exact_blocker = "none";
+        probe.diagnostics.push_back(
+            "Self-Healing Android Device DEX probe executed a real bytecode instruction path");
+        return probe;
+      case 0x0f: {  // return
+        const std::uint32_t destination =
+            static_cast<std::uint32_t>((code_unit >> 8u) & 0x00ffu);
+        if (destination >= registers.size()) {
+          probe.execution_state = "register_out_of_range";
+          probe.exact_blocker = "dex_register_out_of_range";
+          probe.errors.push_back("dex_register_out_of_range");
+          return probe;
+        }
+        probe.returned_value_type =
+            return_type_descriptor.empty() ? "I" : return_type_descriptor;
+        probe.returned_value = std::to_string(registers[destination]);
+        probe.reached_return = true;
+        probe.execution_state = "returned";
+        probe.exact_blocker = "none";
+        probe.diagnostics.push_back(
+            "Self-Healing Android Device DEX probe executed a real bytecode instruction path");
+        return probe;
+      }
       case 0x10:  // return-wide
       case 0x11:  // return-object
+        probe.returned_value_type = return_type_descriptor;
         probe.reached_return = true;
         probe.execution_state = "returned";
         probe.exact_blocker = "none";
@@ -597,8 +660,20 @@ std::string RenderDexExecutionProbeJson(
          << "    \"opcode_value\": " << probe.opcode_value << ",\n"
          << "    \"opcode_name\": \"" << EscapeJson(probe.opcode_name)
          << "\",\n"
+         << "    \"last_instruction_offset\": "
+         << probe.last_instruction_offset << ",\n"
+         << "    \"last_opcode_value\": " << probe.last_opcode_value
+         << ",\n"
+         << "    \"last_opcode_name\": \""
+         << EscapeJson(probe.last_opcode_name) << "\",\n"
+         << "    \"decoded_instruction_count\": "
+         << probe.decoded_instruction_count << ",\n"
          << "    \"executed_instruction_count\": "
          << probe.executed_instruction_count << ",\n"
+         << "    \"returned_value_type\": \""
+         << EscapeJson(probe.returned_value_type) << "\",\n"
+         << "    \"returned_value\": \"" << EscapeJson(probe.returned_value)
+         << "\",\n"
          << "    \"exact_blocker\": \""
          << EscapeJson(probe.exact_blocker) << "\",\n"
          << "    \"diagnostics\": " << RenderJsonArray(probe.diagnostics)

@@ -1833,6 +1833,8 @@ std::string RenderFirstAppStartJson(
          << (proof.java_art_bytecode_executed ? "true" : "false") << ",\n"
          << "  \"reached_return\": "
          << (proof.reached_return ? "true" : "false") << ",\n"
+         << "  \"decoded_instruction_count\": "
+         << proof.decoded_instruction_count << ",\n"
          << "  \"executed_instruction_count\": "
          << proof.executed_instruction_count << ",\n"
          << "  \"instruction_offset\": " << proof.instruction_offset
@@ -1841,6 +1843,16 @@ std::string RenderFirstAppStartJson(
          << proof.first_executed_opcode_value << ",\n"
          << "  \"first_executed_opcode\": \""
          << EscapeJson(proof.first_executed_opcode) << "\",\n"
+         << "  \"last_instruction_offset\": " << proof.last_instruction_offset
+         << ",\n"
+         << "  \"last_executed_opcode_value\": "
+         << proof.last_executed_opcode_value << ",\n"
+         << "  \"last_executed_opcode\": \""
+         << EscapeJson(proof.last_executed_opcode) << "\",\n"
+         << "  \"returned_value_type\": \""
+         << EscapeJson(proof.returned_value_type) << "\",\n"
+         << "  \"returned_value\": \"" << EscapeJson(proof.returned_value)
+         << "\",\n"
          << "  \"activity_lifecycle_state\": \""
          << EscapeJson(proof.activity_lifecycle_state) << "\",\n"
          << "  \"activity_states_visited\": "
@@ -1920,11 +1932,18 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
       report.dex.execution_probe.decoded_instruction &&
       report.dex.execution_probe.executed_instruction_count > 0;
   proof.reached_return = report.dex.execution_probe.reached_return;
+  proof.decoded_instruction_count =
+      report.dex.execution_probe.decoded_instruction_count;
   proof.executed_instruction_count =
       report.dex.execution_probe.executed_instruction_count;
   proof.instruction_offset = report.dex.execution_probe.instruction_offset;
   proof.first_executed_opcode_value = report.dex.execution_probe.opcode_value;
   proof.first_executed_opcode = report.dex.execution_probe.opcode_name;
+  proof.last_instruction_offset = report.dex.execution_probe.last_instruction_offset;
+  proof.last_executed_opcode_value = report.dex.execution_probe.last_opcode_value;
+  proof.last_executed_opcode = report.dex.execution_probe.last_opcode_name;
+  proof.returned_value_type = report.dex.execution_probe.returned_value_type;
+  proof.returned_value = report.dex.execution_probe.returned_value;
   proof.activity_lifecycle_state = report.lifecycle.current_state.empty()
                                        ? report.activity_launch.current_state
                                        : report.lifecycle.current_state;
@@ -4170,6 +4189,9 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"reached_return\": "
          << (report.first_android_app_start.reached_return ? "true" : "false")
          << ",\n"
+         << "    \"decoded_instruction_count\": "
+         << report.first_android_app_start.decoded_instruction_count
+         << ",\n"
          << "    \"executed_instruction_count\": "
          << report.first_android_app_start.executed_instruction_count
          << ",\n"
@@ -4180,6 +4202,20 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << ",\n"
          << "    \"first_executed_opcode\": \""
          << EscapeJson(report.first_android_app_start.first_executed_opcode)
+         << "\",\n"
+         << "    \"last_instruction_offset\": "
+         << report.first_android_app_start.last_instruction_offset << ",\n"
+         << "    \"last_executed_opcode_value\": "
+         << report.first_android_app_start.last_executed_opcode_value
+         << ",\n"
+         << "    \"last_executed_opcode\": \""
+         << EscapeJson(report.first_android_app_start.last_executed_opcode)
+         << "\",\n"
+         << "    \"returned_value_type\": \""
+         << EscapeJson(report.first_android_app_start.returned_value_type)
+         << "\",\n"
+         << "    \"returned_value\": \""
+         << EscapeJson(report.first_android_app_start.returned_value)
          << "\",\n"
          << "    \"activity_lifecycle_state\": \""
          << EscapeJson(report.first_android_app_start.activity_lifecycle_state)

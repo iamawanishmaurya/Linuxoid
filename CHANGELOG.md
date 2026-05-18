@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.111 - 2026-05-18
+
+- Advance the **First DEX Method Return Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]` and `compatctl inspect-apk-first-start <apk-path> [staging-root]`, keeping the same execution-first scope and avoiding any new broad compatibility scaffolding.
+- Extend the minimal DEX interpreter from a single-opcode `return-void` proof into a tiny real method-return slice that parses the same deterministic fixture method as `linuxoidCheckpoint()I`, executes `const/4` followed by `return`, records decoded plus executed instruction counts, and reports `returned_value_type: "I"` with `returned_value: "1"`.
+- Keep unsupported boundaries precise and honest: Linuxoid still reports exact opcode plus offset plus method details when it stops, and the healthy fixture path still names `needs-real-activitythread-context` plus `bridge_activity_oncreate_into_real_art_runtime_context` as the next real blocker beyond this minimal interpreter checkpoint.
+- Update repo docs and status output to say plainly that Linuxoid now reaches a real DEX `return` for one tiny fixture method, but this is still not full ART-owned Java/Kotlin execution or Android framework dispatch.
+
 ## v0.1.110 - 2026-05-18
 
 - Add **First DEX Bytecode Execution Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]` and `compatctl inspect-apk-first-start <apk-path> [staging-root]`, reusing the real direct-session package, activity, process, window, runtime, and Java-proof seams instead of adding a disconnected compatibility layer.
