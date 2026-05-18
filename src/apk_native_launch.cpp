@@ -1828,6 +1828,20 @@ std::string RenderFirstAppStartJson(
          << EscapeJson(proof.framework_boundary_state) << "\",\n"
          << "  \"framework_boundary_reason\": \""
          << EscapeJson(proof.framework_boundary_reason) << "\",\n"
+         << "  \"object_register_field_operation\": \""
+         << EscapeJson(proof.object_register_field_operation) << "\",\n"
+         << "  \"object_register_field_state\": \""
+         << EscapeJson(proof.object_register_field_state) << "\",\n"
+         << "  \"object_register_field_reason\": \""
+         << EscapeJson(proof.object_register_field_reason) << "\",\n"
+         << "  \"object_class_descriptor\": \""
+         << EscapeJson(proof.object_class_descriptor) << "\",\n"
+         << "  \"field_class_descriptor\": \""
+         << EscapeJson(proof.field_class_descriptor) << "\",\n"
+         << "  \"field_name\": \"" << EscapeJson(proof.field_name)
+         << "\",\n"
+         << "  \"field_signature\": \""
+         << EscapeJson(proof.field_signature) << "\",\n"
          << "  \"lifecycle_method_name\": \""
          << EscapeJson(proof.lifecycle_method_name) << "\",\n"
          << "  \"lifecycle_method_signature\": \""
@@ -1948,6 +1962,18 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
       report.dex.execution_probe.framework_boundary_state;
   proof.framework_boundary_reason =
       report.dex.execution_probe.framework_boundary_reason;
+  proof.object_register_field_operation =
+      report.dex.execution_probe.object_register_field_operation;
+  proof.object_register_field_state =
+      report.dex.execution_probe.object_register_field_state;
+  proof.object_register_field_reason =
+      report.dex.execution_probe.object_register_field_reason;
+  proof.object_class_descriptor =
+      report.dex.execution_probe.object_class_descriptor;
+  proof.field_class_descriptor =
+      report.dex.execution_probe.field_class_descriptor;
+  proof.field_name = report.dex.execution_probe.field_name;
+  proof.field_signature = report.dex.execution_probe.field_signature;
   proof.lifecycle_method_name = report.dex.execution_probe.target_method_name;
   proof.lifecycle_method_signature =
       report.dex.execution_probe.target_method_signature;
@@ -4199,6 +4225,32 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"framework_boundary_reason\": \""
          << EscapeJson(
                 report.first_android_app_start.framework_boundary_reason)
+         << "\",\n"
+         << "    \"object_register_field_operation\": \""
+         << EscapeJson(
+                report.first_android_app_start.object_register_field_operation)
+         << "\",\n"
+         << "    \"object_register_field_state\": \""
+         << EscapeJson(
+                report.first_android_app_start.object_register_field_state)
+         << "\",\n"
+         << "    \"object_register_field_reason\": \""
+         << EscapeJson(
+                report.first_android_app_start.object_register_field_reason)
+         << "\",\n"
+         << "    \"object_class_descriptor\": \""
+         << EscapeJson(
+                report.first_android_app_start.object_class_descriptor)
+         << "\",\n"
+         << "    \"field_class_descriptor\": \""
+         << EscapeJson(
+                report.first_android_app_start.field_class_descriptor)
+         << "\",\n"
+         << "    \"field_name\": \""
+         << EscapeJson(report.first_android_app_start.field_name)
+         << "\",\n"
+         << "    \"field_signature\": \""
+         << EscapeJson(report.first_android_app_start.field_signature)
          << "\",\n"
          << "    \"lifecycle_method_name\": \""
          << EscapeJson(report.first_android_app_start.lifecycle_method_name)

@@ -22,6 +22,7 @@ struct NativeApkDexFileReport {
   std::uint32_t string_ids_size = 0;
   std::uint32_t type_ids_size = 0;
   std::uint32_t proto_ids_size = 0;
+  std::uint32_t field_ids_size = 0;
   std::uint32_t method_ids_size = 0;
   std::uint32_t class_defs_count = 0;
   std::vector<std::string> class_descriptors;
@@ -46,6 +47,13 @@ struct NativeApkDexExecutionProbeReport {
   std::string invoked_method_signature;
   std::string framework_boundary_state = "not_reached";
   std::string framework_boundary_reason = "none";
+  std::string object_register_field_operation;
+  std::string object_register_field_state = "not_reached";
+  std::string object_register_field_reason = "none";
+  std::string object_class_descriptor;
+  std::string field_class_descriptor;
+  std::string field_name;
+  std::string field_signature;
   std::uint32_t code_item_offset = 0;
   std::uint32_t instruction_offset = 0;
   std::uint16_t opcode_value = 0;

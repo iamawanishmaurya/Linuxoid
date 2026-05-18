@@ -254,7 +254,7 @@ Linuxoid's direct `launch-apk` path now supports these session-bound proof modes
 
 `--java-proof` now implements **P14 Java/Kotlin APK Proof Contract** on top of the existing package, activity, process, window, and runtime seams. It does not claim real Java/Kotlin bytecode execution yet. Instead, it proves that a Java/Kotlin-style APK can be inspected, resolved through `MAIN`/`LAUNCHER`, mapped onto deterministic process plus window plus runtime session artifacts, and persisted as a Linuxoid-owned `java_apk_proof` contract under `sandbox/data/data/<package>/java-proof/java-proof-state.json`, `java-proof-session-map.json`, and `java-proof-events.jsonl`. `inspect-apk-java` exposes that same proof contract directly, and the diagnostics stay explicit about current limits: this is bootstrap-and-lifecycle wiring proof for the Self-Healing Android Device path, not full ART-owned bytecode execution yet.
 
-### First Android Framework Boundary Checkpoint
+### First DEX Object/Register/Field Checkpoint
 
 `launch-apk --first-app-start-proof` and `inspect-apk-first-start` now drive one minimal Android app fixture through the real Linuxoid direct-session path as far as the current runtime honestly can:
 
@@ -276,7 +276,8 @@ What actually runs today:
 - Linuxoid locates the deterministic fixture lifecycle method `com.example.launchapk.MainActivity.onCreate()I`
 - Linuxoid decodes and executes a tiny real DEX instruction path through Linuxoid's minimal interpreter and records it in `first_android_app_start`
 - Linuxoid resolves the first framework-style call boundary as `Landroid/app/Activity;->onCreate()V`
-- Linuxoid currently supports the smallest opcode and method-resolution subset needed for this checkpoint: DEX header plus string plus type plus proto plus method plus class tables, `nop`, `const/4`, `return-void`, `return`, `return-wide`, `return-object`, and `invoke-super` resolution plus stub handling for `android.app.Activity.onCreate()V`
+- Linuxoid now also models one placeholder object plus one deterministic integer field round-trip for that lifecycle path
+- Linuxoid currently supports the smallest opcode, method-resolution, object, and field subset needed for this checkpoint: DEX header plus string plus type plus proto plus field plus method plus class tables, `nop`, `const/4`, `return-void`, `return`, `return-wide`, `return-object`, `new-instance`, `iget`, `iput`, and `invoke-super` resolution plus stub handling for `android.app.Activity.onCreate()V`
 
 What does **not** run yet:
 
@@ -296,10 +297,16 @@ The checkpoint stays explicit about that boundary. On the healthy fixture path t
 - `first_android_app_start.lifecycle_method_signature: "()I"`
 - `first_android_app_start.dex_parse_state: "header_tables_methods_and_code_item"`
 - `first_android_app_start.bytecode_execution_state: "returned"`
-- `first_android_app_start.first_executed_opcode: "const/4"`
+- `first_android_app_start.object_register_field_operation: "new-instance+iput+iget"`
+- `first_android_app_start.object_register_field_state: "object-placeholder"`
+- `first_android_app_start.object_class_descriptor: "Lcom/example/launchapk/StateCarrier;"`
+- `first_android_app_start.field_class_descriptor: "Lcom/example/launchapk/StateCarrier;"`
+- `first_android_app_start.field_name: "value"`
+- `first_android_app_start.field_signature: "I"`
+- `first_android_app_start.first_executed_opcode: "invoke-super"`
 - `first_android_app_start.last_executed_opcode: "return"`
-- `first_android_app_start.decoded_instruction_count: 4`
-- `first_android_app_start.executed_instruction_count: 4`
+- `first_android_app_start.decoded_instruction_count: 6`
+- `first_android_app_start.executed_instruction_count: 6`
 - `first_android_app_start.java_art_bytecode_executed: true`
 - `first_android_app_start.reached_return: true`
 - `first_android_app_start.returned_value_type: "I"`
@@ -307,7 +314,7 @@ The checkpoint stays explicit about that boundary. On the healthy fixture path t
 - `first_android_app_start.activity_lifecycle_state: "destroyed"`
 - `first_android_app_start.blocking_reason: "needs-real-activitythread-context"`
 
-So this is a truthful first Android framework-boundary proof for the Self-Healing Android Device path. Linuxoid now executes one tiny real `MainActivity.onCreate()I`-style DEX method through its own minimal interpreter, crosses a stubbed `android.app.Activity.onCreate()V` boundary, and reaches a real `return` instruction with a deterministic value, but that is still not a claim that Linuxoid already provides full ART or end-to-end Android framework execution.
+So this is a truthful first DEX object/register/field proof for the Self-Healing Android Device path. Linuxoid now executes one tiny real `MainActivity.onCreate()I`-style DEX method through its own minimal interpreter, crosses a stubbed `android.app.Activity.onCreate()V` boundary, allocates a placeholder `StateCarrier` object, executes a deterministic `iput` plus `iget` round-trip on its `value:I` field, and reaches a real `return` instruction with a deterministic value, but that is still not a claim that Linuxoid already provides a real ART heap, full object model, or end-to-end Android framework execution.
 
 Immediate next blocker:
 

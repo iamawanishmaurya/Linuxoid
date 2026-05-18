@@ -114,6 +114,13 @@ struct NativeApkFirstAppStartProof {
   std::string invoked_method_signature;
   std::string framework_boundary_state = "not_reached";
   std::string framework_boundary_reason = "none";
+  std::string object_register_field_operation;
+  std::string object_register_field_state = "not_reached";
+  std::string object_register_field_reason = "none";
+  std::string object_class_descriptor;
+  std::string field_class_descriptor;
+  std::string field_name;
+  std::string field_signature;
   std::string lifecycle_method_name;
   std::string lifecycle_method_signature;
   std::string target_method_name;

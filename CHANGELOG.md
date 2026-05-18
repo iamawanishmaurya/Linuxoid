@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.114 - 2026-05-18
+
+- Advance the execution-first checkpoint into a **First DEX Object/Register/Field Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, still scoped to one deterministic `MainActivity` seam instead of broad framework growth.
+- Extend the minimal DEX interpreter and first-app-start report so Linuxoid now executes a placeholder `new-instance` allocation plus deterministic `iput` and `iget` field access for `Lcom/example/launchapk/StateCarrier;->value:I` after the existing stubbed `Landroid/app/Activity;->onCreate()V` boundary.
+- Keep the result honest: Linuxoid now models one tiny object/register/field path with `object_register_field_state: object-placeholder` and still returns from `MainActivity.onCreate()I`, but this is still not a real ART heap or full Android framework execution, and the next blocker remains `bridge_activity_oncreate_into_real_art_runtime_context`.
+
 ## v0.1.113 - 2026-05-18
 
 - Advance the execution-first checkpoint into a **First Android Framework Boundary Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, still scoped to one deterministic app lifecycle seam instead of adding broad framework architecture.

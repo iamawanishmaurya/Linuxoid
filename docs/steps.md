@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: First DEX Object/Register/Field Checkpoint GREEN
+  Action: Extended the deterministic `MainActivity.onCreate()I` fixture method to allocate a placeholder `Lcom/example/launchapk/StateCarrier;` object, execute deterministic `iput` plus `iget` access for `value:I`, added the smallest DEX field-table plus `new-instance` plus `iput` plus `iget` interpreter support needed to model that seam honestly, and threaded `object_register_field_*` proof fields through the persisted first-app-start report.
+  Result: Linuxoid can now prove that one minimal app launch path crosses a first Android framework boundary and then executes one tiny object/register/field round-trip through the actual Linuxoid execution path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending ART-owned managed objects already exist.
+  Timestamp: 2026-05-19T01:35:00+05:30
+
 - Step: First Android Framework Boundary Checkpoint GREEN
   Action: Extended the deterministic `MainActivity.onCreate()I` fixture method to cross a real `invoke-super` boundary into `Landroid/app/Activity;->onCreate()V`, added the smallest method-resolution plus `invoke-super` interpreter support needed to identify that boundary, stub it honestly, and continue to a real `return`, and threaded the invoked class/method/signature plus `framework_boundary_state` through the persisted first-app-start report.
   Result: Linuxoid can now prove that one minimal app launch path reaches and reports its first Android framework-style method boundary through the actual Linuxoid execution path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending full Android framework execution already exists.
