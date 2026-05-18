@@ -10,6 +10,8 @@
 #include <string_view>
 #include <vector>
 
+#include <zlib.h>
+
 namespace wfa {
 
 namespace {
@@ -19,6 +21,8 @@ namespace fs = std::filesystem;
 constexpr std::uint32_t kLocalFileHeaderSignature = 0x04034b50;
 constexpr std::uint32_t kCentralDirectorySignature = 0x02014b50;
 constexpr std::uint32_t kEndOfCentralDirectorySignature = 0x06054b50;
+constexpr std::uint16_t kStoredCompressionMethod = 0u;
+constexpr std::uint16_t kDeflatedCompressionMethod = 8u;
 constexpr std::size_t kLocalFileHeaderFixedSize = 30;
 constexpr std::size_t kCentralDirectoryFixedSize = 46;
 constexpr std::size_t kEndOfCentralDirectoryFixedSize = 22;
@@ -26,12 +30,23 @@ constexpr std::size_t kEndOfCentralDirectorySearchWindow =
     0xFFFF + kEndOfCentralDirectoryFixedSize;
 
 std::vector<unsigned char> ReadBinaryFile(const std::string& path) {
-  std::ifstream input(path, std::ios::binary);
+  std::ifstream input(path, std::ios::binary | std::ios::ate);
   if (!input) {
     throw std::runtime_error("unable to open APK archive: " + path);
   }
-  return std::vector<unsigned char>(std::istreambuf_iterator<char>(input),
-                                    std::istreambuf_iterator<char>());
+  const std::streamsize size = input.tellg();
+  if (size < 0) {
+    throw std::runtime_error("unable to determine APK archive size: " + path);
+  }
+  input.seekg(0, std::ios::beg);
+  std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
+  if (size != 0) {
+    input.read(reinterpret_cast<char*>(bytes.data()), size);
+    if (!input) {
+      throw std::runtime_error("unable to read APK archive: " + path);
+    }
+  }
+  return bytes;
 }
 
 std::uint16_t ReadLe16(const std::vector<unsigned char>& bytes,
@@ -85,7 +100,45 @@ std::size_t FindEndOfCentralDirectory(const std::vector<unsigned char>& bytes) {
   throw std::runtime_error("unable to locate ZIP end-of-central-directory");
 }
 
+std::string InflateZipDeflate(const std::vector<unsigned char>& bytes,
+                              std::size_t data_offset,
+                              std::size_t compressed_size,
+                              std::uint32_t uncompressed_size) {
+  z_stream stream{};
+  stream.next_in = const_cast<Bytef*>(
+      reinterpret_cast<const Bytef*>(bytes.data() + data_offset));
+  stream.avail_in = static_cast<uInt>(compressed_size);
+
+  if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) {
+    throw std::runtime_error("inflate_init_failed");
+  }
+
+  std::string output(uncompressed_size, '\0');
+  stream.next_out = reinterpret_cast<Bytef*>(output.data());
+  stream.avail_out = static_cast<uInt>(output.size());
+
+  const int result = inflate(&stream, Z_FINISH);
+  inflateEnd(&stream);
+  if (result != Z_STREAM_END) {
+    throw std::runtime_error("inflate_failed");
+  }
+  if (stream.total_out != uncompressed_size) {
+    throw std::runtime_error("inflate_size_mismatch");
+  }
+  return output;
+}
+
 }  // namespace
+
+bool IsApkArchiveCompressionMethodSupported(std::uint16_t compression_method) {
+  return compression_method == kStoredCompressionMethod ||
+         compression_method == kDeflatedCompressionMethod;
+}
+
+bool IsApkArchiveEntryReadable(const ApkArchiveEntry& entry) {
+  return !entry.is_directory &&
+         IsApkArchiveCompressionMethodSupported(entry.compression_method);
+}
 
 OpenedApkArchive OpenApkArchive(const std::string& apk_path) {
   OpenedApkArchive archive;
@@ -181,7 +234,7 @@ ApkArchiveReadResult ReadApkArchiveEntry(const OpenedApkArchive& archive,
     result.failure_reason = "archive entry is a directory";
     return result;
   }
-  if (it->compression_method != 0) {
+  if (!IsApkArchiveCompressionMethodSupported(it->compression_method)) {
     result.failure_reason = "unsupported_zip_compression_method_" +
                             std::to_string(it->compression_method);
     return result;
@@ -210,8 +263,20 @@ ApkArchiveReadResult ReadApkArchiveEntry(const OpenedApkArchive& archive,
   }
 
   result.readable = true;
-  result.contents.assign(bytes.begin() + static_cast<std::ptrdiff_t>(data_offset),
-                         bytes.begin() + static_cast<std::ptrdiff_t>(data_end));
+  try {
+    if (it->compression_method == kStoredCompressionMethod) {
+      result.contents.assign(
+          bytes.begin() + static_cast<std::ptrdiff_t>(data_offset),
+          bytes.begin() + static_cast<std::ptrdiff_t>(data_end));
+    } else {
+      result.contents = InflateZipDeflate(bytes, data_offset, it->compressed_size,
+                                          it->uncompressed_size);
+    }
+  } catch (const std::exception& error) {
+    result.readable = false;
+    result.failure_reason = error.what();
+    result.contents.clear();
+  }
   return result;
 }
 

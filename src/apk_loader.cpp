@@ -1,4 +1,5 @@
 #include "wfa/apk_loader.hpp"
+#include "wfa/android_binary_xml.hpp"
 #include "wfa/apk_archive.hpp"
 
 #include <algorithm>
@@ -318,6 +319,30 @@ void PopulateManifestFromXml(ApkResourceReadinessReport* report,
       ExtractManifestActivityNames(manifest_xml);
 }
 
+bool TryPopulateManifestFromArchive(ApkResourceReadinessReport* report,
+                                    const OpenedApkArchive& archive) {
+  const auto manifest_read = ReadApkArchiveEntry(archive, "AndroidManifest.xml");
+  if (!manifest_read.found || !manifest_read.readable) {
+    return false;
+  }
+  if (manifest_read.contents.find("<manifest") != std::string::npos) {
+    PopulateManifestFromXml(report, manifest_read.contents, "archive_plain_xml");
+    return true;
+  }
+  if (!LooksLikeAndroidBinaryXml(manifest_read.contents)) {
+    return false;
+  }
+  const auto decoded = DecodeAndroidBinaryXmlToText(manifest_read.contents);
+  if (!decoded.success || decoded.xml_text.find("<manifest") == std::string::npos) {
+    for (const auto& error : decoded.errors) {
+      AppendUnique(report->errors, "binary_manifest_decode_failed: " + error);
+    }
+    return false;
+  }
+  PopulateManifestFromXml(report, decoded.xml_text, "archive_binary_xml_decoded");
+  return true;
+}
+
 std::vector<fs::path> BuildManifestCandidates(const std::string& resource_root,
                                               const std::string& manifest_hint) {
   std::vector<fs::path> candidates;
@@ -424,6 +449,10 @@ std::string BuildInstallId(const ApktoolMetadata& metadata) {
 }
 
 std::string InspectApkPackageName(const std::string& apk_path) {
+  const auto report = InspectApkResourceReadiness(apk_path);
+  if (report.manifest.manifest_ready && !report.manifest.package_name.empty()) {
+    return report.manifest.package_name;
+  }
   return InspectDecodedApk(apk_path).profile.package_name;
 }
 
@@ -456,13 +485,8 @@ ApkResourceReadinessReport InspectApkResourceReadiness(
       });
   report.manifest.manifest_present = manifest_entry != archive_entries.end();
 
-  if (report.manifest.manifest_present) {
-    const auto manifest_read = ReadApkArchiveEntry(archive, "AndroidManifest.xml");
-    if (manifest_read.found && manifest_read.readable &&
-        manifest_read.contents.find("<manifest") != std::string::npos) {
-      PopulateManifestFromXml(&report, manifest_read.contents,
-                              "archive_plain_xml");
-    }
+  if (report.manifest.manifest_present && archive_ready) {
+    report.manifest.manifest_ready = TryPopulateManifestFromArchive(&report, archive);
   }
 
   if (!report.manifest.manifest_ready &&
@@ -520,7 +544,7 @@ ApkResourceReadinessReport InspectApkResourceReadiness(
                     [](const ApkArchiveEntry& entry) {
                       return !entry.is_directory &&
                              entry.path.rfind("assets/", 0) == 0 &&
-                             entry.compression_method == 0;
+                             IsApkArchiveEntryReadable(entry);
                     }) ||
         report.asset_paths.empty();
     report.resources_table_present = std::any_of(

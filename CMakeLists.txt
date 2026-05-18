@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(CTest)
+find_package(ZLIB REQUIRED)
 
 find_path(WAYLAND_CLIENT_INCLUDE_DIR wayland-client.h)
 find_library(WAYLAND_CLIENT_LIBRARY wayland-client)
@@ -19,6 +20,7 @@ find_library(EGL_LIBRARY EGL)
 
 add_library(
   wfa_core
+  src/android_binary_xml.cpp
   src/apk_host_integration.cpp
   src/art_activity_bootstrap_fixture.cpp
   src/art_bootstrap_execution_fixture.cpp
@@ -41,6 +43,7 @@ add_library(
 )
 
 target_include_directories(wfa_core PUBLIC include)
+target_link_libraries(wfa_core PUBLIC ZLIB::ZLIB)
 
 add_library(
   linuxoid_p1

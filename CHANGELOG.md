@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.118 - 2026-05-18
+
+- Harden the direct APK intake path for the real `keyboard-0.1.28.apk` verification target without expanding sideways into new runtime architecture.
+- Add stored plus deflated ZIP entry support to the APK archive reader, replace the slow whole-file iterator path with a direct sized read, and add a minimal binary `AndroidManifest.xml` decoder that feeds the existing manifest/package/component/permission pipeline.
+- Extend the direct `launch-apk`, `inspect-apk-resources`, and `inspect-apk-permissions` flow so the real keyboard APK now returns trustworthy `archive_binary_xml_decoded` manifest metadata, launcher activity facts, permission inventory, and asset/resource readiness instead of hanging behind the old plain-XML-only seam.
+- Keep the blocker honest: the real keyboard APK now fails later at `launch_status: libraries_failed_to_load`, so the next narrow execution task is native library loading/runtime compatibility, not manifest decoding.
+
+## v0.1.117 - 2026-05-18
+
+- Advance the execution-first checkpoint into a **First DEX Constructor + Object Reference Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, still scoped to one deterministic `MainActivity` seam instead of broad framework growth.
+- Extend the minimal DEX interpreter and first-app-start report so Linuxoid now allocates a placeholder `Lcom/example/launchapk/StateCarrier;`, executes a tiny app-local constructor body `Lcom/example/launchapk/StateCarrier;-><init>()V` through `invoke-direct`, stores that object into `MainActivity.currentCarrier:Lcom/example/launchapk/StateCarrier;` with `iput-object`, reads it back through `iget-object`, reads `value:I` through `iget`, and returns the deterministic integer result.
+- Keep the result honest: Linuxoid now supports one tiny constructor plus object-reference field seam, but this is still not a real ART class loader, ActivityThread, heap-backed framework dispatch, or end-to-end Android app execution, and the next blocker remains `bridge_activity_oncreate_into_real_art_runtime_context`.
+
 ## v0.1.116 - 2026-05-18
 
 - Advance the execution-first checkpoint into a **First DEX App-Method Invocation Checkpoint** on top of `compatctl launch-apk --first-app-start-proof [--package <package>] [--component <component>] <apk-path> [staging-root]`, still scoped to one deterministic `MainActivity` seam instead of broad framework growth.

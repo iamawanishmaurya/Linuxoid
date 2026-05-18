@@ -1,5 +1,15 @@
 # Steps Log
 
+- Step: Keyboard APK Intake Checkpoint GREEN
+  Action: Hardened the direct APK path so Linuxoid now reads stored and deflated ZIP entries, decodes a useful subset of binary `AndroidManifest.xml`, and pushes those decoded package/component/permission facts through the existing `inspect-apk-resources`, `inspect-apk-permissions`, and `launch-apk` flow without requiring plain-text fixture manifests.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` target now returns trustworthy manifest, launcher, asset, permission, and ABI inventory facts through the direct Linuxoid path, and the next blocker is honestly `libraries_failed_to_load` rather than manifest decoding or large-APK intake hangs.
+  Timestamp: 2026-05-19T23:40:00+05:30
+
+- Step: First DEX Constructor + Object Reference Checkpoint GREEN
+  Action: Extended the deterministic `MainActivity.onCreate()I` fixture method to allocate a placeholder `Lcom/example/launchapk/StateCarrier;`, execute its tiny app-local constructor body `StateCarrier.<init>()V` through `invoke-direct`, store that object into `MainActivity.currentCarrier` with `iput-object`, read it back with `iget-object`, then read `value:I` with `iget` before returning.
+  Result: Linuxoid can now prove that one minimal app launch path executes a constructor-style invoke boundary plus object-reference and integer instance-field access through the actual Linuxoid DEX path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending ART-owned receiver, heap, or ActivityThread execution already exists.
+  Timestamp: 2026-05-19T16:55:00+05:30
+
 - Step: First DEX App-Method Invocation Checkpoint GREEN
   Action: Extended the deterministic `MainActivity.onCreate()I` fixture method to call a tiny app-local helper `linuxoidComputeValue()I`, taught the DEX bridge to retain class-defined method `code_off` metadata, execute one tiny `invoke-direct` target to completion, propagate its return value through `move-result`, and threaded `app_method_invocation_*` proof fields through the persisted first-app-start report.
   Result: Linuxoid can now prove that one minimal app launch path resolves the lifecycle receiver class, executes a real app-local method invocation seam, and still returns through the actual Linuxoid execution path, while still naming `bridge_activity_oncreate_into_real_art_runtime_context` as the next exact blocker instead of pretending ART-owned managed dispatch already exists.

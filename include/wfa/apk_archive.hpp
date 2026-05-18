@@ -30,6 +30,8 @@ struct OpenedApkArchive {
   std::vector<ApkArchiveEntry> entries;
 };
 
+bool IsApkArchiveCompressionMethodSupported(std::uint16_t compression_method);
+bool IsApkArchiveEntryReadable(const ApkArchiveEntry& entry);
 OpenedApkArchive OpenApkArchive(const std::string& apk_path);
 std::vector<ApkArchiveEntry> ListApkArchiveEntries(const std::string& apk_path);
 const std::vector<ApkArchiveEntry>& ListApkArchiveEntries(

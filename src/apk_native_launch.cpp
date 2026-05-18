@@ -1,6 +1,7 @@
 #include "wfa/apk_native_launch.hpp"
 
 #include "wfa/apk_activity_launch_bridge.hpp"
+#include "wfa/android_binary_xml.hpp"
 #include "wfa/apk_archive.hpp"
 #include "wfa/apk_asset_bridge.hpp"
 #include "wfa/apk_dex_bridge.hpp"
@@ -334,17 +335,30 @@ ParsedManifestMetadata ParseManifestMetadata(
     parsed.errors.push_back("manifest_unreadable:" + manifest.failure_reason);
     return parsed;
   }
-  if (manifest.contents.find("<manifest") == std::string::npos) {
-    parsed.errors.push_back("manifest_plain_xml_required");
-    limitations->push_back("binary_xml_manifest_not_supported_yet");
+  if (manifest.contents.find("<manifest") != std::string::npos) {
+    parsed.manifest_source = "archive_plain_xml";
+    parsed.manifest_contents = manifest.contents;
+  } else if (LooksLikeAndroidBinaryXml(manifest.contents)) {
+    const auto decoded = DecodeAndroidBinaryXmlToText(manifest.contents);
+    if (!decoded.success || decoded.xml_text.find("<manifest") == std::string::npos) {
+      parsed.errors.push_back("manifest_binary_xml_decode_failed");
+      for (const auto& error : decoded.errors) {
+        AppendError(&parsed.errors,
+                    "manifest_binary_xml_decode_failed:" + error);
+      }
+      limitations->push_back("binary_xml_manifest_decode_incomplete");
+      return parsed;
+    }
+    parsed.manifest_source = "archive_binary_xml_decoded";
+    parsed.manifest_contents = decoded.xml_text;
+  } else {
+    parsed.errors.push_back("manifest_format_unsupported");
+    limitations->push_back("manifest_format_unsupported_yet");
     return parsed;
   }
 
-  parsed.manifest_source = "archive_plain_xml";
-  parsed.manifest_contents = manifest.contents;
-
   try {
-    const auto profile = ParseDecodedManifest(manifest.contents);
+    const auto profile = ParseDecodedManifest(parsed.manifest_contents);
     parsed.package_name = profile.package_name;
     parsed.activity_names = profile.declared_activity_components;
     if (profile.has_launcher_activity) {
@@ -360,13 +374,13 @@ ParsedManifestMetadata ParseManifestMetadata(
   }
 
   parsed.version_code =
-      ExtractManifestInt(manifest.contents, "android:versionCode");
+      ExtractManifestInt(parsed.manifest_contents, "android:versionCode");
   parsed.version_name =
-      ExtractManifestString(manifest.contents, "android:versionName");
+      ExtractManifestString(parsed.manifest_contents, "android:versionName");
   parsed.min_sdk =
-      ExtractManifestInt(manifest.contents, "android:minSdkVersion");
+      ExtractManifestInt(parsed.manifest_contents, "android:minSdkVersion");
   parsed.target_sdk =
-      ExtractManifestInt(manifest.contents, "android:targetSdkVersion");
+      ExtractManifestInt(parsed.manifest_contents, "android:targetSdkVersion");
 
   if (parsed.package_name.empty()) {
     parsed.errors.push_back("manifest_package_name_missing");
@@ -2591,8 +2605,8 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       options.self_heal_proof_requested;
   report.surface.state = "not_requested";
   report.limitations = {
-      "plain_xml_manifest_parser_only",
-      "stored_zip_entries_only",
+      "decoded_binary_xml_manifest_subset_only",
+      "stored_and_deflated_zip_entries_only",
       "native_only_no_art_execution_yet",
   };
   if (report.dex_proof_requested) {
@@ -2617,8 +2631,7 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
   }
   if (report.permissions_proof_requested) {
     AppendError(&report.limitations, "permissions_and_appops_contract_only");
-    AppendError(&report.limitations,
-                "binary_manifest_permission_decode_not_supported_yet");
+    AppendError(&report.limitations, "permissions_from_decoded_manifest_only");
   }
   if (report.process_proof_requested) {
     AppendError(&report.limitations,

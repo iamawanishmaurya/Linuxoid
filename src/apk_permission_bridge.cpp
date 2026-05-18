@@ -586,7 +586,8 @@ NativeApkPermissionBridgeSession::BuildPermissionsReport() const {
       ComputeDeterministicUnixMs(context_.package_name, context_.user_id,
                                  context_.app_id);
 
-  if (context_.manifest_source != "archive_plain_xml") {
+  if (context_.manifest_source != "archive_plain_xml" &&
+      context_.manifest_source != "archive_binary_xml_decoded") {
     report.decode_level = "unsupported_manifest_source";
     AppendError(&report.errors,
                 "permissions_manifest_source_unsupported:" +
@@ -597,7 +598,10 @@ NativeApkPermissionBridgeSession::BuildPermissionsReport() const {
     return report;
   }
 
-  report.decode_level = "uses_permission_plain_xml";
+  report.decode_level =
+      context_.manifest_source == "archive_binary_xml_decoded"
+          ? "uses_permission_decoded_binary_xml"
+          : "uses_permission_plain_xml";
   report.requested_permissions =
       ParseRequestedPermissions(context_.manifest_contents);
   for (const auto& permission_name : report.requested_permissions) {

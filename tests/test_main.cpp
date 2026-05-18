@@ -42,6 +42,8 @@
 #include <string>
 #include <vector>
 
+#include <zlib.h>
+
 namespace {
 
 void Expect(bool condition, const std::string& message) {
@@ -197,6 +199,12 @@ void WriteLe32(std::ofstream& output, std::uint32_t value);
 void WriteStoredZipFixture(
     const std::filesystem::path& zip_path,
     const std::vector<std::pair<std::string, std::string>>& entries);
+
+struct ZipFixtureEntry {
+  std::string path;
+  std::string contents;
+  std::uint16_t compression_method = 0u;
+};
 
 std::string BuildStubDexPayload() {
   std::string payload(112, '\0');
@@ -726,6 +734,98 @@ std::string BuildInvokeHelperLifecycleOnCreateDexPayload(
           .instructions = {0x1012u, 0x000fu},
           .registers_size = 1u,
           .access_flags = 0x2u}});
+}
+
+std::string BuildConstructorObjectReferenceLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto state_carrier_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Lcom/example/launchapk/StateCarrier;");
+  Expect(state_carrier_it != ordered_types.end(),
+         "expected StateCarrier descriptor in constructor-object-reference lifecycle fixture");
+  const std::uint16_t state_carrier_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), state_carrier_it));
+
+  constexpr std::uint16_t framework_method_index = 1u;
+  constexpr std::uint16_t constructor_method_index = 2u;
+  constexpr std::uint16_t current_carrier_field_index = 0u;
+  constexpr std::uint16_t state_value_field_index = 1u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x106fu, framework_method_index, 0x0000u, 0x0222u,
+       state_carrier_type_index, 0x1070u, constructor_method_index, 0x0002u,
+       0x025bu, current_carrier_field_index, 0x0354u,
+       current_carrier_field_index, 0x3152u, state_value_field_index, 0x010fu},
+      "I", 4u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Landroid/app/Activity;",
+          .method_name = "onCreate",
+          .return_type_descriptor = "V"}},
+      {DexReferencedFieldFixture{
+           .class_descriptor = "Lcom/example/launchapk/MainActivity;",
+           .field_name = "currentCarrier",
+           .field_type_descriptor = "Lcom/example/launchapk/StateCarrier;"},
+       DexReferencedFieldFixture{
+           .class_descriptor = "Lcom/example/launchapk/StateCarrier;",
+           .field_name = "value",
+           .field_type_descriptor = "I"}},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/StateCarrier;",
+          .method_name = "<init>",
+          .return_type_descriptor = "V",
+          .instructions = {0x1112u, 0x0159u, state_value_field_index, 0x000eu},
+          .registers_size = 2u,
+          .access_flags = 0x10001u}});
+}
+
+std::string BuildUnsupportedConstructorLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto state_carrier_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Lcom/example/launchapk/StateCarrier;");
+  Expect(state_carrier_it != ordered_types.end(),
+         "expected StateCarrier descriptor in unsupported-constructor lifecycle fixture");
+  const std::uint16_t state_carrier_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), state_carrier_it));
+
+  constexpr std::uint16_t framework_method_index = 1u;
+  constexpr std::uint16_t constructor_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x106fu, framework_method_index, 0x0000u, 0x0222u,
+       state_carrier_type_index, 0x1070u, constructor_method_index, 0x0002u,
+       0x010fu},
+      "I", 3u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Landroid/app/Activity;",
+          .method_name = "onCreate",
+          .return_type_descriptor = "V"}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/StateCarrier;",
+          .method_name = "<init>",
+          .return_type_descriptor = "V",
+          .instructions = {0x00ffu},
+          .registers_size = 1u,
+          .access_flags = 0x10001u}});
 }
 
 std::string BuildUnsupportedOpcodeDexPayload(
@@ -1258,14 +1358,41 @@ void WriteLe32(std::ofstream& output, std::uint32_t value) {
   output.put(static_cast<char>((value >> 24) & 0xFF));
 }
 
-void WriteStoredZipFixture(
-    const std::filesystem::path& zip_path,
-    const std::vector<std::pair<std::string, std::string>>& entries) {
+std::string DeflateRawContents(const std::string& contents) {
+  if (contents.empty()) {
+    return {};
+  }
+
+  z_stream stream{};
+  Expect(deflateInit2(&stream, Z_BEST_SPEED, Z_DEFLATED, -MAX_WBITS, 8,
+                      Z_DEFAULT_STRATEGY) == Z_OK,
+         "expected raw deflate initialization to succeed");
+
+  std::string compressed;
+  compressed.resize(compressBound(static_cast<uLong>(contents.size())));
+
+  stream.next_in = reinterpret_cast<Bytef*>(
+      const_cast<char*>(contents.data()));
+  stream.avail_in = static_cast<uInt>(contents.size());
+  stream.next_out = reinterpret_cast<Bytef*>(compressed.data());
+  stream.avail_out = static_cast<uInt>(compressed.size());
+
+  const int result = deflate(&stream, Z_FINISH);
+  deflateEnd(&stream);
+  Expect(result == Z_STREAM_END, "expected raw deflate to finish cleanly");
+  compressed.resize(stream.total_out);
+  return compressed;
+}
+
+void WriteZipFixture(const std::filesystem::path& zip_path,
+                     const std::vector<ZipFixtureEntry>& entries) {
   struct CentralDirectoryEntry {
     std::string path;
-    std::uint32_t crc32 = 0;
-    std::uint32_t size = 0;
-    std::uint32_t local_header_offset = 0;
+    std::uint16_t compression_method = 0u;
+    std::uint32_t crc32 = 0u;
+    std::uint32_t compressed_size = 0u;
+    std::uint32_t uncompressed_size = 0u;
+    std::uint32_t local_header_offset = 0u;
   };
 
   std::ofstream output(zip_path, std::ios::binary);
@@ -1274,30 +1401,40 @@ void WriteStoredZipFixture(
   }
 
   std::vector<CentralDirectoryEntry> central_entries;
-  for (const auto& [path, contents] : entries) {
+  for (const auto& entry : entries) {
     const std::uint32_t local_header_offset =
         static_cast<std::uint32_t>(output.tellp());
-    const std::uint32_t crc32 = ComputeCrc32(contents);
-    const std::uint32_t size = static_cast<std::uint32_t>(contents.size());
+    const std::uint32_t crc32 = ComputeCrc32(entry.contents);
+    const std::uint32_t uncompressed_size =
+        static_cast<std::uint32_t>(entry.contents.size());
+    const std::string stored_contents =
+        entry.compression_method == 8u ? DeflateRawContents(entry.contents)
+                                       : entry.contents;
+    const std::uint32_t compressed_size =
+        static_cast<std::uint32_t>(stored_contents.size());
 
     WriteLe32(output, 0x04034B50u);
     WriteLe16(output, 20);
     WriteLe16(output, 0);
-    WriteLe16(output, 0);
+    WriteLe16(output, entry.compression_method);
     WriteLe16(output, 0);
     WriteLe16(output, 0);
     WriteLe32(output, crc32);
-    WriteLe32(output, size);
-    WriteLe32(output, size);
-    WriteLe16(output, static_cast<std::uint16_t>(path.size()));
+    WriteLe32(output, compressed_size);
+    WriteLe32(output, uncompressed_size);
+    WriteLe16(output, static_cast<std::uint16_t>(entry.path.size()));
     WriteLe16(output, 0);
-    output.write(path.data(), static_cast<std::streamsize>(path.size()));
-    output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+    output.write(entry.path.data(),
+                 static_cast<std::streamsize>(entry.path.size()));
+    output.write(stored_contents.data(),
+                 static_cast<std::streamsize>(stored_contents.size()));
 
     central_entries.push_back(CentralDirectoryEntry{
-        .path = path,
+        .path = entry.path,
+        .compression_method = entry.compression_method,
         .crc32 = crc32,
-        .size = size,
+        .compressed_size = compressed_size,
+        .uncompressed_size = uncompressed_size,
         .local_header_offset = local_header_offset,
     });
   }
@@ -1309,12 +1446,12 @@ void WriteStoredZipFixture(
     WriteLe16(output, 20);
     WriteLe16(output, 20);
     WriteLe16(output, 0);
-    WriteLe16(output, 0);
+    WriteLe16(output, entry.compression_method);
     WriteLe16(output, 0);
     WriteLe16(output, 0);
     WriteLe32(output, entry.crc32);
-    WriteLe32(output, entry.size);
-    WriteLe32(output, entry.size);
+    WriteLe32(output, entry.compressed_size);
+    WriteLe32(output, entry.uncompressed_size);
     WriteLe16(output, static_cast<std::uint16_t>(entry.path.size()));
     WriteLe16(output, 0);
     WriteLe16(output, 0);
@@ -1336,6 +1473,340 @@ void WriteStoredZipFixture(
   WriteLe32(output, central_directory_size);
   WriteLe32(output, central_directory_offset);
   WriteLe16(output, 0);
+}
+
+void WriteStoredZipFixture(
+    const std::filesystem::path& zip_path,
+    const std::vector<std::pair<std::string, std::string>>& entries) {
+  std::vector<ZipFixtureEntry> zip_entries;
+  zip_entries.reserve(entries.size());
+  for (const auto& [path, contents] : entries) {
+    zip_entries.push_back(
+        {.path = path, .contents = contents, .compression_method = 0u});
+  }
+  WriteZipFixture(zip_path, zip_entries);
+}
+
+void AppendLe16(std::string* output, std::uint16_t value) {
+  output->push_back(static_cast<char>(value & 0xFFu));
+  output->push_back(static_cast<char>((value >> 8) & 0xFFu));
+}
+
+void AppendLe32(std::string* output, std::uint32_t value) {
+  output->push_back(static_cast<char>(value & 0xFFu));
+  output->push_back(static_cast<char>((value >> 8) & 0xFFu));
+  output->push_back(static_cast<char>((value >> 16) & 0xFFu));
+  output->push_back(static_cast<char>((value >> 24) & 0xFFu));
+}
+
+void PatchLe32(std::string* output, std::size_t offset, std::uint32_t value) {
+  (*output)[offset + 0] = static_cast<char>(value & 0xFFu);
+  (*output)[offset + 1] = static_cast<char>((value >> 8) & 0xFFu);
+  (*output)[offset + 2] = static_cast<char>((value >> 16) & 0xFFu);
+  (*output)[offset + 3] = static_cast<char>((value >> 24) & 0xFFu);
+}
+
+std::string EncodeStringPoolUtf8Length(std::uint32_t value) {
+  std::string encoded;
+  if (value <= 0x7Fu) {
+    encoded.push_back(static_cast<char>(value));
+  } else {
+    encoded.push_back(static_cast<char>(0x80u | ((value >> 7u) & 0x7Fu)));
+    encoded.push_back(static_cast<char>(value & 0x7Fu));
+  }
+  return encoded;
+}
+
+std::string BuildUtf8StringPoolChunk(const std::vector<std::string>& strings) {
+  std::string string_data;
+  std::vector<std::uint32_t> offsets;
+  offsets.reserve(strings.size());
+  for (const auto& value : strings) {
+    offsets.push_back(static_cast<std::uint32_t>(string_data.size()));
+    string_data += EncodeStringPoolUtf8Length(
+        static_cast<std::uint32_t>(value.size()));
+    string_data += EncodeStringPoolUtf8Length(
+        static_cast<std::uint32_t>(value.size()));
+    string_data += value;
+    string_data.push_back('\0');
+  }
+
+  std::string chunk;
+  AppendLe16(&chunk, 0x0001u);
+  AppendLe16(&chunk, 28u);
+  AppendLe32(&chunk, 0u);
+  AppendLe32(&chunk, static_cast<std::uint32_t>(strings.size()));
+  AppendLe32(&chunk, 0u);
+  AppendLe32(&chunk, 0x00000100u);
+  AppendLe32(&chunk, 28u + static_cast<std::uint32_t>(strings.size() * 4u));
+  AppendLe32(&chunk, 0u);
+  for (const auto offset : offsets) {
+    AppendLe32(&chunk, offset);
+  }
+  chunk += string_data;
+  PatchLe32(&chunk, 4u, static_cast<std::uint32_t>(chunk.size()));
+  return chunk;
+}
+
+struct BinaryManifestAttributeFixture {
+  bool android_namespace = false;
+  std::string name;
+  std::string string_value;
+  std::uint8_t type = 0x03u;
+  std::uint32_t data = 0u;
+};
+
+struct BinaryManifestElementFixture {
+  std::string name;
+  std::vector<BinaryManifestAttributeFixture> attributes;
+  std::vector<BinaryManifestElementFixture> children;
+};
+
+void CollectBinaryManifestStrings(
+    const BinaryManifestElementFixture& element,
+    std::vector<std::string>* strings) {
+  if (std::find(strings->begin(), strings->end(), element.name) ==
+      strings->end()) {
+    strings->push_back(element.name);
+  }
+  for (const auto& attribute : element.attributes) {
+    if (std::find(strings->begin(), strings->end(), attribute.name) ==
+        strings->end()) {
+      strings->push_back(attribute.name);
+    }
+    if (!attribute.string_value.empty() &&
+        std::find(strings->begin(), strings->end(), attribute.string_value) ==
+            strings->end()) {
+      strings->push_back(attribute.string_value);
+    }
+  }
+  for (const auto& child : element.children) {
+    CollectBinaryManifestStrings(child, strings);
+  }
+}
+
+std::string BuildBinaryXmlStartNamespace(std::uint32_t prefix_index,
+                                         std::uint32_t uri_index,
+                                         bool start) {
+  std::string chunk;
+  AppendLe16(&chunk, start ? 0x0100u : 0x0101u);
+  AppendLe16(&chunk, 16u);
+  AppendLe32(&chunk, 24u);
+  AppendLe32(&chunk, 1u);
+  AppendLe32(&chunk, 0xFFFFFFFFu);
+  AppendLe32(&chunk, prefix_index);
+  AppendLe32(&chunk, uri_index);
+  return chunk;
+}
+
+std::string BuildBinaryXmlElementChunk(
+    const BinaryManifestElementFixture& element,
+    const std::map<std::string, std::uint32_t>& string_indexes,
+    bool start) {
+  std::string chunk;
+  const auto name_it = string_indexes.find(element.name);
+  Expect(name_it != string_indexes.end(),
+         "expected binary manifest element name in string pool");
+  if (start) {
+    AppendLe16(&chunk, 0x0102u);
+    AppendLe16(&chunk, 16u);
+    AppendLe32(&chunk, 36u +
+                           static_cast<std::uint32_t>(element.attributes.size() * 20u));
+    AppendLe32(&chunk, 1u);
+    AppendLe32(&chunk, 0xFFFFFFFFu);
+    AppendLe32(&chunk, 0xFFFFFFFFu);
+    AppendLe32(&chunk, name_it->second);
+    AppendLe16(&chunk, 20u);
+    AppendLe16(&chunk, 20u);
+    AppendLe16(&chunk,
+               static_cast<std::uint16_t>(element.attributes.size()));
+    AppendLe16(&chunk, 0u);
+    AppendLe16(&chunk, 0u);
+    AppendLe16(&chunk, 0u);
+    for (const auto& attribute : element.attributes) {
+      const auto attr_name_it = string_indexes.find(attribute.name);
+      Expect(attr_name_it != string_indexes.end(),
+             "expected binary manifest attribute name in string pool");
+      const auto attr_value_it = string_indexes.find(attribute.string_value);
+      const std::uint32_t raw_value_index =
+          attribute.string_value.empty() ? 0xFFFFFFFFu : attr_value_it->second;
+      AppendLe32(&chunk, attribute.android_namespace
+                             ? string_indexes.at("http://schemas.android.com/apk/res/android")
+                             : 0xFFFFFFFFu);
+      AppendLe32(&chunk, attr_name_it->second);
+      AppendLe32(&chunk, raw_value_index);
+      AppendLe16(&chunk, 8u);
+      chunk.push_back('\0');
+      chunk.push_back(static_cast<char>(attribute.type));
+      const std::uint32_t typed_data =
+          attribute.type == 0x03u && !attribute.string_value.empty()
+              ? attr_value_it->second
+              : attribute.data;
+      AppendLe32(&chunk, typed_data);
+    }
+    return chunk;
+  }
+
+  AppendLe16(&chunk, 0x0103u);
+  AppendLe16(&chunk, 16u);
+  AppendLe32(&chunk, 24u);
+  AppendLe32(&chunk, 1u);
+  AppendLe32(&chunk, 0xFFFFFFFFu);
+  AppendLe32(&chunk, 0xFFFFFFFFu);
+  AppendLe32(&chunk, name_it->second);
+  return chunk;
+}
+
+void AppendBinaryManifestElement(
+    std::string* xml,
+    const BinaryManifestElementFixture& element,
+    const std::map<std::string, std::uint32_t>& string_indexes) {
+  *xml += BuildBinaryXmlElementChunk(element, string_indexes, true);
+  for (const auto& child : element.children) {
+    AppendBinaryManifestElement(xml, child, string_indexes);
+  }
+  *xml += BuildBinaryXmlElementChunk(element, string_indexes, false);
+}
+
+std::string BuildBinaryManifestFixtureXml() {
+  const BinaryManifestElementFixture manifest{
+      .name = "manifest",
+      .attributes =
+          {
+              {.android_namespace = false,
+               .name = "package",
+               .string_value = "com.example.binary"},
+              {.android_namespace = true,
+               .name = "versionCode",
+               .type = 0x10u,
+               .data = 7u},
+              {.android_namespace = true,
+               .name = "versionName",
+               .string_value = "0.0.7"},
+          },
+      .children =
+          {
+              {.name = "uses-sdk",
+               .attributes =
+                   {
+                       {.android_namespace = true,
+                        .name = "minSdkVersion",
+                        .type = 0x10u,
+                        .data = 24u},
+                       {.android_namespace = true,
+                        .name = "targetSdkVersion",
+                        .type = 0x10u,
+                        .data = 34u},
+                   }},
+              {.name = "uses-permission",
+               .attributes =
+                   {
+                       {.android_namespace = true,
+                        .name = "name",
+                        .string_value = "android.permission.RECORD_AUDIO"},
+                   }},
+              {.name = "application",
+               .children =
+                   {
+                       {.name = "activity",
+                        .attributes =
+                            {
+                                {.android_namespace = true,
+                                 .name = "name",
+                                 .string_value = "com.example.binary.MainActivity"},
+                            },
+                        .children =
+                            {
+                                {.name = "intent-filter",
+                                 .children =
+                                     {
+                                         {.name = "action",
+                                          .attributes =
+                                              {
+                                                  {.android_namespace = true,
+                                                   .name = "name",
+                                                   .string_value = "android.intent.action.MAIN"},
+                                              }},
+                                         {.name = "category",
+                                          .attributes =
+                                              {
+                                                  {.android_namespace = true,
+                                                   .name = "name",
+                                                   .string_value = "android.intent.category.LAUNCHER"},
+                                              }},
+                                     }},
+                            }},
+                   }},
+          }};
+
+  std::vector<std::string> strings = {"android",
+                                      "http://schemas.android.com/apk/res/android"};
+  CollectBinaryManifestStrings(manifest, &strings);
+  std::map<std::string, std::uint32_t> string_indexes;
+  for (std::size_t index = 0; index < strings.size(); ++index) {
+    string_indexes.emplace(strings[index], static_cast<std::uint32_t>(index));
+  }
+
+  std::string xml_chunk;
+  xml_chunk += BuildBinaryXmlStartNamespace(string_indexes.at("android"),
+                                            string_indexes.at("http://schemas.android.com/apk/res/android"),
+                                            true);
+  AppendBinaryManifestElement(&xml_chunk, manifest, string_indexes);
+  xml_chunk += BuildBinaryXmlStartNamespace(string_indexes.at("android"),
+                                            string_indexes.at("http://schemas.android.com/apk/res/android"),
+                                            false);
+
+  const std::string string_pool = BuildUtf8StringPoolChunk(strings);
+  std::string document;
+  AppendLe16(&document, 0x0003u);
+  AppendLe16(&document, 8u);
+  AppendLe32(&document,
+             static_cast<std::uint32_t>(8u + string_pool.size() + xml_chunk.size()));
+  document += string_pool;
+  document += xml_chunk;
+  return document;
+}
+
+NativeApkLaunchFixture CreateBinaryManifestNativeApkLaunchFixture(
+    const std::string& fixture_name, bool include_native_library = true,
+    const std::vector<ZipFixtureEntry>& extra_entries = {}) {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / fixture_name;
+  fs::remove_all(root);
+  fs::create_directories(root);
+
+  std::vector<ZipFixtureEntry> archive_entries = {
+      {.path = "AndroidManifest.xml",
+       .contents = BuildBinaryManifestFixtureXml(),
+       .compression_method = 8u},
+      {.path = "assets/config/hello.txt",
+       .contents = "hello binary manifest asset\n",
+       .compression_method = 8u},
+      {.path = "resources.arsc", .contents = "arsc", .compression_method = 0u},
+  };
+
+  if (include_native_library) {
+    const fs::path build_dir = ResolveBuildDirFromTestBinary();
+    const fs::path fixture_library = build_dir / "liblinuxoid_p1_fixture.so";
+    Expect(fs::exists(fixture_library),
+           "expected linuxoid p1 fixture library to exist");
+    archive_entries.push_back(
+        {.path = "lib/x86_64/libcalculator.so",
+         .contents = ReadBinaryFile(fixture_library),
+         .compression_method = 8u});
+  }
+
+  archive_entries.insert(archive_entries.end(), extra_entries.begin(),
+                         extra_entries.end());
+
+  const fs::path apk_path = root / "native-launch.apk";
+  WriteZipFixture(apk_path, archive_entries);
+
+  return {.root = root,
+          .apk_path = apk_path,
+          .staging_root = root / "staging",
+          .package_name = "com.example.binary",
+          .launcher_component = "com.example.binary/.MainActivity"};
 }
 
 void TestWeightedCheckpointProgress() {
@@ -2402,6 +2873,52 @@ void TestOpenedApkArchiveReadsEntriesDeterministically() {
   fs::remove_all(root);
 }
 
+void TestOpenedApkArchiveReadsDeflatedEntriesDeterministically() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-opened-apk-archive-deflated";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path apk_path = root / "fixture.apk";
+  const std::string binary_manifest = BuildBinaryManifestFixtureXml();
+  WriteZipFixture(
+      apk_path,
+      {
+          {.path = "AndroidManifest.xml",
+           .contents = binary_manifest,
+           .compression_method = 8u},
+          {.path = "assets/config/hello.txt",
+           .contents = "hello deflated archive\n",
+           .compression_method = 8u},
+      });
+
+  const auto archive = wfa::OpenApkArchive(apk_path.string());
+  const auto& entries = wfa::ListApkArchiveEntries(archive);
+  Expect(entries.size() == 2, "expected two deflated archive entries");
+  Expect(entries[0].compression_method == 8u,
+         "expected deflated manifest compression method");
+  Expect(wfa::IsApkArchiveEntryReadable(entries[0]),
+         "expected deflated manifest entry to be readable");
+  Expect(entries[1].compression_method == 8u,
+         "expected deflated asset compression method");
+  Expect(wfa::IsApkArchiveEntryReadable(entries[1]),
+         "expected deflated asset entry to be readable");
+
+  const auto manifest =
+      wfa::ReadApkArchiveEntry(archive, "AndroidManifest.xml");
+  Expect(manifest.readable, "expected deflated manifest read to succeed");
+  Expect(manifest.contents == binary_manifest,
+         "expected deflated manifest contents to round-trip");
+
+  const auto asset =
+      wfa::ReadApkArchiveEntry(archive, "assets/config/hello.txt");
+  Expect(asset.readable, "expected deflated asset read to succeed");
+  Expect(asset.contents == "hello deflated archive\n",
+         "expected deflated asset contents");
+
+  fs::remove_all(root);
+}
+
 void TestApkResourceReadinessUsesStagedManifestFallback() {
   namespace fs = std::filesystem;
   const fs::path root =
@@ -2442,6 +2959,52 @@ void TestApkResourceReadinessUsesStagedManifestFallback() {
   Expect(std::find(report.errors.begin(), report.errors.end(),
                    "manifest_missing") == report.errors.end(),
          "expected no manifest_missing error when staged manifest exists");
+
+  fs::remove_all(root);
+}
+
+void TestApkResourceReadinessDecodesBinaryManifestFromArchive() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() / "linuxoid-apk-resource-binary-manifest";
+  fs::remove_all(root);
+  fs::create_directories(root);
+  const fs::path apk_path = root / "fixture.apk";
+  WriteZipFixture(
+      apk_path,
+      {
+          {.path = "AndroidManifest.xml",
+           .contents = BuildBinaryManifestFixtureXml(),
+           .compression_method = 8u},
+          {.path = "assets/config/hello.txt",
+           .contents = "hello binary manifest asset\n",
+           .compression_method = 8u},
+          {.path = "resources.arsc", .contents = "arsc", .compression_method = 0u},
+      });
+
+  const auto report = wfa::InspectApkResourceReadiness(apk_path.string());
+  Expect(report.manifest.manifest_present, "expected binary manifest presence");
+  Expect(report.manifest.manifest_ready, "expected binary manifest readiness");
+  Expect(report.manifest.manifest_source == "archive_binary_xml_decoded",
+         "expected decoded binary manifest source");
+  Expect(report.manifest.package_name == "com.example.binary",
+         "expected package name from decoded binary manifest");
+  Expect(report.manifest.min_sdk == 24, "expected min sdk from binary manifest");
+  Expect(report.manifest.target_sdk == 34,
+         "expected target sdk from binary manifest");
+  Expect(report.manifest.activity_names.size() == 1,
+         "expected one launcher activity from binary manifest");
+  Expect(report.manifest.activity_names.front() ==
+             "com.example.binary.MainActivity",
+         "expected launcher activity from decoded binary manifest");
+  Expect(report.asset_listing_ready, "expected binary manifest asset listing");
+  Expect(report.asset_read_ready, "expected binary manifest asset read support");
+  Expect(report.asset_paths.size() == 1, "expected one binary asset path");
+  Expect(report.asset_paths.front() == "config/hello.txt",
+         "expected normalized binary asset path");
+  Expect(report.resources_table_present,
+         "expected resources table presence from archive entry");
+  Expect(report.errors.empty(), "expected no binary manifest readiness errors");
 
   fs::remove_all(root);
 }
@@ -5808,8 +6371,8 @@ void TestLaunchApkCommandRunsNativeOnlyFixture() {
   Expect(output.find("\"diagnostics\": [\"[fixture] JNI_OnLoad invoked\"") !=
              std::string::npos,
          "expected captured native diagnostics in launch-apk json");
-  Expect(output.find("\"limitations\": [\"plain_xml_manifest_parser_only\", "
-                     "\"stored_zip_entries_only\", "
+  Expect(output.find("\"limitations\": [\"decoded_binary_xml_manifest_subset_only\", "
+                     "\"stored_and_deflated_zip_entries_only\", "
                      "\"native_only_no_art_execution_yet\"]") !=
              std::string::npos,
          "expected limitation list in launch-apk json");
@@ -7701,6 +8264,58 @@ void TestLaunchApkPermissionsProofPersistsStateUnderSandbox() {
   fs::remove_all(fixture.root);
 }
 
+void TestLaunchApkPermissionsProofSupportsDecodedBinaryManifest() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateBinaryManifestNativeApkLaunchFixture(
+      "linuxoid-launch-apk-binary-manifest-permissions", true);
+
+  const auto report = wfa::LaunchNativeApk(
+      fixture.apk_path.string(),
+      {.staging_root = fixture.staging_root.string(),
+       .storage_proof_requested = true,
+       .permissions_proof_requested = true});
+
+  Expect(report.package_name == "com.example.binary",
+         "expected decoded binary manifest package name");
+  Expect(report.manifest_source == "archive_binary_xml_decoded",
+         "expected decoded binary manifest source in launch report");
+  Expect(report.launcher_component == "com.example.binary/.MainActivity",
+         "expected decoded binary launcher component");
+  Expect(report.launch_ready,
+         "expected binary manifest launch fixture to reach native launch success");
+  Expect(report.permissions.ready,
+         "expected ready permissions contract for decoded binary manifest");
+  Expect(report.permissions.decode_level == "uses_permission_decoded_binary_xml",
+         "expected decoded binary manifest permission decode level");
+  Expect(report.permissions.requested_permissions.size() == 1,
+         "expected one parsed permission from binary manifest");
+  Expect(report.permissions.requested_permissions.front() ==
+             "android.permission.RECORD_AUDIO",
+         "expected record audio permission from binary manifest");
+  Expect(report.permission_health == "ready",
+         "expected permission health ready for decoded binary manifest");
+  Expect(report.app_ops.ready,
+         "expected app ops contract for decoded binary manifest");
+  Expect(report.jni_onload_called,
+         "expected JNI_OnLoad to run from deflated native library entry");
+  Expect(report.errors.empty(),
+         "expected no launch errors for decoded binary manifest fixture");
+  Expect(std::find(report.limitations.begin(), report.limitations.end(),
+                   "decoded_binary_xml_manifest_subset_only") !=
+             report.limitations.end(),
+         "expected decoded binary manifest limitation to remain explicit");
+  Expect(std::find(report.limitations.begin(), report.limitations.end(),
+                   "stored_and_deflated_zip_entries_only") !=
+             report.limitations.end(),
+         "expected supported zip method limitation to remain explicit");
+  Expect(std::find(report.limitations.begin(), report.limitations.end(),
+                   "permissions_from_decoded_manifest_only") !=
+             report.limitations.end(),
+         "expected decoded permission limitation to remain explicit");
+
+  fs::remove_all(fixture.root);
+}
+
 void TestLaunchApkPermissionsProofPersistenceRoundTripIsDeterministic() {
   namespace fs = std::filesystem;
   const std::string manifest = R"(<manifest package="com.example.launchapk" android:versionCode="1" android:versionName="1.0.0">
@@ -9132,7 +9747,7 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
   const auto fixture = CreateJavaKotlinApkProofFixture(
       "linuxoid-first-app-start-checkpoint-ready", true,
       {{"classes.dex",
-        BuildInvokeHelperLifecycleOnCreateDexPayload(
+        BuildConstructorObjectReferenceLifecycleOnCreateDexPayload(
             {"Lcom/example/launchapk/App;",
              "Lcom/example/launchapk/StateCarrier;",
              "Lcom/example/launchapk/MainActivity;"},
@@ -9188,13 +9803,13 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
                      "\"invoke-direct-returned\"") != std::string::npos,
          "expected app method invocation state in first app start json");
   Expect(output.find("\"app_invoked_method_class_descriptor\": "
-                     "\"Lcom/example/launchapk/MainActivity;\"") !=
+                     "\"Lcom/example/launchapk/StateCarrier;\"") !=
              std::string::npos,
          "expected app invoked method class descriptor in first app start json");
   Expect(output.find("\"app_invoked_method_name\": "
-                     "\"linuxoidComputeValue\"") != std::string::npos,
+                     "\"<init>\"") != std::string::npos,
          "expected app invoked method name in first app start json");
-  Expect(output.find("\"app_invoked_method_signature\": \"()I\"") !=
+  Expect(output.find("\"app_invoked_method_signature\": \"()V\"") !=
              std::string::npos,
          "expected app invoked method signature in first app start json");
   Expect(output.find(
@@ -9243,7 +9858,7 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
              std::string::npos,
          "expected real decoded instruction execution in first app start json");
   Expect(output.find("\"object_register_field_operation\": "
-                     "\"new-instance+iput+iget\"") != std::string::npos,
+                     "\"new-instance+invoke-direct+iput-object+iget-object+iget\"") != std::string::npos,
          "expected object/register/field operation name in first app start json");
   Expect(output.find("\"object_register_field_state\": "
                      "\"object-placeholder\"") != std::string::npos,
@@ -9258,14 +9873,15 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
          "expected field class descriptor in first app start json");
   Expect(output.find("\"field_name\": \"value\"") != std::string::npos,
          "expected field name in first app start json");
-  Expect(output.find("\"field_signature\": \"I\"") != std::string::npos,
+  Expect(output.find("\"field_signature\": \"I\"") !=
+             std::string::npos,
          "expected field signature in first app start json");
-  Expect(output.find("\"decoded_instruction_count\": 9") !=
+  Expect(output.find("\"decoded_instruction_count\": 10") !=
              std::string::npos,
-         "expected nine decoded instructions in first app start json");
-  Expect(output.find("\"executed_instruction_count\": 9") !=
+         "expected ten decoded instructions in first app start json");
+  Expect(output.find("\"executed_instruction_count\": 10") !=
              std::string::npos,
-         "expected nine executed instructions in first app start json");
+         "expected ten executed instructions in first app start json");
   Expect(output.find("\"first_executed_opcode\": \"invoke-super\"") !=
              std::string::npos,
          "expected first executed opcode in first app start json");
@@ -9292,6 +9908,57 @@ void TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction() {
          "expected actionable next blocker in first app start json");
   Expect(output.find("Self-Healing Android Device") != std::string::npos,
          "expected Self-Healing Android Device diagnostics in first app start json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointReportsUnsupportedConstructorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-unsupported-constructor", true,
+      {{"classes.dex",
+        BuildUnsupportedConstructorLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/StateCarrier;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected unsupported-constructor checkpoint command to succeed with precise boundary proof");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for unsupported constructor boundary");
+  Expect(output.find("\"app_method_invocation_state\": \"blocked\"") !=
+             std::string::npos,
+         "expected blocked app method invocation state in unsupported-constructor json");
+  Expect(output.find("\"app_invoked_method_class_descriptor\": "
+                     "\"Lcom/example/launchapk/StateCarrier;\"") !=
+             std::string::npos,
+         "expected constructor class descriptor in unsupported-constructor json");
+  Expect(output.find("\"app_invoked_method_name\": \"<init>\"") !=
+             std::string::npos,
+         "expected constructor method name in unsupported-constructor json");
+  Expect(output.find("\"bytecode_execution_state\": \"unsupported_opcode\"") !=
+             std::string::npos,
+         "expected unsupported opcode execution state in unsupported-constructor json");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"unsupported-dex-opcode:opcode-0xff\"") !=
+             std::string::npos,
+         "expected exact unsupported constructor blocker in first app start json");
+  Expect(output.find("\"next_blocker\": "
+                     "\"extend_minimal_dex_interpreter_for_opcode_0xff\"") !=
+             std::string::npos,
+         "expected actionable unsupported constructor next blocker in first app start json");
 
   fs::remove_all(fixture.launch.root);
 }
@@ -13872,7 +14539,9 @@ int main() {
     TestApkResourceReadinessReadsManifestAndAssetsFromZipFixture();
     TestApkResourceReadinessHandlesMissingManifest();
     TestOpenedApkArchiveReadsEntriesDeterministically();
+    TestOpenedApkArchiveReadsDeflatedEntriesDeterministically();
     TestApkResourceReadinessUsesStagedManifestFallback();
+    TestApkResourceReadinessDecodesBinaryManifestFromArchive();
     TestInspectApkResourcesCommandWritesStableJson();
     TestHeadlessNativeWindowSurfaceTracksMetadataAndLifecycle();
     TestHeadlessFirstPixelFixtureWritesDeterministicMarker();
@@ -13996,6 +14665,7 @@ int main() {
   TestLaunchApkSelfHealProofSurfacesPermissionAndAppOpsHealth();
   TestLaunchApkSelfHealProofRebuildsPermissionState();
     TestLaunchApkPermissionsProofPersistsStateUnderSandbox();
+    TestLaunchApkPermissionsProofSupportsDecodedBinaryManifest();
     TestLaunchApkPermissionsProofPersistenceRoundTripIsDeterministic();
   TestLaunchApkPermissionsProofHealsMissingFiles();
   TestLaunchApkPermissionsProofHealsMalformedFiles();
@@ -14027,6 +14697,7 @@ int main() {
     TestLaunchApkJavaProofBlocksWhenDexInvalid();
     TestLaunchApkJavaProofHealsMalformedFiles();
     TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction();
+    TestLaunchApkFirstAppStartCheckpointReportsUnsupportedConstructorBoundary();
     TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary();
     TestLaunchApkFirstAppStartCheckpointBlocksWithoutRuntimeRoot();
     TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid();
