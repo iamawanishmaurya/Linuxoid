@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Visible Wayland Interaction Checkpoint GREEN
+  Action: Extended `launch-apk --window-proof` so Linuxoid now binds the resolved keyboard `SettingsActivity` session to one deterministic `window_manager` target, records `visible_target_state`, `focus_state`, `focus_owned`, `focus_owner`, `interaction_state`, and `interaction_target_component`, and preserves the exact upstream native blocker while still reporting best-effort `backing_mode`, `wayland_surface_available`, and `egl_surface_available` truth.
+  Result: Linuxoid now tells one coherent visible-launch and focus/input story for the real keyboard activity instead of collapsing back into generic window failure, while still honestly blocking at `native_dlopen_failed:libandroidx.graphics.path.so` before visible app use exists.
+  Timestamp: 2026-05-19T05:55:00+05:30
+
 - Step: JNI and Native Loading Checkpoint GREEN
   Action: Extended the real keyboard APK native path so Linuxoid now records deterministic per-library `dlopen`, `JNI_OnLoad`, and entrypoint attempt facts, surfaces exact `native_loading_*` fields through `launch-apk`, and preserves that same upstream blocker through `launch-apk --first-app-start-proof` instead of letting downstream surface/runtime placeholders blur it.
   Result: Linuxoid now names the real keyboard APK native seam as an exact upstream blocker with machine-readable recovery guidance, while the downstream managed seam remains the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` boundary for the execution-first checkpoint path.

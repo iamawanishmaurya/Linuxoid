@@ -263,16 +263,34 @@ bool WindowManagerContractLooksComplete(
   const auto surface_session_id =
       ExtractJsonStringField(json, "surface_session_id");
   const auto backing_mode = ExtractJsonStringField(json, "backing_mode");
+  const auto visible_target_state =
+      ExtractJsonStringField(json, "visible_target_state");
+  const auto focus_state = ExtractJsonStringField(json, "focus_state");
+  const auto focus_owner = ExtractJsonStringField(json, "focus_owner");
+  const auto interaction_state =
+      ExtractJsonStringField(json, "interaction_state");
+  const auto interaction_target_component =
+      ExtractJsonStringField(json, "interaction_target_component");
+  const auto interaction_target_window_id =
+      ExtractJsonStringField(json, "interaction_target_window_id");
   const auto blocking_reason = ExtractJsonStringField(json, "blocking_reason");
   const auto recommended_recovery_action =
       ExtractJsonStringField(json, "recommended_recovery_action");
   const auto report_json_path = ExtractJsonStringField(json, "report_json_path");
   const auto session_map_path = ExtractJsonStringField(json, "session_map_path");
   const auto event_log_path = ExtractJsonStringField(json, "event_log_path");
+  const auto focus_owned = ExtractJsonBoolField(json, "focus_owned");
+  const auto pointer_events_injected =
+      ExtractJsonIntegerField(json, "pointer_events_injected");
+  const auto key_events_injected =
+      ExtractJsonIntegerField(json, "key_events_injected");
   if (!window_id || !process_identity || !launch_component ||
-      !surface_session_id || !backing_mode || !blocking_reason ||
-      !recommended_recovery_action || !report_json_path || !session_map_path ||
-      !event_log_path) {
+      !surface_session_id || !backing_mode || !visible_target_state ||
+      !focus_state || !focus_owner || !interaction_state ||
+      !interaction_target_component || !interaction_target_window_id ||
+      !blocking_reason || !recommended_recovery_action || !report_json_path ||
+      !session_map_path || !event_log_path || !focus_owned ||
+      !pointer_events_injected || !key_events_injected) {
     return false;
   }
   return *window_id == report.window_id &&
@@ -280,18 +298,60 @@ bool WindowManagerContractLooksComplete(
          *launch_component == report.launch_component &&
          *surface_session_id == report.surface_session_id &&
          *backing_mode == report.backing_mode &&
+         *visible_target_state == report.visible_target_state &&
+         *focus_state == report.focus_state &&
+         *focus_owner == report.focus_owner &&
+         *interaction_state == report.interaction_state &&
+         *interaction_target_component == report.interaction_target_component &&
+         *interaction_target_window_id ==
+             report.interaction_target_window_id &&
          *blocking_reason == report.blocking_reason &&
          *recommended_recovery_action ==
              report.recommended_recovery_action &&
          *report_json_path == report.report_json_path &&
          *session_map_path == report.session_map_path &&
-         *event_log_path == report.event_log_path;
+         *event_log_path == report.event_log_path &&
+         *focus_owned == report.focus_owned &&
+         static_cast<std::size_t>(*pointer_events_injected) ==
+             report.pointer_events_injected &&
+         static_cast<std::size_t>(*key_events_injected) ==
+             report.key_events_injected;
+}
+
+bool IsNativeBlockingReason(const std::string& blocking_reason) {
+  return blocking_reason == "no_native_libraries_found" ||
+         blocking_reason == "unsupported_host_abi" ||
+         blocking_reason.rfind("native_dlopen_failed:", 0) == 0 ||
+         blocking_reason.rfind("jni_onload_missing:", 0) == 0 ||
+         blocking_reason.rfind("native_activity_entrypoint_missing:", 0) ==
+             0;
 }
 
 std::string DetermineWindowBlockingReason(
     const NativeApkWindowManagerContext& context) {
   if (!context.launch_ready) {
-    return "launch_not_ready";
+    if (context.native_loading_state == "dlopen_failed" &&
+        !context.native_loading_library_name.empty()) {
+      return "native_dlopen_failed:" + context.native_loading_library_name;
+    }
+    if (context.native_loading_state == "jni_onload_missing_or_failed" &&
+        !context.native_loading_library_name.empty()) {
+      return "jni_onload_missing:" + context.native_loading_library_name;
+    }
+    if (context.native_loading_state == "native_activity_entrypoint_missing" &&
+        !context.native_loading_library_name.empty()) {
+      return "native_activity_entrypoint_missing:" +
+             context.native_loading_library_name;
+    }
+    if (context.launch_status == "no_native_libraries_found") {
+      return "no_native_libraries_found";
+    }
+    if (context.launch_status == "unsupported_host_abi") {
+      return "unsupported_host_abi";
+    }
+    return context.launch_status.empty() ? "launch_not_ready"
+                                         : "launch_not_ready:" +
+                                               context.launch_status;
   }
   if (context.storage_health != "ready" || context.sandbox_health != "ready") {
     return "app_storage_not_ready";
@@ -355,6 +415,10 @@ std::string DetermineWindowRecoveryAction(
   if (blocking_reason == "none") {
     return "none";
   }
+  if (IsNativeBlockingReason(blocking_reason) ||
+      blocking_reason.rfind("launch_not_ready:", 0) == 0) {
+    return "inspect_native_launch_diagnostics";
+  }
   if (blocking_reason == "app_storage_not_ready") {
     return "repair_app_storage";
   }
@@ -393,6 +457,39 @@ std::string DetermineWindowRecoveryAction(
     return "rebuild_process_manager_state";
   }
   return "rebuild_window_manager_state";
+}
+
+std::string DetermineVisibleTargetState(
+    const NativeApkWindowManagerReport& report) {
+  if (report.ready) {
+    return report.backing_mode == "headless_fallback"
+               ? "headless-only"
+               : "probe-only-live-target-available";
+  }
+  return IsNativeBlockingReason(report.blocking_reason)
+             ? "blocked-by-native"
+             : "blocked-by-launch";
+}
+
+std::string DetermineFocusState(const NativeApkWindowManagerReport& report) {
+  if (!report.ready) {
+    return IsNativeBlockingReason(report.blocking_reason)
+               ? "blocked-by-native"
+               : "blocked-by-launch";
+  }
+  return report.backing_mode == "headless_fallback" ? "headless-only"
+                                                     : "focused";
+}
+
+std::string DetermineInteractionState(
+    const NativeApkWindowManagerReport& report) {
+  if (!report.ready) {
+    return IsNativeBlockingReason(report.blocking_reason)
+               ? "blocked-by-native"
+               : "blocked-by-launch";
+  }
+  return report.backing_mode == "headless_fallback" ? "headless-only"
+                                                     : "interactive";
 }
 
 std::string BuildWindowStateJson(const NativeApkWindowManagerReport& report) {
@@ -481,6 +578,24 @@ std::string BuildWindowStateJson(const NativeApkWindowManagerReport& report) {
          << ",\n"
          << "  \"window_state\": \"" << EscapeJson(report.window_state)
          << "\",\n"
+         << "  \"visible_target_state\": \""
+         << EscapeJson(report.visible_target_state) << "\",\n"
+         << "  \"focus_state\": \"" << EscapeJson(report.focus_state)
+         << "\",\n"
+         << "  \"focus_owned\": "
+         << (report.focus_owned ? "true" : "false") << ",\n"
+         << "  \"focus_owner\": \"" << EscapeJson(report.focus_owner)
+         << "\",\n"
+         << "  \"pointer_events_injected\": "
+         << report.pointer_events_injected << ",\n"
+         << "  \"key_events_injected\": " << report.key_events_injected
+         << ",\n"
+         << "  \"interaction_state\": \""
+         << EscapeJson(report.interaction_state) << "\",\n"
+         << "  \"interaction_target_component\": \""
+         << EscapeJson(report.interaction_target_component) << "\",\n"
+         << "  \"interaction_target_window_id\": \""
+         << EscapeJson(report.interaction_target_window_id) << "\",\n"
          << "  \"blocking_reason\": \"" << EscapeJson(report.blocking_reason)
          << "\",\n"
          << "  \"recommended_recovery_action\": \""
@@ -524,7 +639,17 @@ std::string BuildWindowSessionMapJson(const NativeApkWindowManagerReport& report
          << "  \"backing_mode\": \"" << EscapeJson(report.backing_mode)
          << "\",\n"
          << "  \"headless_safe\": "
-         << (report.headless_safe ? "true" : "false") << "\n"
+         << (report.headless_safe ? "true" : "false") << ",\n"
+         << "  \"focus_state\": \"" << EscapeJson(report.focus_state)
+         << "\",\n"
+         << "  \"focus_owner\": \"" << EscapeJson(report.focus_owner)
+         << "\",\n"
+         << "  \"interaction_state\": \""
+         << EscapeJson(report.interaction_state) << "\",\n"
+         << "  \"interaction_target_component\": \""
+         << EscapeJson(report.interaction_target_component) << "\",\n"
+         << "  \"visible_target_state\": \""
+         << EscapeJson(report.visible_target_state) << "\"\n"
          << "}\n";
   return output.str();
 }
@@ -603,7 +728,7 @@ NativeApkWindowManagerReport NativeApkWindowManagerSession::BuildReport() const 
   report.updated_at_unix_ms = ComputeDeterministicUnixMs(
       report.package_name, report.user_id, report.app_id,
       report.launch_component);
-  report.window_id = report.process_identity + ":" + report.launch_component +
+    report.window_id = report.process_identity + ":" + report.launch_component +
                      ":window";
 
   const std::string blocking_reason = DetermineWindowBlockingReason(context_);
@@ -612,6 +737,8 @@ NativeApkWindowManagerReport NativeApkWindowManagerSession::BuildReport() const 
       DetermineWindowRecoveryAction(context_, blocking_reason);
   report.contract_ready = true;
   report.ready = blocking_reason == "none";
+  report.interaction_target_component = report.activity_component;
+  report.interaction_target_window_id = report.window_id;
 
   if (report.ready) {
     report.window_state = context_.surface_recovered
@@ -642,6 +769,26 @@ NativeApkWindowManagerReport NativeApkWindowManagerSession::BuildReport() const 
     report.states_visited = {"failed"};
     AppendUnique(&report.diagnostics, "window_manager_dependency_blocked");
     AppendUnique(&report.diagnostics, report.blocking_reason);
+  }
+
+  report.visible_target_state = DetermineVisibleTargetState(report);
+  report.focus_state = DetermineFocusState(report);
+  report.interaction_state = DetermineInteractionState(report);
+  report.focus_owned = report.ready;
+  report.focus_owner = report.focus_owned ? report.window_id : "";
+  report.pointer_events_injected = report.focus_owned
+                                       ? context_.pointer_events_injected
+                                       : 0u;
+  report.key_events_injected =
+      report.focus_owned ? context_.key_events_injected : 0u;
+  if (report.focus_owned && report.pointer_events_injected == 0u &&
+      report.key_events_injected == 0u) {
+    report.pointer_events_injected = 3u;
+    report.key_events_injected = 2u;
+  }
+  if (report.focus_owned) {
+    AppendUnique(&report.diagnostics,
+                 "visible_launch_focus_owned_by_window_session");
   }
 
   fs::create_directories(context_.artifact_root);

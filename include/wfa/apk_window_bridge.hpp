@@ -26,6 +26,10 @@ struct NativeApkWindowManagerContext {
   int uid_placeholder = 10000;
   int gid_placeholder = 10000;
   std::string launch_status;
+  std::string native_loading_state = "not_requested";
+  std::string native_jni_state = "not_requested";
+  std::string native_loading_library_name;
+  std::string native_loading_detail;
   bool launch_ready = false;
   bool recoverable = false;
   std::string launcher_component;
@@ -63,6 +67,10 @@ struct NativeApkWindowManagerContext {
   std::string lifecycle_health = "not_requested";
   std::string looper_health = "not_requested";
   std::string input_health = "not_requested";
+  bool input_focus_owned = false;
+  std::string input_focus_owner;
+  std::size_t pointer_events_injected = 0;
+  std::size_t key_events_injected = 0;
   std::string dex_health = "not_requested";
   std::string art_health = "not_requested";
   std::string activity_health = "not_requested";
@@ -124,6 +132,15 @@ struct NativeApkWindowManagerReport {
   bool failed = false;
   bool recovered = false;
   std::string window_state = "window_manager_dependency_blocked";
+  std::string visible_target_state = "not_requested";
+  std::string focus_state = "not_requested";
+  bool focus_owned = false;
+  std::string focus_owner;
+  std::size_t pointer_events_injected = 0;
+  std::size_t key_events_injected = 0;
+  std::string interaction_state = "not_requested";
+  std::string interaction_target_component;
+  std::string interaction_target_window_id;
   std::string blocking_reason = "none";
   std::string recommended_recovery_action = "none";
   std::vector<std::string> states_visited;

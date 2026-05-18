@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.122 - 2026-05-18
+
+- Close **Phase 5: Visible Wayland Interaction** around the real keyboard APK window/focus seam instead of widening the runtime sideways.
+- Extend `launch-apk --window-proof` and `inspect-apk-window` so Linuxoid now binds the resolved `org.futo.inputmethod.latin/.uix.settings.SettingsActivity` session to one deterministic `window_manager` target, records `visible_target_state`, `focus_state`, `focus_owned`, `focus_owner`, `interaction_state`, and `interaction_target_component`, and persists that same continuity through `window-state.json` and `window-session-map.json`.
+- Keep the blocker honest on the real `/home/astra/Downloads/keyboard-0.1.28.apk` path: Linuxoid now preserves `blocking_reason: native_dlopen_failed:libandroidx.graphics.path.so` plus `recommended_recovery_action: inspect_native_launch_diagnostics` while still reporting best-effort live-host `backing_mode`, `wayland_surface_available`, and `egl_surface_available` truth.
+
 ## v0.1.121 - 2026-05-18
 
 - Close **Phase 4: JNI and Native Loading** around the real keyboard APK native seam instead of widening the runtime sideways.

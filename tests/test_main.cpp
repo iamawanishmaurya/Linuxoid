@@ -9351,6 +9351,36 @@ void TestLaunchApkWindowProofTracksSessionArtifacts() {
          "expected window-session-map artifact");
   Expect(fs::exists(window_root / "window-events.jsonl"),
          "expected window-events artifact");
+  Expect(report.window_manager.focus_owned,
+         "expected focus to be owned for ready headless fixture");
+  Expect(report.window_manager.focus_owner == report.window_manager.window_id,
+         "expected focus owner to stay tied to the same window session");
+  Expect(report.window_manager.interaction_target_component ==
+             report.window_manager.activity_component,
+         "expected interaction target to match resolved activity component");
+  Expect(report.window_manager.pointer_events_injected == 3,
+         "expected deterministic pointer event count from input contract");
+  Expect(report.window_manager.key_events_injected == 2,
+         "expected deterministic key event count from input contract");
+  if (report.window_manager.backing_mode == "headless_fallback") {
+    Expect(report.window_manager.visible_target_state == "headless-only",
+           "expected headless-only visible target state in fallback mode");
+    Expect(report.window_manager.focus_state == "headless-only",
+           "expected headless-only focus state in fallback mode");
+    Expect(report.window_manager.interaction_state == "headless-only",
+           "expected headless-only interaction state in fallback mode");
+  } else {
+    Expect(report.window_manager.backing_mode ==
+               "probe_only_wayland_egl_available",
+           "expected only the probe-capable backing mode outside headless fallback");
+    Expect(report.window_manager.visible_target_state ==
+               "probe-only-live-target-available",
+           "expected live-target probe state when Wayland/EGL probes succeed");
+    Expect(report.window_manager.focus_state == "focused",
+           "expected focused state when probe-capable target exists");
+    Expect(report.window_manager.interaction_state == "interactive",
+           "expected interactive state when probe-capable target exists");
+  }
 
   const std::string session_map =
       ReadTextFile(window_root / "window-session-map.json");
@@ -9359,6 +9389,9 @@ void TestLaunchApkWindowProofTracksSessionArtifacts() {
   Expect(session_map.find(report.process_manager.process_identity) !=
              std::string::npos,
          "expected session map to reference process identity");
+  Expect(session_map.find(report.window_manager.focus_owner) !=
+             std::string::npos,
+         "expected session map to reference focus owner continuity");
 
   const std::string event_log =
       ReadTextFile(window_root / "window-events.jsonl");
@@ -9366,6 +9399,60 @@ void TestLaunchApkWindowProofTracksSessionArtifacts() {
          "expected created state in window event log");
   Expect(event_log.find("\"state\": \"destroyed\"") != std::string::npos,
          "expected destroyed state in window event log");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkWindowProofPreservesKeyboardNativeBlockerAndTargetState() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+      "linuxoid-window-proof-keyboard-native-blocker",
+      BuildKeyboardSettingsActivityManifestXml(), false,
+      {{"lib/x86_64/libbroken.so", "not a real shared object\n"},
+       {"classes.dex",
+        BuildFrameworkBoundaryLifecycleOnCreateDexPayload(
+            {"Lorg/futo/inputmethod/latin/App;",
+             "Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;"},
+            "Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;")}});
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() +
+          " launch-apk --window-proof"
+          " --package org.futo.inputmethod.latin"
+          " --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected keyboard window proof fixture to stay blocked on native load");
+  Expect(output.find("\"window_manager\": {") != std::string::npos,
+         "expected window manager section in keyboard window proof json");
+  Expect(output.find("\"activity_component\": "
+                     "\"org.futo.inputmethod.latin/.uix.settings.SettingsActivity\"") !=
+             std::string::npos,
+         "expected real keyboard settings activity component in window proof");
+  Expect(output.find("\"visible_target_state\": \"blocked-by-native\"") !=
+             std::string::npos,
+         "expected exact native-blocked visible target state");
+  Expect(output.find("\"focus_state\": \"blocked-by-native\"") !=
+             std::string::npos,
+         "expected exact native-blocked focus state");
+  Expect(output.find("\"interaction_state\": \"blocked-by-native\"") !=
+             std::string::npos,
+         "expected exact native-blocked interaction state");
+  Expect(output.find("\"blocking_reason\": \"native_dlopen_failed:libbroken.so\"") !=
+             std::string::npos,
+         "expected exact native window blocker to stay visible");
+  Expect(output.find("\"recommended_recovery_action\": "
+                     "\"inspect_native_launch_diagnostics\"") !=
+             std::string::npos,
+         "expected native diagnostics recommendation for keyboard window proof");
+  Expect(output.find("\"surface_session_id\": "
+                     "\"org.futo.inputmethod.latin:vc11654-0.1.28:surface\"") !=
+             std::string::npos,
+         "expected deterministic keyboard surface session id in window proof");
 
   fs::remove_all(fixture.root);
 }
@@ -15031,6 +15118,7 @@ int main() {
     TestLaunchApkSelfHealProofRebuildsProcessManagerState();
     TestLaunchApkWindowProofCommandRunsFixture();
     TestLaunchApkWindowProofTracksSessionArtifacts();
+    TestLaunchApkWindowProofPreservesKeyboardNativeBlockerAndTargetState();
     TestInspectApkWindowCommandReportsReadyContracts();
     TestLaunchApkWindowProofHealsMalformedFiles();
     TestLaunchApkSelfHealProofRebuildsWindowManagerStateAfterSurfaceFailure();

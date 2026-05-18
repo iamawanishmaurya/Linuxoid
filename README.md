@@ -291,6 +291,40 @@ What it still does **not** prove:
 - this is still not full ART-owned framework dispatch
 - the next downstream managed seam remains the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` boundary once native loading is solved
 
+## Visible Wayland Interaction Checkpoint
+
+Linuxoid now narrows the real keyboard APK visible-launch seam instead of collapsing it into only `window_health: "blocked"`.
+
+- `compatctl launch-apk --window-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity /home/astra/Downloads/keyboard-0.1.28.apk <staging-root>`
+  - binds the resolved `SettingsActivity` session to one deterministic `window_manager` target
+  - now reports:
+    - `visible_target_state`
+    - `focus_state`
+    - `focus_owned`
+    - `focus_owner`
+    - `interaction_state`
+    - `interaction_target_component`
+    - `interaction_target_window_id`
+  - keeps the real upstream blocker explicit through:
+    - `blocking_reason: "native_dlopen_failed:libandroidx.graphics.path.so"`
+    - `recommended_recovery_action: "inspect_native_launch_diagnostics"`
+  - still records best-effort live-host truth when available through:
+    - `backing_mode`
+    - `wayland_surface_available`
+    - `egl_surface_available`
+
+What this checkpoint actually proves:
+
+- Linuxoid now ties the real keyboard `SettingsActivity` package/activity/process/surface/window session together in one machine-readable contract.
+- Linuxoid now distinguishes `headless-only`, `probe-only-live-target-available`, `blocked-by-native`, and `blocked-by-launch` states instead of flattening them into a generic window failure.
+- The Self-Healing Android Device path now preserves the real native blocker while still reporting whether a live Wayland/EGL target is available on the host.
+
+What it still does **not** prove:
+
+- this is still not a visibly rendered, usable keyboard app on Linux
+- this is still not full Android framework window dispatch or input ownership
+- the next real blocker on the keyboard APK path is still resolving the upstream native `dlopen` failure for `libandroidx.graphics.path.so`
+
 `--dex-proof` now stages `classes.dex`, `classes2.dex`, and similar entries into the deterministic APK session root, parses safe DEX header plus string/type/proto/method/class metadata, can locate a deterministic entrypoint code item, and emits structured `dex` plus `art_bootstrap` JSON without claiming full Java/Kotlin ART execution yet.
 
 `--storage-proof` now implements **P9 Android App Storage + Sandbox Contract** for the direct APK session path. It materializes deterministic `sandbox/data/data/<package>`-style directories, exposes `files` plus `cache` plus native-lib plus asset/resource roots, validates app-relative paths through a Linuxoid safe resolver, writes a session marker file, rejects escape attempts explicitly, and emits nested `storage` JSON plus `storage_health` and `sandbox_health` fields for the Self-Healing Android Device loop while keeping `isolation_level: path_sandbox_only` honest.
@@ -305,7 +339,7 @@ What it still does **not** prove:
 
 `inspect-apk-process` now gives that P11 contract a focused operator surface. It reuses the same sandbox-backed session data, heals missing, malformed, stale, or incompatible process-manager artifacts before trusting them, and returns stable JSON that exposes `activity_manager`, `process_manager`, `activity_manager_health`, `process_health`, and the current recovery guidance for the Self-Healing Android Device path.
 
-`--window-proof` now implements **P12 WindowManager + Wayland/EGL Surface Contract** for the same direct APK session path. It binds the staged session to a Linuxoid-owned `window_manager` contract, persists deterministic `window-state.json`, `window-session-map.json`, and `window-events.jsonl` artifacts under `sandbox/data/data/<package>/window-manager`, maps the resolved activity and process identity onto the existing native surface proof, and exposes explicit `created`, `attached`, `visible`, `resized`, `hidden`, `destroyed`, `failed`, and `recovered` states without requiring a live Wayland display in CI. When a live Wayland/EGL environment is available, Linuxoid records that best-effort availability through `backing_mode` and probe metadata while keeping the contract headless-safe and honest.
+`--window-proof` now implements **P12 WindowManager + Wayland/EGL Surface Contract** for the same direct APK session path. It binds the staged session to a Linuxoid-owned `window_manager` contract, persists deterministic `window-state.json`, `window-session-map.json`, and `window-events.jsonl` artifacts under `sandbox/data/data/<package>/window-manager`, maps the resolved activity and process identity onto the existing native surface proof, records one coherent visible-target plus focus/input story through `visible_target_state`, `focus_state`, `focus_owned`, `focus_owner`, `interaction_state`, and `interaction_target_component`, and exposes explicit `created`, `attached`, `visible`, `resized`, `hidden`, `destroyed`, `failed`, and `recovered` states without requiring a live Wayland display in CI. When a live Wayland/EGL environment is available, Linuxoid records that best-effort availability through `backing_mode`, `wayland_surface_available`, and `egl_surface_available` while keeping the contract headless-safe and honest and preserving exact upstream native blockers when visible launch still cannot proceed.
 
 `inspect-apk-window` now gives that P12 contract a focused operator surface. It reuses the same sandbox-backed session data, heals missing, malformed, stale, incompatible, or incomplete window-manager artifacts before trusting them, and returns stable JSON that exposes `window_manager`, `window_health`, current package/activity/process/surface mappings, and the current recovery guidance for the Self-Healing Android Device path.
 

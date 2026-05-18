@@ -1059,6 +1059,10 @@ NativeApkWindowManagerSession BuildWindowManagerBridgeSession(
        .uid_placeholder = report.storage.uid_placeholder,
        .gid_placeholder = report.storage.gid_placeholder,
        .launch_status = report.launch_status,
+       .native_loading_state = report.native_loading_state,
+       .native_jni_state = report.native_jni_state,
+       .native_loading_library_name = report.native_loading_library_name,
+       .native_loading_detail = report.native_loading_detail,
        .launch_ready = report.launch_ready,
        .recoverable = report.recoverable,
        .launcher_component = report.launcher_component,
@@ -1098,6 +1102,12 @@ NativeApkWindowManagerSession BuildWindowManagerBridgeSession(
        .lifecycle_health = report.lifecycle_health,
        .looper_health = report.looper_health,
        .input_health = report.input_health,
+       .input_focus_owned = report.input_queue.ready,
+       .input_focus_owner = report.input_queue.ready
+                                ? report.process_manager.process_identity
+                                : "",
+       .pointer_events_injected = report.input_queue.ready ? 3u : 0u,
+       .key_events_injected = report.input_queue.ready ? 2u : 0u,
        .dex_health = report.dex_health,
        .art_health = report.art_health,
        .activity_health = report.activity_health,
@@ -2822,6 +2832,17 @@ NativeApkSurfaceSession RunNativeApkSurfaceProof(
           .string();
 
   fs::create_directories(surface.session_root);
+  const NativeWindowMetadata metadata = BuildSurfaceMetadata(options);
+  const auto bridge = RunNativeWindowBridgeFixture(
+      (fs::path(surface.session_root) / "bridge").string(), metadata);
+  surface.backing_mode = bridge.backing_mode;
+  surface.bridge_metadata_path = bridge.metadata_path;
+  surface.bridge_event_log_path = bridge.event_log_path;
+  surface.wayland_surface_available = bridge.wayland_surface_created;
+  surface.egl_surface_available = bridge.egl_pbuffer_created;
+  surface.width = metadata.width;
+  surface.height = metadata.height;
+  surface.format = metadata.format;
 
   if (!launch_report.launch_ready) {
     surface.state = "blocked";
@@ -2832,15 +2853,6 @@ NativeApkSurfaceSession RunNativeApkSurfaceProof(
     WriteSurfaceSessionMetadata(surface);
     return surface;
   }
-
-  const NativeWindowMetadata metadata = BuildSurfaceMetadata(options);
-  const auto bridge = RunNativeWindowBridgeFixture(
-      (fs::path(surface.session_root) / "bridge").string(), metadata);
-  surface.backing_mode = bridge.backing_mode;
-  surface.bridge_metadata_path = bridge.metadata_path;
-  surface.bridge_event_log_path = bridge.event_log_path;
-  surface.wayland_surface_available = bridge.wayland_surface_created;
-  surface.egl_surface_available = bridge.egl_pbuffer_created;
   if (!bridge.native_window_bridge_ready) {
     surface.state = "surface_creation_failed";
     surface.errors.push_back(bridge.exit_reason);
@@ -4252,6 +4264,27 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << (report.window_manager.recovered ? "true" : "false") << ",\n"
          << "    \"window_state\": \""
          << EscapeJson(report.window_manager.window_state) << "\",\n"
+         << "    \"visible_target_state\": \""
+         << EscapeJson(report.window_manager.visible_target_state) << "\",\n"
+         << "    \"focus_state\": \""
+         << EscapeJson(report.window_manager.focus_state) << "\",\n"
+         << "    \"focus_owned\": "
+         << (report.window_manager.focus_owned ? "true" : "false")
+         << ",\n"
+         << "    \"focus_owner\": \""
+         << EscapeJson(report.window_manager.focus_owner) << "\",\n"
+         << "    \"pointer_events_injected\": "
+         << report.window_manager.pointer_events_injected << ",\n"
+         << "    \"key_events_injected\": "
+         << report.window_manager.key_events_injected << ",\n"
+         << "    \"interaction_state\": \""
+         << EscapeJson(report.window_manager.interaction_state) << "\",\n"
+         << "    \"interaction_target_component\": \""
+         << EscapeJson(report.window_manager.interaction_target_component)
+         << "\",\n"
+         << "    \"interaction_target_window_id\": \""
+         << EscapeJson(report.window_manager.interaction_target_window_id)
+         << "\",\n"
          << "    \"blocking_reason\": \""
          << EscapeJson(report.window_manager.blocking_reason) << "\",\n"
          << "    \"recommended_recovery_action\": \""
