@@ -38,5 +38,8 @@ There is also a dense design journal pattern:
 Generated and staged runtime artifacts are usually not kept in the repo.
 They are created under staging roots such as `/tmp/linuxoid-*` or user-provided roots.
 
-The empty `.planning/` directory was created for GSD work.
-The new codebase map files should live in `/home/astra/codex/wine-for-android/.planning/codebase/`.
+The `.planning/` directory is active and already contains:
+- roadmap and milestone state
+- per-phase plans and summaries
+- research notes
+- the codebase map in `/home/astra/codex/wine-for-android/.planning/codebase/`

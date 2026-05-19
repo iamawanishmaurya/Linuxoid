@@ -18,6 +18,7 @@ Current execution-first conventions:
 - name unsupported boundaries precisely
 - distinguish `framework-stubbed`, `object-placeholder`, and real execution
 - keep the next blocker explicit in status and docs
+- anchor progress against the real `keyboard-0.1.28.apk` path once a synthetic seam is proven
 
 Documentation conventions:
 - phase progression is recorded in `README.md`, `CHANGELOG.md`, `docs/phased-build-plan.md`, and `docs/steps.md`
@@ -28,6 +29,7 @@ CLI conventions:
 - `compatctl` owns the operator surface
 - proof modes use flags such as `--first-app-start-proof`
 - inspection commands use names like `inspect-apk-*`
+- the first visible-launch work is expected to route through `compatctl launch-apk ... --package ... --component ...`
 
 Code style conventions visible in source:
 - standard library and explicit structs over metaprogramming-heavy style

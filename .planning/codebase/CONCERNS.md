@@ -27,7 +27,8 @@ This codebase is productive, but there are several clear risk areas.
   - `src/project_status.cpp`
 
 5. Execution-first blockers remain deep:
-- the current major blocker is still bridging `MainActivity.onCreate` into a real ART-owned runtime context
+- the current major blocker is now the real keyboard path at `unsupported-dex-opcode:opcode-0x90`
+- Linuxoid is already past several earlier framework and no-code library seams on that path, so the remaining work is increasingly concentrated in the minimal DEX interpreter
 - many higher-level proofs depend on this blocker being represented accurately
 
 6. Brownfield complexity:
@@ -37,5 +38,9 @@ This codebase is productive, but there are several clear risk areas.
 7. Optional graphics/runtime integrations:
 - Wayland and EGL are optional at build time
 - behavior may differ across hosts if these libraries are present or absent
+
+8. Planning/worktree drift risk:
+- the repository is often intentionally dirty while a runtime checkpoint is being developed
+- GSD artifacts need to be refreshed without rolling unrelated source edits into automatic commits
 
 The codebase map should help future planning avoid widening the surface without strengthening the current execution-first spine.

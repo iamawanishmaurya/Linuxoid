@@ -21,6 +21,7 @@ The direct APK session path assembles these contracts:
 - runtime bootstrap state
 - Java proof and first-app-start execution checkpoints
 - Self-Healing Android Device watchdog diagnostics
+ - compatibility reporting for real and synthetic APK verification
 
 Header naming reveals the architecture clearly:
 - `apk_activity_launch_bridge.hpp`
@@ -36,7 +37,9 @@ Header naming reveals the architecture clearly:
 Execution-first logic currently lives at the boundary between:
 - staged APK metadata
 - minimal DEX parsing and interpretation
+- managed activity dispatch seams for real APKs such as `keyboard-0.1.28.apk`
 - explicit placeholder or stubbed Android framework seams
+- library/framework invoke targets that have no DEX code item and therefore need an honest Linuxoid stub or a real runtime bridge
 
 The code favors deterministic JSON artifact output at each bridge.
 That means most subsystems have a persisted report path as part of their contract.
@@ -45,6 +48,8 @@ The architecture is intentionally honest about incomplete execution.
 Instead of hiding blockers, it records exact boundary reasons such as:
 - `needs-real-art-execution`
 - `needs-real-activitythread-context`
+- `dex_invoked_method_code_item_missing:Ljava/lang/Math;->min(II)I`
+- `unsupported-dex-opcode:opcode-0x90`
 - `unsupported-dex-opcode:...`
 
 This is a brownfield codebase with significant accumulated runtime slices already in place.

@@ -18,6 +18,10 @@ Runtime strategy integrations surfaced in code:
 - `/home/astra/codex/wine-for-android/include/wfa/runtime_bridge.hpp`
 - `/home/astra/codex/wine-for-android/src/waydroid_integration.cpp`
 - `/home/astra/codex/wine-for-android/include/wfa/waydroid_integration.hpp`
+- `/home/astra/codex/wine-for-android/src/apk_runtime_bridge.cpp`
+- `/home/astra/codex/wine-for-android/include/wfa/apk_runtime_bridge.hpp`
+- `/home/astra/codex/wine-for-android/src/apk_dex_bridge.cpp`
+- `/home/astra/codex/wine-for-android/include/wfa/apk_dex_bridge.hpp`
 
 Operator and reporting integration:
 - `compatctl` is the single operator-facing CLI surface
@@ -37,6 +41,9 @@ The test flow does not require:
 - ADB
 - Waydroid
 - live Wayland display
+
+Real verification targets currently include:
+- `/home/astra/Downloads/keyboard-0.1.28.apk` for the first real app-start path on a Linux desktop
 
 Documentation integrations:
 - long-form technical notes under `/home/astra/codex/wine-for-android/docs/`
