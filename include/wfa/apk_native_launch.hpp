@@ -134,6 +134,10 @@ struct NativeApkFirstAppStartProof {
   std::string native_managed_activity_runtime_binding_reason = "none";
   std::string native_managed_activity_runtime_context_id;
   std::string native_managed_activity_runtime_context_kind = "not_requested";
+  std::string native_post_dispatch_state = "not_reached";
+  std::string native_post_dispatch_blocker = "none";
+  std::string native_post_dispatch_recovery_action = "none";
+  std::string native_post_dispatch_backend = "none";
   std::string native_loading_library_name;
   std::string native_loading_detail;
   std::string bytecode_execution_state = "not_attempted";
@@ -251,6 +255,10 @@ struct NativeApkLaunchReport {
   std::string native_managed_activity_runtime_binding_reason = "none";
   std::string native_managed_activity_runtime_context_id;
   std::string native_managed_activity_runtime_context_kind = "not_requested";
+  std::string native_post_dispatch_state = "not_reached";
+  std::string native_post_dispatch_blocker = "none";
+  std::string native_post_dispatch_recovery_action = "none";
+  std::string native_post_dispatch_backend = "none";
   std::string native_loading_library_name;
   std::string native_loading_library_path;
   std::string native_loading_detail;

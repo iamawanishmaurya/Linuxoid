@@ -235,6 +235,12 @@ std::string DetermineRecommendedNextAction(
   if (AllContractsReady(report, state)) {
     return "none";
   }
+  if (!state.launch_ready && report.native_post_dispatch_blocker != "none") {
+    return report.native_post_dispatch_recovery_action.empty() ||
+                   report.native_post_dispatch_recovery_action == "none"
+               ? "extend_runtime_context_bridge"
+               : report.native_post_dispatch_recovery_action;
+  }
   if (!state.launch_ready &&
       (report.launch_status == "native_library_staging_failed" ||
        report.launch_status == "libraries_failed_to_load" ||
@@ -308,6 +314,10 @@ bool HasUpstreamNativeLaunchBlocker(const NativeApkLaunchReport& report) {
   if (report.launch_ready) {
     return false;
   }
+  if (report.launch_status == "managed_activity_post_dispatch_blocked" &&
+      report.native_post_dispatch_blocker != "none") {
+    return true;
+  }
   if (report.launch_status == "native_library_staging_failed" ||
       report.launch_status == "libraries_failed_to_load" ||
       report.launch_status == "jni_onload_missing_or_failed" ||
@@ -340,6 +350,10 @@ std::string DescribeUpstreamNativeLaunchBlocker(
     const NativeApkLaunchReport& report) {
   if (!HasUpstreamNativeLaunchBlocker(report)) {
     return "none";
+  }
+  if (report.launch_status == "managed_activity_post_dispatch_blocked" &&
+      report.native_post_dispatch_blocker != "none") {
+    return report.native_post_dispatch_blocker;
   }
   if (report.native_loading_state == "dlopen_failed" &&
       !report.native_loading_library_name.empty()) {
@@ -381,6 +395,16 @@ std::string DescribeUpstreamNativeLaunchBlocker(
       !report.native_loading_library_name.empty()) {
     return "managed_runtime_context_required:" +
            report.native_loading_library_name;
+  }
+  if (report.native_loading_state ==
+          "managed_activity_post_dispatch_blocked" &&
+      report.native_post_dispatch_blocker != "none") {
+    return report.native_post_dispatch_blocker;
+  }
+  if (report.native_loading_state ==
+          "activity_oncreate_bundle_dispatch_required" &&
+      report.native_post_dispatch_blocker != "none") {
+    return report.native_post_dispatch_blocker;
   }
   if (report.native_loading_state ==
           "activity_oncreate_bundle_dispatch_required" &&

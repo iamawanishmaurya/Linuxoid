@@ -28,6 +28,10 @@ struct NativeApkRuntimeBridgeContext {
   std::string launch_status;
   bool launch_ready = false;
   bool recoverable = false;
+  std::string native_post_dispatch_state = "not_reached";
+  std::string native_post_dispatch_blocker = "none";
+  std::string native_post_dispatch_recovery_action = "none";
+  std::string native_post_dispatch_backend = "none";
   std::string launcher_component;
   std::string resolved_component;
   std::string activity_launch_status = "not_requested";
@@ -130,6 +134,10 @@ struct NativeApkRuntimeBridgeReport {
   bool wayland_surface_available = false;
   bool egl_surface_available = false;
   std::string bootstrap_state = "unavailable";
+  std::string native_post_dispatch_state = "not_reached";
+  std::string native_post_dispatch_blocker = "none";
+  std::string native_post_dispatch_recovery_action = "none";
+  std::string native_post_dispatch_backend = "none";
   std::string blocking_reason = "none";
   std::string recommended_recovery_action = "none";
   std::vector<std::string> states_visited;

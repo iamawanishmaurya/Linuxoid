@@ -212,7 +212,7 @@ Linuxoid still does **not** launch `/home/astra/Downloads/keyboard-0.1.28.apk` a
 
 - `native_execute.android_compat_state: preloaded_and_version_normalized`
 - `native_execute.execution_engine_ready: true`
-- `native_loading_state: activity_oncreate_bundle_dispatch_required`
+- `native_loading_state: managed_activity_post_dispatch_blocked`
 - `native_jni_state: called`
 - `native_app_start_bridge_state: linuxoid_managed_app_start_bridge_selected`
 - `native_app_start_bridge_reason: jni_registration_completed_and_managed_activity_dispatch_target_selected`
@@ -230,11 +230,15 @@ Linuxoid still does **not** launch `/home/astra/Downloads/keyboard-0.1.28.apk` a
 - `native_managed_activity_runtime_binding_state: linuxoid_runtime_context_bound`
 - `native_managed_activity_runtime_binding_reason: managed_activity_dispatch_target_bound_to_linuxoid_runtime_context`
 - `native_managed_activity_runtime_context_kind: linuxoid_managed_runtime_context_placeholder`
+- `native_post_dispatch_state: framework-blocked`
+- `native_post_dispatch_blocker: framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`
+- `native_post_dispatch_recovery_action: extend_runtime_context_bridge`
+- `native_post_dispatch_backend: linuxoid_minimal_dex_interpreter`
 - `native_loading_library_name: libjni_latinime.so`
 - `native_execute.jni_onload_results[0].return_code: 65542`
 - `native_loading_detail: managed_activity_lifecycle_method:org.futo.inputmethod.latin.uix.settings.SettingsActivity->onCreate(Landroid/os/Bundle;)V`
 
-That is progress, but it is still not a working launch. Linuxoid now gets the real entry library loaded, calls `JNI_OnLoad`, dispatches a real registration callback, observes `RegisterNatives`, selects the real `SettingsActivity->onCreate(Landroid/os/Bundle;)V` lifecycle target, binds a deterministic Linuxoid managed runtime-context placeholder for that target, writes the blocked report cleanly, and stops at the honest next seam: Linuxoid still needs real `Activity.onCreate(Bundle)` dispatch into that context. The managed checkpoint remains honest too: `launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity ...` now gets far enough to keep that native handoff explicit and reports the next exact blocker as `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`.
+That is progress, but it is still not a working launch. Linuxoid now gets the real entry library loaded, calls `JNI_OnLoad`, dispatches a real registration callback, observes `RegisterNatives`, selects the real `SettingsActivity->onCreate(Landroid/os/Bundle;)V` lifecycle target, binds a deterministic Linuxoid managed runtime-context placeholder for that target, resolves the staged DEX entrypoint, executes the first real `invoke-super` boundary in `onCreate(Bundle)`, and stops at the honest next seam: `Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V` is still unimplemented inside the Linuxoid-managed runtime context. The managed checkpoint remains honest too: `launch-apk --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity ...` now reports `first_app_start_health: ready`, `blocking_reason: framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`, and `next_blocker: bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context`.
 
 ## Direct APK Proof Modes
 
@@ -336,8 +340,8 @@ Linuxoid now narrows the real keyboard APK visible-launch seam instead of collap
   - `interaction_target_component`
   - `interaction_target_window_id`
   - keeps the real upstream blocker explicit through:
-    - `blocking_reason: "activity_oncreate_bundle_dispatch_required:libjni_latinime.so"`
-    - `recommended_recovery_action: "inspect_native_launch_diagnostics"`
+    - `blocking_reason: "framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V"`
+    - `recommended_recovery_action: "extend_runtime_context_bridge"`
   - still records best-effort live-host truth when available through:
     - `backing_mode`
     - `wayland_surface_available`
@@ -347,13 +351,13 @@ What this checkpoint actually proves:
 
 - Linuxoid now ties the real keyboard `SettingsActivity` package/activity/process/surface/window session together in one machine-readable contract.
 - Linuxoid now distinguishes `headless-only`, `probe-only-live-target-available`, `blocked-by-native`, and `blocked-by-launch` states instead of flattening them into a generic window failure.
-- The Self-Healing Android Device path now preserves the real native blocker while still reporting whether a live Wayland/EGL target is available on the host.
+- The Self-Healing Android Device path now preserves the exact post-dispatch framework blocker while still reporting whether a live Wayland/EGL target is available on the host.
 
 What it still does **not** prove:
 
 - this is still not a visibly rendered, usable keyboard app on Linux
 - this is still not full Android framework window dispatch or input ownership
-- the next real blocker on the keyboard APK path is now bridging the managed activity-dispatch boundary surfaced after `libjni_latinime.so` finishes JNI registration
+- the next real blocker on the keyboard APK path is now bridging `ComponentActivity.onCreate(Bundle)` inside the Linuxoid-managed runtime context
 
 ## Recovery and Runtime Hardening Checkpoint
 
@@ -367,24 +371,24 @@ Linuxoid now makes the real keyboard verification path repeatable and quieter wi
   - `continuity_state`
   - `continuity_diagnostics`
 - on the real keyboard APK path, `launch-apk --self-heal-proof --window-proof --first-app-start-proof --package org.futo.inputmethod.latin --component org.futo.inputmethod.latin/.uix.settings.SettingsActivity ...` now keeps the earliest native blocker authoritative through:
-  - `primary_blocker_reason: "activity_oncreate_bundle_dispatch_required:libjni_latinime.so"`
+  - `primary_blocker_reason: "framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V"`
   - `recovery_gating_state: "upstream_native_blocker_gated"`
-  - `recovery_gating_reason: "activity_oncreate_bundle_dispatch_required:libjni_latinime.so"`
-  - `recommended_next_action: "inspect_native_launch_diagnostics"`
+  - `recovery_gating_reason: "framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V"`
+  - `recommended_next_action: "extend_runtime_context_bridge"`
 - downstream launch-dependent repairs are now journaled as `skipped_upstream_blocker` instead of being noisily attempted behind a known native `dlopen` failure
 
 What this checkpoint actually proves:
 
 - repeated verification runs keep one coherent sandbox, permission, and AppOps story for the same app identity
 - the Self-Healing Android Device watchdog now emits stable, comparable recovery artifacts for repeated keyboard APK failures
-- the real first blocker on the keyboard path stays explicit and machine-readable
+- the real first blocker on the keyboard path stays explicit and machine-readable all the way through the post-dispatch framework seam
 
 What it still does **not** prove:
 
 - this is still not a successful native-library fix for the keyboard APK
 - this is still not full ART-owned ActivityThread or framework dispatch
 - the next exact blocker is still:
-  - `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
+  - `bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context`
 
 `--dex-proof` now stages `classes.dex`, `classes2.dex`, and similar entries into the deterministic APK session root, parses safe DEX header plus string/type/proto/method/class metadata, can locate a deterministic entrypoint code item, and emits structured `dex` plus `art_bootstrap` JSON without claiming full Java/Kotlin ART execution yet.
 
@@ -501,18 +505,25 @@ On the real keyboard verification path today, Linuxoid now reports:
 - `first_android_app_start.lifecycle_parameter_state: "parameter-placeholder-materialized"`
 - `first_android_app_start.lifecycle_parameter_class_descriptor: "Landroid/os/Bundle;"`
 - `first_android_app_start.lifecycle_parameter_register: 3`
-- `first_android_app_start.framework_boundary_state: "framework-stubbed"`
-- `first_android_app_start.framework_boundary_reason: "android_activity_oncreate_bundle_stubbed_for_minimal_checkpoint"`
-- `first_android_app_start.blocking_reason: "framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V"`
+- `first_android_app_start.native_post_dispatch_state: "framework-blocked"`
+- `first_android_app_start.native_post_dispatch_blocker: "framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V"`
+- `first_android_app_start.class_loading_state: "resolved-from-staged-dex"`
+- `first_android_app_start.framework_boundary_state: "blocked"`
+- `first_android_app_start.framework_boundary_reason: "framework_or_invoke_target_unimplemented"`
+- `first_android_app_start.first_executed_opcode: "invoke-super"`
+- `first_android_app_start.java_art_bytecode_execution_attempted: true`
+- `first_android_app_start.java_art_bytecode_executed: true`
+- `first_android_app_start.blocking_reason: "framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V"`
+- `first_android_app_start.next_blocker: "bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context"`
 
-So this is a truthful managed-activity start checkpoint for the Self-Healing Android Device path. Linuxoid now resolves the real keyboard `SettingsActivity` class and `onCreate(Bundle)V` seam from staged DEX metadata, while the deterministic execution fixture still proves the minimal interpreter can cross one framework boundary, one constructor boundary, and one object-reference field round-trip to a real `return`. That is still not a claim that Linuxoid already provides a real ART class loader, ActivityThread, heap, or end-to-end Android framework execution.
+So this is a truthful managed-activity start checkpoint for the Self-Healing Android Device path. Linuxoid now resolves the real keyboard `SettingsActivity` class and `onCreate(Bundle)V` seam from staged DEX metadata, materializes the lifecycle receiver and Bundle placeholders, executes one real `invoke-super` bytecode boundary, and reports the exact unimplemented `ComponentActivity.onCreate(Bundle)` seam instead of collapsing back to a generic native blocker. The deterministic execution fixture still proves the minimal interpreter can cross one framework boundary, one constructor boundary, and one object-reference field round-trip to a real `return`. That is still not a claim that Linuxoid already provides a real ART class loader, ActivityThread, heap, or end-to-end Android framework execution.
 
 Immediate next blocker:
 
-- real keyboard APK end-to-end launch still blocks earlier at `activity_oncreate_bundle_dispatch_required`
-- Linuxoid now reports that upstream blocker as an exact post-`JNI_OnLoad` seam through `native_loading_state`, `native_loading_library_name`, `native_loading_detail`, `native_post_jni_dispatch_symbol`, and `native_execute.library_load_attempts`
-- the next managed-runtime interpreter seam after lookup is now the stubbed `Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V` bundle boundary
-- the next larger runtime-context blocker is `bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
+- real keyboard APK end-to-end launch now blocks at `managed_activity_post_dispatch_blocked`
+- Linuxoid now reports that upstream blocker as the exact post-dispatch seam `framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`
+- window, runtime, and Self-Healing Android Device reports now preserve that same blocker instead of flattening it back into `launch_not_ready`
+- the next larger runtime-context blocker is `bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context`
 
 `inspect-apk-compatibility` and `inspect-apk-compatibility-suite` now implement **P15 Third-Party APK Compatibility Sprint** on top of those same direct-session seams. They do not invent a disconnected mock matrix. Instead, Linuxoid launches the real staged APK session through package inspection, intent/activity resolution, storage sandboxing, permissions/AppOps, native/JNI load, process/session creation, window/surface state, runtime bootstrap, Java/Kotlin proof, and Self-Healing Android Device diagnostics, then emits a deterministic compatibility report under `sandbox/data/data/<package>/compatibility/compatibility-report.json`, `compatibility-domains.json`, and `compatibility-events.jsonl`. The suite command materializes the same contract across a small locally generated APK-like fixture set and summarizes statuses such as `supported`, `partial`, `blocked`, `missing-runtime`, `missing-surface`, `missing-native-lib`, `needs-real-art`, `recovered`, and `degraded`.
 

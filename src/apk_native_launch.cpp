@@ -578,6 +578,12 @@ std::string DetermineRecommendedRecoveryAction(
   if (report.launch_status == "native_library_staging_failed") {
     return "stage_abi_matching_native_library";
   }
+  if ((report.launch_status == "managed_activity_post_dispatch_blocked" ||
+       (report.launch_status == "activity_oncreate_bundle_dispatch_required" &&
+        report.native_post_dispatch_blocker != "none")) &&
+      report.native_post_dispatch_recovery_action != "none") {
+    return report.native_post_dispatch_recovery_action;
+  }
   if (report.launch_status == "libraries_failed_to_load" ||
       report.launch_status == "jni_onload_missing_or_failed" ||
       report.launch_status == "native_activity_entrypoint_missing" ||
@@ -585,6 +591,7 @@ std::string DetermineRecommendedRecoveryAction(
       report.launch_status == "jni_registration_callback_crashed" ||
       report.launch_status == "managed_activity_dispatch_required" ||
       report.launch_status == "managed_runtime_context_required" ||
+      report.launch_status == "managed_activity_post_dispatch_blocked" ||
       report.launch_status == "activity_oncreate_bundle_dispatch_required" ||
       report.launch_status == "jni_direct_method_dispatch_required") {
     return "inspect_native_launch_diagnostics";
@@ -864,6 +871,11 @@ std::string DetermineDexEntrypointClassDescriptor(
 
 std::string DetermineDexEntrypointMethodName(
     const NativeApkLaunchReport& report) {
+  if (report.native_managed_activity_dispatch_state ==
+          "linuxoid_dispatch_attempted" &&
+      !report.native_managed_activity_dispatch_method_name.empty()) {
+    return report.native_managed_activity_dispatch_method_name;
+  }
   return report.first_app_start_proof_requested ? "onCreate"
                                                 : "linuxoidCheckpoint";
 }
@@ -1069,6 +1081,11 @@ NativeApkWindowManagerSession BuildWindowManagerBridgeSession(
        .native_jni_state = report.native_jni_state,
        .native_loading_library_name = report.native_loading_library_name,
        .native_loading_detail = report.native_loading_detail,
+       .native_post_dispatch_state = report.native_post_dispatch_state,
+       .native_post_dispatch_blocker = report.native_post_dispatch_blocker,
+       .native_post_dispatch_recovery_action =
+           report.native_post_dispatch_recovery_action,
+       .native_post_dispatch_backend = report.native_post_dispatch_backend,
        .launch_ready = report.launch_ready,
        .recoverable = report.recoverable,
        .launcher_component = report.launcher_component,
@@ -1171,6 +1188,11 @@ NativeApkRuntimeBridgeSession BuildRuntimeBridgeSession(
        .launch_status = report.launch_status,
        .launch_ready = report.launch_ready,
        .recoverable = report.recoverable,
+       .native_post_dispatch_state = report.native_post_dispatch_state,
+       .native_post_dispatch_blocker = report.native_post_dispatch_blocker,
+       .native_post_dispatch_recovery_action =
+           report.native_post_dispatch_recovery_action,
+       .native_post_dispatch_backend = report.native_post_dispatch_backend,
        .launcher_component = report.launcher_component,
        .resolved_component = report.intent_resolution.resolved_component,
        .activity_launch_status = report.activity_launch.activity_launch_status,
@@ -1663,6 +1685,144 @@ std::string SanitizeExecutionToken(std::string value) {
   return value;
 }
 
+bool HasManagedPostDispatchProbeContext(const NativeApkLaunchReport& report) {
+  return report.native_managed_activity_dispatch_state ==
+             "linuxoid_dispatch_attempted" &&
+         report.native_managed_activity_runtime_binding_state ==
+             "linuxoid_runtime_context_bound" &&
+         report.dex.execution_probe.ready;
+}
+
+std::string DetermineManagedPostDispatchBlocker(
+    const NativeApkLaunchReport& report) {
+  if (!HasManagedPostDispatchProbeContext(report)) {
+    return "none";
+  }
+  if (report.dex.execution_probe.reached_return) {
+    return "needs-real-activitythread-context";
+  }
+  if (!report.dex.execution_probe.exact_blocker.empty() &&
+      report.dex.execution_probe.exact_blocker != "none") {
+    return report.dex.execution_probe.exact_blocker;
+  }
+  if (!report.dex.execution_probe.execution_state.empty() &&
+      report.dex.execution_probe.execution_state != "not_attempted") {
+    return "managed-post-dispatch-probe-blocked:" +
+           report.dex.execution_probe.execution_state;
+  }
+  return "none";
+}
+
+std::string DetermineManagedPostDispatchState(
+    const NativeApkLaunchReport& report, const std::string& blocker) {
+  if (!HasManagedPostDispatchProbeContext(report)) {
+    return "not_reached";
+  }
+  if (blocker == "none") {
+    return "dispatched";
+  }
+  if (blocker == "needs-real-activitythread-context") {
+    return "returned";
+  }
+  if (blocker.rfind("framework-boundary-stubbed:", 0) == 0) {
+    return "framework-stubbed";
+  }
+  if (blocker.rfind("framework-boundary-unimplemented:", 0) == 0) {
+    return "framework-blocked";
+  }
+  if (blocker.rfind("unsupported-dex-opcode:", 0) == 0) {
+    return "bytecode-blocked";
+  }
+  if (blocker.rfind("managed-post-dispatch-probe-blocked:", 0) == 0 ||
+      blocker.rfind("dex_", 0) == 0) {
+    return "dispatch-probe-blocked";
+  }
+  return "blocked";
+}
+
+std::string DetermineManagedPostDispatchRecoveryAction(
+    const std::string& blocker) {
+  if (blocker == "none" ||
+      blocker == "needs-real-activitythread-context") {
+    return "none";
+  }
+  if (blocker.rfind("framework-boundary-stubbed:", 0) == 0 ||
+      blocker.rfind("framework-boundary-unimplemented:", 0) == 0) {
+    return "extend_runtime_context_bridge";
+  }
+  if (blocker.rfind("unsupported-dex-opcode:", 0) == 0 ||
+      blocker == "dex_invoke_receiver_missing" ||
+      blocker == "dex_invoke_argument_placeholder_missing" ||
+      blocker == "dex_invoke_register_out_of_range" ||
+      blocker == "dex_move_result_without_pending_value" ||
+      blocker.rfind("managed-post-dispatch-probe-blocked:", 0) == 0 ||
+      blocker.rfind("dex_", 0) == 0) {
+    return "extend_minimal_dex_interpreter";
+  }
+  return "inspect_native_launch_diagnostics";
+}
+
+std::string DetermineManagedPostDispatchNextBlocker(
+    const std::string& blocker) {
+  if (blocker == "needs-real-activitythread-context") {
+    return "bridge_activity_oncreate_into_real_art_runtime_context";
+  }
+  if (blocker ==
+      "framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V") {
+    return "bridge_framework_oncreate_super_call_into_managed_runtime_context";
+  }
+  if (blocker ==
+      "framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V") {
+    return "bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context";
+  }
+  if (blocker.rfind("framework-boundary-stubbed:", 0) == 0 ||
+      blocker.rfind("framework-boundary-unimplemented:", 0) == 0) {
+    return "bridge_framework_boundary_into_managed_runtime_context_" +
+           SanitizeExecutionToken(blocker.substr(blocker.find(':') + 1u));
+  }
+  if (blocker.rfind("unsupported-dex-opcode:", 0) == 0) {
+    return "extend_minimal_dex_interpreter_for_" +
+           SanitizeExecutionToken(
+               blocker.substr(std::string("unsupported-dex-opcode:").size()));
+  }
+  if (blocker == "dex_invoke_receiver_missing") {
+    return "propagate_framework_invoke_receiver_registers";
+  }
+  if (blocker == "dex_invoke_argument_placeholder_missing") {
+    return "materialize_framework_lifecycle_argument_placeholders";
+  }
+  if (blocker == "dex_invoke_register_out_of_range") {
+    return "repair_dex_invoke_register_mapping";
+  }
+  if (blocker == "dex_move_result_without_pending_value") {
+    return "preserve_dex_pending_result_state";
+  }
+  if (blocker.rfind("managed-post-dispatch-probe-blocked:", 0) == 0 ||
+      blocker.rfind("dex_", 0) == 0) {
+    return "stabilize_linuxoid_managed_post_dispatch_probe";
+  }
+  return "inspect_first_app_start_diagnostics";
+}
+
+void ApplyManagedPostDispatchBoundary(NativeApkLaunchReport* report) {
+  const std::string blocker = DetermineManagedPostDispatchBlocker(*report);
+  report->native_post_dispatch_state =
+      DetermineManagedPostDispatchState(*report, blocker);
+  report->native_post_dispatch_blocker = blocker;
+  report->native_post_dispatch_recovery_action =
+      DetermineManagedPostDispatchRecoveryAction(blocker);
+  report->native_post_dispatch_backend =
+      HasManagedPostDispatchProbeContext(*report)
+          ? report->dex.execution_probe.execution_backend
+          : "none";
+  if ((report->launch_status == "managed_activity_dispatch_required" ||
+       report->launch_status == "managed_runtime_context_required" ||
+       report->launch_status == "activity_oncreate_bundle_dispatch_required") &&
+      blocker != "none") {
+    report->launch_status = "managed_activity_post_dispatch_blocked";
+  }
+}
+
 const NativeLibraryLoadAttempt* FindPrimaryNativeLoadAttempt(
     const NativeExecuteReport& report) {
   if (!report.selected_library_path.empty()) {
@@ -1722,6 +1882,9 @@ std::string DetermineNativeLoadingState(const NativeApkLaunchReport& report) {
   }
   if (report.launch_status == "managed_runtime_context_required") {
     return "managed_runtime_context_required";
+  }
+  if (report.launch_status == "managed_activity_post_dispatch_blocked") {
+    return "managed_activity_post_dispatch_blocked";
   }
   if (report.launch_status == "activity_oncreate_bundle_dispatch_required") {
     return "activity_oncreate_bundle_dispatch_required";
@@ -1878,6 +2041,10 @@ std::string DetermineFirstAppStartNativeBlockingReason(
   if (report.launch_ready) {
     return "";
   }
+  if (report.launch_status == "managed_activity_post_dispatch_blocked" &&
+      report.native_post_dispatch_blocker != "none") {
+    return report.native_post_dispatch_blocker;
+  }
   if (report.launch_status == "no_native_libraries_found") {
     return "no_native_libraries_found_for_first_app_start";
   }
@@ -1922,6 +2089,10 @@ std::string DetermineFirstAppStartNativeBlockingReason(
       attempt != nullptr) {
     return "managed_runtime_context_required_for_first_app_start:" +
            attempt->library_name;
+  }
+  if (report.launch_status == "activity_oncreate_bundle_dispatch_required" &&
+      report.native_post_dispatch_blocker != "none") {
+    return report.native_post_dispatch_blocker;
   }
   if (report.launch_status == "activity_oncreate_bundle_dispatch_required" &&
       attempt != nullptr) {
@@ -2023,6 +2194,10 @@ std::string DetermineFirstAppStartRecoveryAction(
       blocking_reason == "needs-real-activitythread-context") {
     return "none";
   }
+  if (blocking_reason.rfind("framework-boundary-unimplemented:", 0) == 0 ||
+      blocking_reason.rfind("managed-post-dispatch-probe-blocked:", 0) == 0) {
+    return "extend_runtime_context_bridge";
+  }
   if (blocking_reason.rfind("unsupported-dex-opcode:", 0) == 0) {
     return "extend_minimal_dex_interpreter";
   }
@@ -2122,6 +2297,10 @@ std::string DetermineFirstAppStartNextBlocker(
   if (blocking_reason == "needs-real-activitythread-context") {
     return "bridge_activity_oncreate_into_real_art_runtime_context";
   }
+  if (blocking_reason.rfind("framework-boundary-unimplemented:", 0) == 0 ||
+      blocking_reason.rfind("managed-post-dispatch-probe-blocked:", 0) == 0) {
+    return DetermineManagedPostDispatchNextBlocker(blocking_reason);
+  }
   if (blocking_reason.rfind("unsupported-dex-opcode:", 0) == 0) {
     return "extend_minimal_dex_interpreter_for_" +
            SanitizeExecutionToken(blocking_reason.substr(
@@ -2141,7 +2320,7 @@ std::string DetermineFirstAppStartNextBlocker(
   }
   if (blocking_reason ==
       "framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V") {
-    return "bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context";
+    return DetermineManagedPostDispatchNextBlocker(blocking_reason);
   }
   if (blocking_reason == "art_runtime_unavailable_for_first_app_start") {
     return "provide_discoverable_art_runtime_root";
@@ -2408,6 +2587,15 @@ std::string RenderFirstAppStartJson(
          << "  \"native_managed_activity_runtime_context_kind\": \""
          << EscapeJson(proof.native_managed_activity_runtime_context_kind)
          << "\",\n"
+         << "  \"native_post_dispatch_state\": \""
+         << EscapeJson(proof.native_post_dispatch_state) << "\",\n"
+         << "  \"native_post_dispatch_blocker\": \""
+         << EscapeJson(proof.native_post_dispatch_blocker) << "\",\n"
+         << "  \"native_post_dispatch_recovery_action\": \""
+         << EscapeJson(proof.native_post_dispatch_recovery_action)
+         << "\",\n"
+         << "  \"native_post_dispatch_backend\": \""
+         << EscapeJson(proof.native_post_dispatch_backend) << "\",\n"
          << "  \"native_loading_library_name\": \""
          << EscapeJson(proof.native_loading_library_name) << "\",\n"
          << "  \"native_loading_detail\": \""
@@ -2627,6 +2815,11 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
       report.native_managed_activity_runtime_context_id;
   proof.native_managed_activity_runtime_context_kind =
       report.native_managed_activity_runtime_context_kind;
+  proof.native_post_dispatch_state = report.native_post_dispatch_state;
+  proof.native_post_dispatch_blocker = report.native_post_dispatch_blocker;
+  proof.native_post_dispatch_recovery_action =
+      report.native_post_dispatch_recovery_action;
+  proof.native_post_dispatch_backend = report.native_post_dispatch_backend;
   proof.native_loading_library_name = report.native_loading_library_name;
   proof.native_loading_detail = report.native_loading_detail;
   proof.bytecode_execution_state = report.dex.execution_probe.execution_state;
@@ -2725,6 +2918,11 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
   proof.checkpoint_boundary_reached =
       proof.app_started || proof.blocking_reason == "none" ||
       proof.blocking_reason == "needs-real-activitythread-context" ||
+      proof.blocking_reason.rfind("framework-boundary-stubbed:", 0) == 0 ||
+      proof.blocking_reason.rfind("framework-boundary-unimplemented:", 0) ==
+          0 ||
+      proof.blocking_reason.rfind("managed-post-dispatch-probe-blocked:", 0) ==
+          0 ||
       proof.blocking_reason.rfind("unsupported-dex-opcode:", 0) == 0;
   proof.ready = proof.checkpoint_boundary_reached;
   proof.contract_ready = proof.ready;
@@ -2744,6 +2942,18 @@ NativeApkFirstAppStartProof BuildFirstAppStartProof(
         "Self-Healing Android Device first app start checkpoint executed real DEX bytecode through Linuxoid's minimal interpreter");
     proof.diagnostics.push_back(
         "Linuxoid has not crossed into real ART-owned ActivityThread context or managed Android framework dispatch yet");
+  } else if (proof.blocking_reason.rfind("framework-boundary-unimplemented:",
+                                         0) == 0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint crossed Linuxoid's managed Activity.onCreate(Bundle) dispatch seam and reached an exact unimplemented framework boundary");
+  } else if (proof.blocking_reason.rfind("framework-boundary-stubbed:", 0) ==
+             0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint crossed Linuxoid's managed Activity.onCreate(Bundle) dispatch seam and reached a stubbed framework boundary");
+  } else if (proof.blocking_reason.rfind(
+                 "managed-post-dispatch-probe-blocked:", 0) == 0) {
+    proof.diagnostics.push_back(
+        "Self-Healing Android Device first app start checkpoint crossed the native managed-dispatch seam and then blocked inside Linuxoid's post-dispatch probe");
   } else if (proof.blocking_reason.rfind("native_dlopen_failed_for_first_app_start:",
                                          0) == 0) {
     proof.diagnostics.push_back(
@@ -3316,6 +3526,9 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
       options.java_proof_requested || report.first_app_start_proof_requested;
   report.runtime_proof_requested =
       options.runtime_proof_requested || report.java_proof_requested ||
+      report.first_app_start_proof_requested ||
+      options.window_proof_requested ||
+      options.self_heal_proof_requested ||
       options.simulate_failed_runtime_bootstrap;
   report.window_proof_requested =
       options.window_proof_requested || report.runtime_proof_requested ||
@@ -3771,6 +3984,9 @@ NativeApkLaunchReport LaunchNativeApk(const std::string& apk_path,
     report.art_health = "not_requested";
   }
 
+  ApplyManagedPostDispatchBoundary(&report);
+  RefreshNativeLoadingDetails(&report);
+
   if (report.activity_proof_requested) {
     const auto binder_report = MaterializeBinderFoundation(report);
     report.binder_health = binder_report.manager_ready ? "ready" : "blocked";
@@ -4030,6 +4246,15 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "  \"native_managed_activity_runtime_context_kind\": \""
          << EscapeJson(report.native_managed_activity_runtime_context_kind)
          << "\",\n"
+         << "  \"native_post_dispatch_state\": \""
+         << EscapeJson(report.native_post_dispatch_state) << "\",\n"
+         << "  \"native_post_dispatch_blocker\": \""
+         << EscapeJson(report.native_post_dispatch_blocker) << "\",\n"
+         << "  \"native_post_dispatch_recovery_action\": \""
+         << EscapeJson(report.native_post_dispatch_recovery_action)
+         << "\",\n"
+         << "  \"native_post_dispatch_backend\": \""
+         << EscapeJson(report.native_post_dispatch_backend) << "\",\n"
          << "  \"native_loading_library_name\": \""
          << EscapeJson(report.native_loading_library_name) << "\",\n"
          << "  \"native_loading_library_path\": \""
@@ -5248,6 +5473,22 @@ std::string RenderNativeApkLaunchJson(const NativeApkLaunchReport& report) {
          << "    \"native_managed_activity_runtime_context_kind\": \""
          << EscapeJson(report.first_android_app_start
                            .native_managed_activity_runtime_context_kind)
+         << "\",\n"
+         << "    \"native_post_dispatch_state\": \""
+         << EscapeJson(
+                report.first_android_app_start.native_post_dispatch_state)
+         << "\",\n"
+         << "    \"native_post_dispatch_blocker\": \""
+         << EscapeJson(
+                report.first_android_app_start.native_post_dispatch_blocker)
+         << "\",\n"
+         << "    \"native_post_dispatch_recovery_action\": \""
+         << EscapeJson(report.first_android_app_start
+                           .native_post_dispatch_recovery_action)
+         << "\",\n"
+         << "    \"native_post_dispatch_backend\": \""
+         << EscapeJson(
+                report.first_android_app_start.native_post_dispatch_backend)
          << "\",\n"
          << "    \"native_loading_library_name\": \""
          << EscapeJson(report.first_android_app_start.native_loading_library_name)

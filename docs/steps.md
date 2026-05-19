@@ -1,5 +1,10 @@
 # Steps Log
 
+- Step: Post-Dispatch Framework Boundary Checkpoint GREEN
+  Action: Extended the direct keyboard APK path so Linuxoid now carries the JNI-selected `SettingsActivity->onCreate(Landroid/os/Bundle;)V` target through staged DEX resolution and a first real `invoke-super` execution step, then threads the resulting exact post-dispatch blocker through launch, first-app-start, runtime, window, and Self-Healing Android Device reports.
+  Result: The real keyboard APK path now reports `native_loading_state: managed_activity_post_dispatch_blocked`, `native_post_dispatch_blocker: framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`, `first_app_start_health: ready`, `primary_blocker_reason: framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`, and `next_blocker: bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context`, while still honestly not claiming visible app launch or full ActivityThread/framework execution.
+  Timestamp: 2026-05-19T18:45:00+05:30
+
 - Step: Managed Runtime Context Binding Checkpoint GREEN
   Action: Extended the direct native execute path so Linuxoid now turns the selected `SettingsActivity->onCreate(Landroid/os/Bundle;)V` target into a deterministic Linuxoid managed runtime-context placeholder binding instead of stopping at the broader managed-runtime-context-required seam.
   Result: The real keyboard APK path now reports `native_loading_state: activity_oncreate_bundle_dispatch_required`, `native_managed_activity_runtime_binding_state: linuxoid_runtime_context_bound`, `native_managed_activity_runtime_context_kind: linuxoid_managed_runtime_context_placeholder`, `primary_blocker_reason: activity_oncreate_bundle_dispatch_required:libjni_latinime.so`, and `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`, while still honestly not claiming full ActivityThread or framework dispatch.

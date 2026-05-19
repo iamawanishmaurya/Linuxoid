@@ -331,6 +331,9 @@ bool IsNativeBlockingReason(const std::string& blocking_reason) {
 std::string DetermineWindowBlockingReason(
     const NativeApkWindowManagerContext& context) {
   if (!context.launch_ready) {
+    if (context.native_post_dispatch_blocker != "none") {
+      return context.native_post_dispatch_blocker;
+    }
     if (context.native_loading_state == "dlopen_failed" &&
         !context.native_loading_library_name.empty()) {
       return "native_dlopen_failed:" + context.native_loading_library_name;
@@ -418,6 +421,13 @@ std::string DetermineWindowRecoveryAction(
     const std::string& blocking_reason) {
   if (blocking_reason == "none") {
     return "none";
+  }
+  if (blocking_reason.rfind("framework-boundary-stubbed:", 0) == 0 ||
+      blocking_reason.rfind("framework-boundary-unimplemented:", 0) == 0 ||
+      blocking_reason.rfind("managed-post-dispatch-probe-blocked:", 0) == 0) {
+    return context.native_post_dispatch_recovery_action == "none"
+               ? "extend_runtime_context_bridge"
+               : context.native_post_dispatch_recovery_action;
   }
   if (IsNativeBlockingReason(blocking_reason) ||
       blocking_reason.rfind("launch_not_ready:", 0) == 0) {
@@ -600,6 +610,15 @@ std::string BuildWindowStateJson(const NativeApkWindowManagerReport& report) {
          << EscapeJson(report.interaction_target_component) << "\",\n"
          << "  \"interaction_target_window_id\": \""
          << EscapeJson(report.interaction_target_window_id) << "\",\n"
+         << "  \"native_post_dispatch_state\": \""
+         << EscapeJson(report.native_post_dispatch_state) << "\",\n"
+         << "  \"native_post_dispatch_blocker\": \""
+         << EscapeJson(report.native_post_dispatch_blocker) << "\",\n"
+         << "  \"native_post_dispatch_recovery_action\": \""
+         << EscapeJson(report.native_post_dispatch_recovery_action)
+         << "\",\n"
+         << "  \"native_post_dispatch_backend\": \""
+         << EscapeJson(report.native_post_dispatch_backend) << "\",\n"
          << "  \"blocking_reason\": \"" << EscapeJson(report.blocking_reason)
          << "\",\n"
          << "  \"recommended_recovery_action\": \""
@@ -729,6 +748,11 @@ NativeApkWindowManagerReport NativeApkWindowManagerSession::BuildReport() const 
   report.surface_metadata_path = context_.surface_metadata_path;
   report.surface_event_log_path = context_.surface_event_log_path;
   report.marker_path = context_.surface_marker_path;
+  report.native_post_dispatch_state = context_.native_post_dispatch_state;
+  report.native_post_dispatch_blocker = context_.native_post_dispatch_blocker;
+  report.native_post_dispatch_recovery_action =
+      context_.native_post_dispatch_recovery_action;
+  report.native_post_dispatch_backend = context_.native_post_dispatch_backend;
   report.updated_at_unix_ms = ComputeDeterministicUnixMs(
       report.package_name, report.user_id, report.app_id,
       report.launch_component);

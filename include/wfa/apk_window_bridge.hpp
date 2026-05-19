@@ -30,6 +30,10 @@ struct NativeApkWindowManagerContext {
   std::string native_jni_state = "not_requested";
   std::string native_loading_library_name;
   std::string native_loading_detail;
+  std::string native_post_dispatch_state = "not_reached";
+  std::string native_post_dispatch_blocker = "none";
+  std::string native_post_dispatch_recovery_action = "none";
+  std::string native_post_dispatch_backend = "none";
   bool launch_ready = false;
   bool recoverable = false;
   std::string launcher_component;
@@ -141,6 +145,10 @@ struct NativeApkWindowManagerReport {
   std::string interaction_state = "not_requested";
   std::string interaction_target_component;
   std::string interaction_target_window_id;
+  std::string native_post_dispatch_state = "not_reached";
+  std::string native_post_dispatch_blocker = "none";
+  std::string native_post_dispatch_recovery_action = "none";
+  std::string native_post_dispatch_backend = "none";
   std::string blocking_reason = "none";
   std::string recommended_recovery_action = "none";
   std::vector<std::string> states_visited;

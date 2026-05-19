@@ -6993,7 +6993,16 @@ void TestLaunchApkFirstAppStartReportsPostRegistrationManagedDispatchBoundary() 
       build_dir / "liblinuxoid_p1_jni_registration_fixture.so";
   const auto fixture = CreateNativeApkLaunchFixtureWithLibraryPath(
       "linuxoid-first-app-start-jni-registration-fixture", fixture_library,
-      "lib/x86_64/libjni_latinime.so");
+      "lib/x86_64/libjni_latinime.so",
+      {{"classes.dex",
+        BuildFrameworkBoundaryLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const auto runtime_root =
+      CreateArtRuntimeRootFixture(fixture.root / "art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", runtime_root.string());
 
   int exit_code = 0;
   const std::string output = ReadCommandOutput(
@@ -7001,11 +7010,11 @@ void TestLaunchApkFirstAppStartReportsPostRegistrationManagedDispatchBoundary() 
           fixture.apk_path.string() + " " + fixture.staging_root.string(),
       &exit_code);
 
-  Expect(exit_code != 0,
-         "expected blocked first-app-start proof for JNI registration fixture");
-  Expect(output.find("\"first_app_start_health\": \"blocked\"") !=
+  Expect(exit_code == 0,
+         "expected first-app-start proof for JNI registration fixture to succeed once the precise post-dispatch boundary is reached");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
              std::string::npos,
-         "expected blocked first app start health for JNI registration fixture");
+         "expected proof-ready first app start health for JNI registration fixture");
   Expect(output.find(
              "\"native_app_start_bridge_state\": "
              "\"linuxoid_managed_app_start_bridge_selected\"") !=
@@ -7043,19 +7052,87 @@ void TestLaunchApkFirstAppStartReportsPostRegistrationManagedDispatchBoundary() 
              std::string::npos,
          "expected runtime context placeholder kind in first-app-start proof");
   Expect(output.find(
-             "\"blocking_reason\": "
-             "\"activity_oncreate_bundle_dispatch_required_for_first_app_start:libjni_latinime.so\"") !=
+             "\"native_post_dispatch_state\": "
+             "\"framework-stubbed\"") != std::string::npos,
+         "expected exact post-dispatch state in first-app-start proof");
+  Expect(output.find(
+             "\"native_post_dispatch_blocker\": "
+             "\"framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V\"") !=
              std::string::npos,
-         "expected narrowed first-app-start blocker for post-binding seam");
+         "expected exact post-dispatch blocker in first-app-start proof");
+  Expect(output.find(
+             "\"blocking_reason\": "
+             "\"framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V\"") !=
+             std::string::npos,
+         "expected narrowed first-app-start blocker for post-dispatch seam");
   Expect(output.find(
              "\"recommended_recovery_action\": "
-             "\"inspect_native_launch_diagnostics\"") != std::string::npos,
-         "expected native diagnostics recovery action for post-registration seam");
+             "\"extend_runtime_context_bridge\"") != std::string::npos,
+         "expected runtime-context bridge recovery action for post-dispatch seam");
   Expect(output.find(
              "\"next_blocker\": "
-             "\"bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context\"") !=
+             "\"bridge_framework_oncreate_super_call_into_managed_runtime_context\"") !=
              std::string::npos,
-         "expected next blocker to point at managed runtime dispatch");
+         "expected next blocker to point at framework onCreate super call");
+
+  fs::remove_all(fixture.root);
+}
+
+void TestLaunchApkWindowRuntimeAndWatchdogSharePostDispatchBlockerTruth() {
+  namespace fs = std::filesystem;
+  const fs::path build_dir = ResolveBuildDirFromTestBinary();
+  const fs::path compatctl = build_dir / "compatctl";
+  const fs::path fixture_library =
+      build_dir / "liblinuxoid_p1_jni_registration_fixture.so";
+  const auto fixture = CreateNativeApkLaunchFixtureWithLibraryPath(
+      "linuxoid-window-runtime-post-dispatch-fixture", fixture_library,
+      "lib/x86_64/libjni_latinime.so",
+      {{"classes.dex",
+        BuildFrameworkBoundaryLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const auto runtime_root =
+      CreateArtRuntimeRootFixture(fixture.root / "art-runtime");
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", runtime_root.string());
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() +
+          " launch-apk --window-proof --runtime-proof --self-heal-proof " +
+          fixture.apk_path.string() + " " + fixture.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code != 0,
+         "expected blocked launch for post-dispatch window/runtime fixture");
+  Expect(output.find("\"launch_status\": "
+                     "\"managed_activity_post_dispatch_blocked\"") !=
+             std::string::npos,
+         "expected launch status to move beyond the generic activity onCreate seam");
+  Expect(output.find("\"native_post_dispatch_state\": "
+                     "\"framework-stubbed\"") != std::string::npos,
+         "expected top-level post-dispatch state in launch json");
+  Expect(output.find("\"native_post_dispatch_blocker\": "
+                     "\"framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V\"") !=
+             std::string::npos,
+         "expected top-level post-dispatch blocker in launch json");
+  Expect(output.find("\"native_post_dispatch_recovery_action\": "
+                     "\"extend_runtime_context_bridge\"") !=
+             std::string::npos,
+         "expected top-level post-dispatch recovery action in launch json");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V\"") !=
+             std::string::npos,
+         "expected shared exact blocker across nested reports");
+  Expect(output.find("\"primary_blocker_reason\": "
+                     "\"framework-boundary-stubbed:Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V\"") !=
+             std::string::npos,
+         "expected watchdog primary blocker to use exact post-dispatch seam");
+  Expect(output.find("\"recommended_next_action\": "
+                     "\"extend_runtime_context_bridge\"") !=
+             std::string::npos,
+         "expected watchdog recovery guidance for exact post-dispatch seam");
 
   fs::remove_all(fixture.root);
 }
@@ -11062,8 +11139,8 @@ void TestLaunchApkFirstAppStartProofTargetsKeyboardSettingsActivityFixture() {
           fixture.apk_path.string() + " " + fixture.staging_root.string(),
       &exit_code);
 
-  Expect(exit_code != 0,
-         "expected keyboard settings activity proof fixture to stop at a precise managed-start boundary");
+  Expect(exit_code == 0,
+         "expected keyboard settings activity proof fixture to succeed once the precise managed-start boundary is reported");
   Expect(output.find(
              "\"activity_name\": "
              "\"org.futo.inputmethod.latin.uix.settings.SettingsActivity\"") !=
@@ -11083,9 +11160,9 @@ void TestLaunchApkFirstAppStartProofTargetsKeyboardSettingsActivityFixture() {
              "\"Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;\"") !=
              std::string::npos,
          "expected keyboard activity class descriptor in first app start json");
-  Expect(output.find("\"first_app_start_health\": \"blocked\"") !=
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
              std::string::npos,
-         "expected blocked first app start health for keyboard fixture boundary");
+         "expected proof-ready first app start health for keyboard fixture boundary");
   Expect(output.find(
              "\"dex_parse_state\": \"entrypoint_code_item_resolved\"") !=
              std::string::npos,
@@ -11148,7 +11225,7 @@ void TestLaunchApkFirstAppStartProofTargetsKeyboardSettingsActivityFixture() {
              std::string::npos,
          "expected exact framework-stubbed blocker for keyboard fixture");
   Expect(output.find("\"next_blocker\": "
-                     "\"bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context\"") !=
+                     "\"bridge_framework_oncreate_super_call_into_managed_runtime_context\"") !=
              std::string::npos,
          "expected actionable next blocker for keyboard fixture");
 
@@ -15863,6 +15940,7 @@ int main() {
     TestLaunchApkFirstAppStartReportsManagedAppStartBridgeBoundary();
     TestLaunchApkReportsJniRegistrationCallbackDispatchOutcomePrecisely();
     TestLaunchApkFirstAppStartReportsPostRegistrationManagedDispatchBoundary();
+    TestLaunchApkWindowRuntimeAndWatchdogSharePostDispatchBlockerTruth();
     TestLaunchApkReportsUnshimmedAndroidSymbolBlockerPrecisely();
   } catch (const std::exception& error) {
     std::cerr << "Test failure: " << error.what() << '\n';

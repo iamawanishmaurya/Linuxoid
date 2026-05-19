@@ -409,6 +409,9 @@ std::string DetermineRuntimeBlockingReason(
     const NativeApkRuntimeBridgeContext& context,
     const RuntimeDiscovery& discovery) {
   if (!context.launch_ready) {
+    if (context.native_post_dispatch_blocker != "none") {
+      return context.native_post_dispatch_blocker;
+    }
     return "launch_not_ready";
   }
   if (context.storage_health != "ready" || context.sandbox_health != "ready") {
@@ -466,6 +469,11 @@ std::string DetermineRuntimeBlockingReason(
 }
 
 std::string DetermineRuntimeRecoveryAction(const std::string& blocking_reason) {
+  if (blocking_reason.rfind("framework-boundary-stubbed:", 0) == 0 ||
+      blocking_reason.rfind("framework-boundary-unimplemented:", 0) == 0 ||
+      blocking_reason.rfind("managed-post-dispatch-probe-blocked:", 0) == 0) {
+    return "extend_runtime_context_bridge";
+  }
   if (blocking_reason == "activity_manager_not_ready" ||
       blocking_reason == "process_manager_not_ready") {
     return "rebuild_process_manager_state";
@@ -599,6 +607,15 @@ std::string RenderRuntimeBridgeJson(const NativeApkRuntimeBridgeReport& report) 
          << (report.egl_surface_available ? "true" : "false") << ",\n"
          << "  \"bootstrap_state\": \"" << EscapeJson(report.bootstrap_state)
          << "\",\n"
+         << "  \"native_post_dispatch_state\": \""
+         << EscapeJson(report.native_post_dispatch_state) << "\",\n"
+         << "  \"native_post_dispatch_blocker\": \""
+         << EscapeJson(report.native_post_dispatch_blocker) << "\",\n"
+         << "  \"native_post_dispatch_recovery_action\": \""
+         << EscapeJson(report.native_post_dispatch_recovery_action)
+         << "\",\n"
+         << "  \"native_post_dispatch_backend\": \""
+         << EscapeJson(report.native_post_dispatch_backend) << "\",\n"
          << "  \"blocking_reason\": \"" << EscapeJson(report.blocking_reason)
          << "\",\n"
          << "  \"recommended_recovery_action\": \""
@@ -696,6 +713,11 @@ NativeApkRuntimeBridgeReport NativeApkRuntimeBridgeSession::BuildReport() const 
   report.headless_safe = true;
   report.wayland_surface_available = context_.wayland_surface_available;
   report.egl_surface_available = context_.egl_surface_available;
+  report.native_post_dispatch_state = context_.native_post_dispatch_state;
+  report.native_post_dispatch_blocker = context_.native_post_dispatch_blocker;
+  report.native_post_dispatch_recovery_action =
+      context_.native_post_dispatch_recovery_action;
+  report.native_post_dispatch_backend = context_.native_post_dispatch_backend;
   report.class_loader_ready = context_.class_loader_ready;
   report.java_execution_supported = false;
   report.bytecode_execution_ready = false;

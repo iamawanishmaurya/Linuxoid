@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.131 - 2026-05-19
+
+- Close **Phase 13: Activity onCreate Dispatch Bridge** around the real keyboard APK's first post-dispatch framework seam instead of widening into broad framework recreation.
+- Extend the direct launch, first-app-start, window, runtime, and watchdog paths so once `libjni_latinime.so` loads, `JNI_OnLoad` succeeds, `RegisterNatives` completes, Linuxoid selects `SettingsActivity->onCreate(Landroid/os/Bundle;)V`, binds a deterministic managed runtime-context placeholder, resolves staged DEX metadata, and executes the first real `invoke-super` boundary, Linuxoid now reports the exact post-dispatch blocker `framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`.
+- Tighten the focused JNI-registration and keyboard lifecycle fixtures so proof mode is considered successful once that exact checkpoint boundary is reached, while the real launch path stays honestly blocked with `launch_status: managed_activity_post_dispatch_blocked`, `recommended_recovery_action: extend_runtime_context_bridge`, and `next_blocker: bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context`.
+
 ## v0.1.130 - 2026-05-19
 
 - Close **Phase 12: Managed Runtime Context Binding** around the real keyboard APK's post-dispatch managed handoff instead of widening into broad framework recreation.

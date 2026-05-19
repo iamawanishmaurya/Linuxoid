@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Visible App Launch
-status: planning
-last_updated: "2026-05-19T00:00:00.000Z"
+status: executing
+last_updated: "2026-05-19T13:15:00.000Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 9
-  completed_plans: 0
-  percent: 0
+  completed_plans: 3
+  percent: 33
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** Run a real Android app directly on Linux through Linuxoid's own compatibility/runtime path, with honest execution and honest blockers instead of emulator fallback.
-**Current focus:** Phase 13 — Activity onCreate Dispatch Bridge
+**Current focus:** Next visible-launch bridge after Phase 13
 
 ## Current Position
 
-Phase: 13 (Activity onCreate Dispatch Bridge) — PLANNED
+Phase: 13 (Activity onCreate Dispatch Bridge) — COMPLETED
 Plan: 3 of 3 authored
-Status: Ready for execute-phase
-Last activity: 2026-05-19 — Milestone v1.1 initialized, research refreshed, and Phase 13 planned
+Status: Executed and verified
+Last activity: 2026-05-19 — Phase 13 executed; the real keyboard path now reaches an exact post-dispatch framework boundary
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -53,19 +53,19 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Execute Phase 13 plans `13-01` through `13-03`
+- Plan the next visible-launch phase after the `ComponentActivity.onCreate(Bundle)` boundary
 - Bridge post-dispatch startup into visible surface readiness for the keyboard settings activity
 - Reserve IME service behavior for later milestone work after visible launch exists
 
 ### Blockers/Concerns
 
-- Current exact live blocker: `native_loading_state: activity_oncreate_bundle_dispatch_required`, `native_jni_state: called`, `native_managed_activity_runtime_binding_state: linuxoid_runtime_context_bound`, `native_loading_library_name: libjni_latinime.so`, `next_blocker: bridge_activity_oncreate_bundle_dispatch_into_managed_runtime_context`
+- Current exact live blocker: `native_loading_state: managed_activity_post_dispatch_blocked`, `native_post_dispatch_blocker: framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`, `native_post_dispatch_recovery_action: extend_runtime_context_bridge`, `first_app_start_health: ready`, `next_blocker: bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context`
 - Current milestone target: move the real keyboard settings activity from that seam into a visible and interactive Linux launch on Wayland
-- Expected next seam after Phase 13: the first exact post-dispatch framework, resource, or visible-surface blocker
+- Expected next seam after Phase 13: the `ComponentActivity.onCreate(Bundle)` bridge and the first visible-surface blocker after it
 - Main planning constraint: reduce the real keyboard launch blocker without widening into broad Android framework recreation or IME scope creep
 
 ## Session Continuity
 
 Last session: 2026-05-19 00:05
-Stopped at: Phase 13 planned; next work is to run `$gsd-execute-phase 13`
+Stopped at: Phase 13 complete; next work is to plan and execute the `ComponentActivity.onCreate(Bundle)` visible-launch bridge
 Resume file: .planning/ROADMAP.md
