@@ -48,8 +48,8 @@ The architecture is intentionally honest about incomplete execution.
 Instead of hiding blockers, it records exact boundary reasons such as:
 - `needs-real-art-execution`
 - `needs-real-activitythread-context`
-- `dex_invoked_method_code_item_missing:Ljava/lang/Math;->min(II)I`
-- `unsupported-dex-opcode:opcode-0x90`
+- `dex_invoked_method_code_item_missing:Ljava/lang/System;->arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V`
+- `unsupported-dex-opcode:opcode-0xbb`
 - `unsupported-dex-opcode:...`
 
 This is a brownfield codebase with significant accumulated runtime slices already in place.

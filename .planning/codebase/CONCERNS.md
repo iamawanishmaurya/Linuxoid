@@ -27,8 +27,8 @@ This codebase is productive, but there are several clear risk areas.
   - `src/project_status.cpp`
 
 5. Execution-first blockers remain deep:
-- the current major blocker is now the real keyboard path at `unsupported-dex-opcode:opcode-0x90`
-- Linuxoid is already past several earlier framework and no-code library seams on that path, so the remaining work is increasingly concentrated in the minimal DEX interpreter
+- the current major blocker is now the real keyboard path at `unsupported-dex-opcode:opcode-0xbb`
+- Linuxoid is already past several earlier framework and no-code library seams on that path, including `java.lang.System.arraycopy(...)`, `move`, and `iget-wide`, so the remaining work is increasingly concentrated in the minimal DEX interpreter
 - many higher-level proofs depend on this blocker being represented accurately
 
 6. Brownfield complexity:

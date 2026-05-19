@@ -19,7 +19,7 @@ What tests emphasize today:
 - staged artifact correctness
 - DEX parsing and minimal bytecode execution checkpoints
 - real APK checkpoints for the keyboard settings activity launch path
-- exact live blocker reporting for the current `unsupported-dex-opcode:opcode-0x90` boundary
+- exact live blocker reporting for the current `unsupported-dex-opcode:opcode-0xbb` boundary
 - honest failure boundaries
 - Self-Healing Android Device recovery diagnostics
 
