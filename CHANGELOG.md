@@ -1,5 +1,137 @@
 # Changelog
 
+## v0.1.159 - 2026-05-20
+
+- Advance the execution-first checkpoint through the next real **keyboard APK ArrayList capacity-constructor seam** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact no-code support needed for `java.util.ArrayList.<init>(I)V`, persist the placeholder capacity on the receiver object, and pin that seam with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now clears the earlier `ArrayList.<init>(I)` seam and stops later at `unsupported-dex-opcode:opcode-0x49`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0x49` honestly.
+
+## v0.1.158 - 2026-05-20
+
+- Advance the execution-first checkpoint through the next real **keyboard APK list-iteration and string-char-array seams** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact no-code support needed for `java.util.List.iterator()Ljava/util/Iterator;`, stateful placeholder `Iterator.hasNext()` plus `Iterator.next()`, and `java.lang.String.toCharArray()[C`, and pin those seams with focused first-app-start regressions.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now clears the earlier `Collections.singletonList(Object)` seam, `opcode-0x20`, `LinkedHashSet.<init>()V`, `Iterable.iterator()`, `ArrayList.<init>()V`, `List.size()I`, `List.iterator()`, placeholder `Iterator.next()`, and `String.toCharArray()[C`, and now stops later at `dex_invoked_method_code_item_missing:Ljava/util/ArrayList;-><init>(I)V`, with the next implementation step narrowed to stubbing or executing that no-code constructor seam honestly.
+
+## v0.1.151 - 2026-05-20
+
+- Advance the execution-first checkpoint through the next real **keyboard APK packed-switch seam** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact support needed for DEX `packed-switch` (`opcode 0x2b`), and pin that branch/payload seam with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now clears the earlier `opcode-0x2b` seam and stops later at `dex_invoked_method_code_item_missing:Ljava/util/Collections;->singletonList(Ljava/lang/Object;)Ljava/util/List;`, with the next implementation step narrowed to stubbing or executing that no-code invoke target honestly.
+
+## v0.1.150 - 2026-05-20
+
+- Advance the execution-first checkpoint through the next real **keyboard APK collection-constructor seams** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact no-code constructor stubs needed for `java.util.HashMap.<init>()V` and `java.util.LinkedHashMap.<init>()V`, and pin the `LinkedHashMap` seam with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now clears the earlier `opcode-0xbb`, `opcode-0x5a`, `HashMap.<init>()V`, and `LinkedHashMap.<init>()V` seams, and now stops later at `unsupported-dex-opcode:opcode-0x2b`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0x2b` honestly.
+
+## v0.1.149 - 2026-05-20
+
+- Advance the execution-first checkpoint through the next real **keyboard APK integer-op seams** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact placeholder support needed for `add-int` (`opcode 0x90`) and `sub-int/2addr` (`opcode 0xb1`), and pin both seams with focused first-app-start regressions.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now clears the earlier `Math.min(int, int)` no-code seam plus `opcode-0x90` and `opcode-0xb1`, and now stops later at `dex_invoked_method_code_item_missing:Ljava/lang/System;->arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V`, with the next implementation step narrowed to stubbing or executing that no-code invoke target honestly.
+
+## v0.1.148 - 2026-05-20
+
+- Advance the execution-first checkpoint through the next real **keyboard APK AtomicReference and integer-arithmetic seams** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact placeholder support needed for `AtomicReference.set(Object)` and DEX `sub-int` (`opcode 0x91`), and pin both seams with focused first-app-start regressions.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now clears the earlier `AtomicReference.getAndSet(Object)` and `AtomicReference.set(Object)` no-code invoke targets plus `unsupported-dex-opcode:opcode-0x91`, and now stops later at `unsupported-dex-opcode:opcode-0xd1`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0xd1` honestly.
+
+## v0.1.147 - 2026-05-20
+
+- Advance the execution-first checkpoint through the next real **keyboard APK object-array seam** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact placeholder support needed for `aget-object`, and pin that seam with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now also crosses `aget-object` plus deterministic placeholder object-array length materialization, and now stops later at `dex_invoked_method_code_item_missing:Ljava/util/concurrent/atomic/AtomicReference;->getAndSet(Ljava/lang/Object;)Ljava/lang/Object;`, with the next implementation step narrowed to stubbing or executing that no-code invoke target honestly.
+
+## v0.1.146 - 2026-05-20
+
+- Advance the execution-first checkpoint through the first real **keyboard APK add-int/2addr and if-ge seams** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact placeholder support needed for `add-int/2addr` and `if-ge`, and pin both seams with focused first-app-start regressions.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, `cmp-long`, `if-gtz`, `sub-long`, `add-int/2addr`, `if-ge`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x34`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0x34` honestly.
+
+## v0.1.145 - 2026-05-20
+
+- Advance the execution-first checkpoint through the first real **keyboard APK sub-long seam** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact placeholder `sub-long` support needed by the deterministic fixture and the real keyboard APK path, and pin it with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, `cmp-long`, `if-gtz`, `sub-long`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0xb0`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0xb0` honestly.
+
+## v0.1.144 - 2026-05-20
+
+- Advance the execution-first checkpoint through the first real **keyboard APK if-gtz seam** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact placeholder `if-gtz` support needed by the deterministic fixture and the real keyboard APK path, and pin it with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, `cmp-long`, `if-gtz`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x9c`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0x9c` honestly.
+
+## v0.1.143 - 2026-05-20
+
+- Advance the execution-first checkpoint through the first real **keyboard APK cmp-long seam** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact placeholder `cmp-long` support needed by the deterministic fixture and the real keyboard APK path, and pin it with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, `cmp-long`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x3c`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0x3c` honestly.
+
+## v0.1.142 - 2026-05-20
+
+- Advance the execution-first checkpoint through the first real **keyboard APK const-wide/16 seam** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact placeholder `const-wide/16` support needed by the deterministic fixture and the real keyboard APK path, and pin it with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x31`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0x31` honestly.
+
+## v0.1.141 - 2026-05-20
+
+- Advance the execution-first checkpoint through the first real **keyboard APK or-long seam** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact placeholder `or-long` support needed by the deterministic fixture and the real keyboard APK path, and pin it with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x16`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0x16` honestly.
+
+## v0.1.140 - 2026-05-20
+
+- Advance the execution-first checkpoint through the first real **keyboard APK invoke-static/range seam** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact `invoke-static/range` support needed by the deterministic fixture and the real keyboard APK path, and expose the nested invoked callee on the first-app-start report so the checkpoint proves the real 3rc method-call seam instead of only the outer helper.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0xa1`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0xa1` honestly.
+
+## v0.1.139 - 2026-05-20
+
+- Advance the execution-first checkpoint through the first real **keyboard APK closeable-close and string-getbytes seams** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact stubs for `java.io.Closeable.close()V` and `java.lang.String.getBytes(Charset)[B`, and pin both seams with focused first-app-start regressions.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, one placeholder `new-array` seam, `Reader.read(char[])I`, `if-ltz`, `StringWriter.toString()`, `Closeable.close()V`, and `String.getBytes(Charset)[B`, and now stops later at `unsupported-dex-opcode:opcode-0x21`, with the next implementation step narrowed to extending the minimal DEX interpreter for opcode `0x21` honestly.
+
+## v0.1.138 - 2026-05-20
+
+- Advance the execution-first checkpoint through the first real **keyboard APK if-ltz and inline return-object seams** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with `if-ltz` support in both top-level and inline interpreter paths, and add the smallest exact stub plus inline `return-object` support needed to cross `StringWriter.toString()`.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, one placeholder `new-array` seam, `Reader.read(char[])I`, `if-ltz`, and `StringWriter.toString()`, and now stops later at `dex_invoked_method_code_item_missing:Ljava/io/Closeable;->close()V`, with the next implementation step narrowed to stubbing or executing that no-code close boundary honestly.
+
+## v0.1.137 - 2026-05-19
+
+- Advance the execution-first checkpoint through the first real **keyboard APK reader-read boundary** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with the smallest exact `java.io.Reader.read(char[])I` stub needed by the live keyboard APK path, and pin that seam with a focused first-app-start regression.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, one placeholder `new-array` seam, and the no-code `Reader.read(char[])I` boundary, and now stops later at `unsupported-dex-opcode:opcode-0x3a`, with the next implementation step narrowed to extending the minimal DEX interpreter for that opcode honestly.
+
+## v0.1.136 - 2026-05-19
+
+- Advance the execution-first checkpoint through the first real **keyboard APK inline invoke-direct boundary** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge so inline invoked methods can now execute `invoke-direct` constructor calls, propagate nested object/register/field state, and stub the exact `java.lang.Object.<init>()V` seam needed to keep the first real app path moving.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, and one placeholder `new-array` seam, and now stops later at `dex_invoked_method_code_item_missing:Ljava/io/Reader;->read([C)I`, with the next implementation step narrowed to stubbing or executing that no-code reader boundary honestly.
+
+## v0.1.135 - 2026-05-19
+
+- Advance the execution-first checkpoint through the first real **keyboard APK const-string boundary** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge with `const-string` support in both top-level lifecycle execution and inline invoked-method execution, and pin that seam with a focused lifecycle fixture that materializes a placeholder `java.lang.String` and still returns cleanly.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now crosses the earlier top-level `LayoutManager.init(Context)` call boundary, the `if-nez`, `sget-boolean`, and `sput-boolean` seams after it, and stops later at `dex_invoked_method_code_item_missing:Landroid/content/Context;->getAssets()Landroid/content/res/AssetManager;`, with the next implementation step narrowed to stubbing or executing that no-code invoke target honestly.
+
+## v0.1.134 - 2026-05-19
+
+- Advance the execution-first checkpoint through the first real **keyboard APK invoke-static boundary** instead of widening the runtime sideways again.
+- Extend Linuxoid's minimal DEX bridge so the deterministic fixture and the real `SettingsActivity.onCreate(Landroid/os/Bundle;)V` path both stay honest after the nested `ComponentActivity.onCreate(Bundle)` seam: inline invoked methods now materialize placeholder static fields where needed, and the first unresolved top-level `invoke-static` call is reported precisely instead of falling back to a generic unsupported-opcode story.
+- Keep the blocker exact on `/home/astra/Downloads/keyboard-0.1.28.apk`: the real launch now stops at `invoke-static-unimplemented:Lorg/futo/inputmethod/v2keyboard/LayoutManager;->init(Landroid/content/Context;)V`, and the next implementation step is extending the minimal DEX interpreter for that `LayoutManager.init(Context)` call boundary.
+
+## v0.1.133 - 2026-05-19
+
+- Advance the execution-first checkpoint through a **Nested ComponentActivity Bytecode Boundary** instead of widening the runtime sideways again.
+- Fix Linuxoid's inline DEX invocation bridge so invoked methods receive parameters in the real high-register `ins` window, which lets the deterministic keyboard-shaped fixture cross `Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`, materialize placeholder object fields for `iget-object` chains, stub the minimal saved-state plus iterator plus report-fragment seams, and return cleanly through `launch-apk --first-app-start-proof`.
+- Keep the blocker honest: the real `/home/astra/Downloads/keyboard-0.1.28.apk` launch still stops at `framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`, and the next exact blocker remains `bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context`.
+
+## v0.1.132 - 2026-05-19
+
+- Close **Phase 14: Binder Transport Hardening** around the real keyboard APK first-app-start path instead of widening the runtime sideways again.
+- Harden the Linuxoid-owned Binder-shaped transport simulation so long staged APK paths and keyboard-shaped payload summaries no longer fail inside the local socketpair round-trip before `service-manager.json` and `transport-messages.jsonl` are written.
+- Keep the real blocker honest on `/home/astra/Downloads/keyboard-0.1.28.apk`: after the binder transport no longer false-blocks the run, Linuxoid is back to reporting `framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V` as the next exact managed runtime seam.
+
 ## v0.1.131 - 2026-05-19
 
 - Close **Phase 13: Activity onCreate Dispatch Bridge** around the real keyboard APK's first post-dispatch framework seam instead of widening into broad framework recreation.

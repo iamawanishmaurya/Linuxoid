@@ -1,5 +1,8 @@
 #include "wfa/binder_service_manager.hpp"
 
+#include <cerrno>
+#include <cstdint>
+#include <cstring>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -374,27 +377,104 @@ void WriteTransportMessageLog(
   WriteJsonlFile(path, rendered_lines);
 }
 
+[[noreturn]] void ThrowTransportError(const std::string& prefix,
+                                      const std::string& detail) {
+  if (detail.empty()) {
+    throw std::runtime_error(prefix);
+  }
+  throw std::runtime_error(prefix + ":" + detail);
+}
+
+void WriteTransportBytes(int fd, const char* data, std::size_t size,
+                         const std::string& prefix) {
+  std::size_t total_written = 0;
+  while (total_written < size) {
+    const ssize_t written = ::write(fd, data + total_written, size - total_written);
+    if (written < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      ThrowTransportError(prefix, std::strerror(errno));
+    }
+    if (written == 0) {
+      ThrowTransportError(prefix, "short_write_zero");
+    }
+    total_written += static_cast<std::size_t>(written);
+  }
+}
+
+void ReadTransportBytes(int fd, char* data, std::size_t size,
+                        const std::string& prefix) {
+  std::size_t total_read = 0;
+  while (total_read < size) {
+    const ssize_t received = ::read(fd, data + total_read, size - total_read);
+    if (received < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      ThrowTransportError(prefix, std::strerror(errno));
+    }
+    if (received == 0) {
+      ThrowTransportError(prefix, "peer_closed");
+    }
+    total_read += static_cast<std::size_t>(received);
+  }
+}
+
+std::array<char, 4> EncodeTransportPayloadSize(std::size_t size) {
+  if (size > 0xffffffffu) {
+    throw std::runtime_error("binder transport payload too large");
+  }
+  const std::uint32_t value = static_cast<std::uint32_t>(size);
+  return {
+      static_cast<char>(value & 0xffu),
+      static_cast<char>((value >> 8u) & 0xffu),
+      static_cast<char>((value >> 16u) & 0xffu),
+      static_cast<char>((value >> 24u) & 0xffu),
+  };
+}
+
+std::uint32_t DecodeTransportPayloadSize(const std::array<char, 4>& bytes) {
+  return static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[0])) |
+         (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[1]))
+          << 8u) |
+         (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[2]))
+          << 16u) |
+         (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[3]))
+          << 24u);
+}
+
 void SendBinderTransportPayload(int fd, const std::string& payload) {
-  const ssize_t written = send(fd, payload.data(), payload.size(), 0);
-  if (written < 0 || static_cast<std::size_t>(written) != payload.size()) {
-    throw std::runtime_error("unable to write binder transport payload");
+  const auto header = EncodeTransportPayloadSize(payload.size());
+  WriteTransportBytes(fd, header.data(), header.size(),
+                      "unable to write binder transport payload");
+  if (!payload.empty()) {
+    WriteTransportBytes(fd, payload.data(), payload.size(),
+                        "unable to write binder transport payload");
   }
 }
 
 std::string ReceiveBinderTransportPayload(int fd) {
-  std::array<char, 2048> buffer{};
-  const ssize_t received = recv(fd, buffer.data(), buffer.size(), 0);
-  if (received < 0) {
-    throw std::runtime_error("unable to read binder transport payload");
+  std::array<char, 4> header{};
+  ReadTransportBytes(fd, header.data(), header.size(),
+                     "unable to read binder transport payload");
+  const std::uint32_t payload_size = DecodeTransportPayloadSize(header);
+  if (payload_size > 1024u * 1024u) {
+    throw std::runtime_error("binder transport payload too large");
   }
-  return std::string(buffer.data(), static_cast<std::size_t>(received));
+  std::string payload(payload_size, '\0');
+  if (payload_size != 0) {
+    ReadTransportBytes(fd, payload.data(), payload.size(),
+                       "unable to read binder transport payload");
+  }
+  return payload;
 }
 
 void SimulateTransportRoundTrip(const BinderTransportMessage& request,
                                 const BinderTransportMessage& response,
                                 std::vector<BinderTransportMessage>& messages) {
   int sockets[2] = {-1, -1};
-  if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
+  if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
     throw std::runtime_error("unable to create unix socketpair transport");
   }
 

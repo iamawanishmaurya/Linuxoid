@@ -1785,6 +1785,17 @@ std::string DetermineManagedPostDispatchNextBlocker(
            SanitizeExecutionToken(
                blocker.substr(std::string("unsupported-dex-opcode:").size()));
   }
+  if (blocker.rfind("invoke-static-unimplemented:", 0) == 0) {
+    return "extend_minimal_dex_interpreter_for_invoke_static_" +
+           SanitizeExecutionToken(
+               blocker.substr(std::string("invoke-static-unimplemented:").size()));
+  }
+  if (blocker.rfind("dex_invoked_method_code_item_missing:", 0) == 0) {
+    return "stub_or_execute_no_code_invoke_target_" +
+           SanitizeExecutionToken(
+               blocker.substr(std::string("dex_invoked_method_code_item_missing:")
+                                  .size()));
+  }
   if (blocker == "dex_invoke_receiver_missing") {
     return "propagate_framework_invoke_receiver_registers";
   }
@@ -2305,6 +2316,20 @@ std::string DetermineFirstAppStartNextBlocker(
     return "extend_minimal_dex_interpreter_for_" +
            SanitizeExecutionToken(blocking_reason.substr(
                std::string("unsupported-dex-opcode:").size()));
+  }
+  if (blocking_reason.rfind("invoke-static-unimplemented:", 0) == 0) {
+    return "extend_minimal_dex_interpreter_for_invoke_static_" +
+           SanitizeExecutionToken(blocking_reason.substr(
+               std::string("invoke-static-unimplemented:").size()));
+  }
+  if (blocking_reason.rfind("dex_invoked_method_code_item_missing:", 0) == 0) {
+    return "stub_or_execute_no_code_invoke_target_" +
+           SanitizeExecutionToken(blocking_reason.substr(
+               std::string("dex_invoked_method_code_item_missing:").size()));
+  }
+  if (blocking_reason == "dex_invoked_method_aget_object_array_length_unknown" ||
+      blocking_reason == "dex_aget_object_array_length_unknown") {
+    return "materialize_placeholder_object_array_length_for_aget_object";
   }
   if (blocking_reason == "dex_invoke_receiver_missing") {
     return "propagate_framework_invoke_receiver_registers";

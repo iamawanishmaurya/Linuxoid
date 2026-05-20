@@ -1,5 +1,110 @@
 # Steps Log
 
+- Step: Keyboard APK ArrayList Capacity Constructor GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact no-code support needed for `java.util.ArrayList.<init>(I)V`, persisted the placeholder capacity on the receiver object, and pinned that seam with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now clears the earlier `dex_invoked_method_code_item_missing:Ljava/util/ArrayList;-><init>(I)V` seam and now stops later at `unsupported-dex-opcode:opcode-0x49`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0x49` honestly.
+  Timestamp: 2026-05-21T08:45:00+05:30
+
+- Step: Keyboard APK List Iterator + String Char Array GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact no-code support needed for `java.util.List.iterator()Ljava/util/Iterator;`, stateful placeholder `Iterator.hasNext()` plus `Iterator.next()`, and `java.lang.String.toCharArray()[C`, and pinned those seams with focused first-app-start regressions.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now clears the earlier `dex_invoked_method_code_item_missing:Ljava/util/Collections;->singletonList(Ljava/lang/Object;)Ljava/util/List;` seam, `unsupported-dex-opcode:opcode-0x20`, `dex_invoked_method_code_item_missing:Ljava/util/LinkedHashSet;-><init>()V`, `dex_invoked_method_code_item_missing:Ljava/lang/Iterable;->iterator()Ljava/util/Iterator;`, `dex_invoked_method_code_item_missing:Ljava/util/ArrayList;-><init>()V`, `dex_invoked_method_code_item_missing:Ljava/util/List;->size()I`, `dex_invoked_method_code_item_missing:Ljava/util/List;->iterator()Ljava/util/Iterator;`, and `dex_invoked_method_code_item_missing:Ljava/lang/String;->toCharArray()[C`, and now stops later at `dex_invoked_method_code_item_missing:Ljava/util/ArrayList;-><init>(I)V`, with the next exact implementation step narrowed to stubbing or executing `ArrayList.<init>(I)` honestly.
+  Timestamp: 2026-05-21T00:45:00+05:30
+
+- Step: Keyboard APK Packed-Switch GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact support needed for DEX `packed-switch` (`opcode 0x2b`), and pinned that branch/payload seam with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now clears the earlier `unsupported-dex-opcode:opcode-0x2b` seam, and now stops later at `dex_invoked_method_code_item_missing:Ljava/util/Collections;->singletonList(Ljava/lang/Object;)Ljava/util/List;`, with the next exact implementation step narrowed to stubbing or executing `Collections.singletonList(Object)` honestly.
+  Timestamp: 2026-05-20T23:59:30+05:30
+
+- Step: Keyboard APK HashMap + LinkedHashMap Constructors GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact no-code constructor stubs needed for `java.util.HashMap.<init>()V` and `java.util.LinkedHashMap.<init>()V`, and pinned the `LinkedHashMap` seam with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now clears the earlier `unsupported-dex-opcode:opcode-0xbb`, `unsupported-dex-opcode:opcode-0x5a`, `java.util.HashMap.<init>()V`, and `java.util.LinkedHashMap.<init>()V` seams, and now stops later at `unsupported-dex-opcode:opcode-0x2b`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0x2b`.
+  Timestamp: 2026-05-20T23:59:00+05:30
+
+- Step: Keyboard APK Add-Int + Sub-Int2Addr GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact placeholder support needed for `add-int` (`opcode 0x90`) and `sub-int/2addr` (`opcode 0xb1`), and pinned both seams with focused first-app-start regressions.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now clears the earlier `Math.min(int, int)` no-code seam plus `unsupported-dex-opcode:opcode-0x90` and `unsupported-dex-opcode:opcode-0xb1`, and now stops later at `dex_invoked_method_code_item_missing:Ljava/lang/System;->arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V`, with the next exact implementation step narrowed to stubbing or executing `System.arraycopy(...)` honestly.
+  Timestamp: 2026-05-20T07:20:00+05:30
+
+- Step: Keyboard APK AtomicReference-Set + Sub-Int GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact placeholder support needed for `AtomicReference.set(Object)` and DEX `sub-int` (`opcode 0x91`), and pinned both seams with focused first-app-start regressions.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now clears the earlier `AtomicReference.getAndSet(Object)` and `AtomicReference.set(Object)` invoke targets plus `unsupported-dex-opcode:opcode-0x91`, and now stops later at `unsupported-dex-opcode:opcode-0xd1`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0xd1`.
+  Timestamp: 2026-05-20T23:45:00+05:30
+
+- Step: Keyboard APK Aget-Object GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact placeholder support needed for `aget-object`, and pinned that seam with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now also crosses `aget-object` plus deterministic placeholder object-array length materialization, and now stops later at `dex_invoked_method_code_item_missing:Ljava/util/concurrent/atomic/AtomicReference;->getAndSet(Ljava/lang/Object;)Ljava/lang/Object;`, with the next exact implementation step narrowed to stubbing or executing that no-code invoke target.
+  Timestamp: 2026-05-20T22:40:00+05:30
+
+- Step: Keyboard APK Add-Int2Addr + If-Ge GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact placeholder support needed for `add-int/2addr` and `if-ge`, and pinned both seams with focused first-app-start regressions.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, `cmp-long`, `if-gtz`, `sub-long`, `add-int/2addr`, `if-ge`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x34`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0x34`.
+  Timestamp: 2026-05-20T18:55:00+05:30
+
+- Step: Keyboard APK Sub-Long GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact placeholder `sub-long` support needed by the deterministic fixture and the real keyboard APK path, and pinned it with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, `cmp-long`, `if-gtz`, `sub-long`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0xb0`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0xb0`.
+  Timestamp: 2026-05-20T18:15:00+05:30
+
+- Step: Keyboard APK If-Gtz GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact placeholder `if-gtz` support needed by the deterministic fixture and the real keyboard APK path, and pinned it with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, `cmp-long`, `if-gtz`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x9c`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0x9c`.
+  Timestamp: 2026-05-20T17:27:00+05:30
+
+- Step: Keyboard APK Cmp-Long GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact placeholder `cmp-long` support needed by the deterministic fixture and the real keyboard APK path, and pinned it with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, `cmp-long`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x3c`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0x3c`.
+  Timestamp: 2026-05-20T17:12:00+05:30
+
+- Step: Keyboard APK Const-Wide16 GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact placeholder `const-wide/16` support needed by the deterministic fixture and the real keyboard APK path, and pinned it with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, `const-wide/16`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x31`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0x31`.
+  Timestamp: 2026-05-20T16:58:00+05:30
+
+- Step: Keyboard APK Or-Long GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact placeholder `or-long` support needed by the deterministic fixture and the real keyboard APK path, and pinned it with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, `or-long`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0x16`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0x16`.
+  Timestamp: 2026-05-20T10:05:00+05:30
+
+- Step: Keyboard APK Invoke-Static-Range GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact `invoke-static/range` support needed by the deterministic fixture and the real keyboard APK path, and surfaced the nested invoked callee on the first-app-start report so the checkpoint proves the real 3rc method-call seam instead of only the outer helper.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, `Reader.read(char[])I`, `StringWriter.toString()`, `Closeable.close()V`, `String.getBytes(Charset)[B`, `array-length`, `int-to-long`, and the nested `invoke-static/range` seam, and now stops later at `unsupported-dex-opcode:opcode-0xa1`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0xa1`.
+  Timestamp: 2026-05-20T09:15:00+05:30
+
+- Step: Keyboard APK Closeable + GetBytes GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact stubs for `java.io.Closeable.close()V` and `java.lang.String.getBytes(Charset)[B`, and pinned both seams with focused first-app-start regressions.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, one placeholder `new-array` seam, `Reader.read(char[])I`, `if-ltz`, `StringWriter.toString()`, `Closeable.close()V`, and `String.getBytes(Charset)[B`, and now stops later at `unsupported-dex-opcode:opcode-0x21`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0x21`.
+  Timestamp: 2026-05-20T01:35:00+05:30
+
+- Step: Keyboard APK If-Ltz + Return-Object GREEN
+  Action: Extended the minimal DEX bridge with `if-ltz` support in both top-level and inline interpreter paths, then added the smallest exact `StringWriter.toString()` stub plus inline `return-object` support needed by the real keyboard launch path, and pinned those seams with focused first-app-start regressions.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, one placeholder `new-array` seam, `Reader.read(char[])I`, `if-ltz`, and `StringWriter.toString()`, and now stops later at `dex_invoked_method_code_item_missing:Ljava/io/Closeable;->close()V`, with the next exact implementation step narrowed to stubbing or executing that no-code close boundary honestly.
+  Timestamp: 2026-05-20T00:35:00+05:30
+
+- Step: Keyboard APK Reader Boundary GREEN
+  Action: Extended the minimal DEX bridge with the smallest exact stub for `java.io.Reader.read(char[])I` on the real keyboard path, and pinned it with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, one placeholder `new-array` seam, and the no-code `Reader.read(char[])I` boundary, and now stops later at `unsupported-dex-opcode:opcode-0x3a`, with the next exact implementation step narrowed to extending the minimal DEX interpreter for opcode `0x3a`.
+  Timestamp: 2026-05-19T23:59:00+05:30
+
+- Step: Keyboard APK Reader Chain Constructor Boundary GREEN
+  Action: Extended the minimal DEX bridge with one more exact constructor seam on the real keyboard path by stubbing `java.io.BufferedReader.<init>(Reader, int)` after the earlier `InputStreamReader.<init>(InputStream, Charset)` seam, and pinned it with a focused first-app-start regression.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses `Context.getAssets()`, `AssetManager.open(String)`, `InputStreamReader.<init>(InputStream, Charset)`, `BufferedReader.<init>(Reader, int)`, `StringWriter.<init>()V`, and one placeholder `new-array` seam, and stops later at `dex_invoked_method_code_item_missing:Ljava/io/Reader;->read([C)I`, with the next exact implementation step narrowed to stubbing or executing that no-code read boundary honestly.
+  Timestamp: 2026-05-20T06:15:00+05:30
+
+- Step: Keyboard APK Static-Field + Nested No-Code Invoke Boundary GREEN
+  Action: Extended the minimal DEX bridge with `if-nez`, `sget-boolean`, and `sput-boolean` support, added focused lifecycle regressions for those seams plus an exact missing-code-item invoke boundary, and tightened the first-app-start blocker so nested no-code invoke targets are reported with full class/method/signature context instead of a generic code-item-missing token.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now crosses the earlier `LayoutManager.init(Context)` call boundary, the first `const-string`, `if-nez`, `sget-boolean`, and `sput-boolean` seams after that, and stops later at `dex_invoked_method_code_item_missing:Landroid/content/Context;->getAssets()Landroid/content/res/AssetManager;`, with the next exact implementation step narrowed to stubbing or executing that no-code invoke target honestly.
+  Timestamp: 2026-05-20T03:35:00+05:30
+
+- Step: Keyboard APK Invoke-Static Boundary GREEN
+  Action: Extended the minimal DEX bridge and focused regression fixture so Linuxoid now keeps the first real top-level `invoke-static` seam explicit after the nested `ComponentActivity.onCreate(Bundle)` path, with exact class/method/signature reporting instead of falling back to a generic unsupported-opcode blocker.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path now stops at `invoke-static-unimplemented:Lorg/futo/inputmethod/v2keyboard/LayoutManager;->init(Landroid/content/Context;)V`, and the next exact implementation step is extending the minimal DEX interpreter for that `LayoutManager.init(Context)` call boundary.
+  Timestamp: 2026-05-19T23:55:00+05:30
+
+- Step: Binder Transport Hardening Checkpoint GREEN
+  Action: Hardened the Linuxoid-owned Binder-shaped transport simulation so the keyboard first-app-start path no longer false-blocks on long staged APK payload summaries before `binder/service-manager.json` and `binder/transport-messages.jsonl` are written, and added focused regression coverage for keyboard-like long payloads through both the fixture and the first-app-start command path.
+  Result: The real `/home/astra/Downloads/keyboard-0.1.28.apk` path no longer dies at `unable to write binder transport payload`; once the local binder artifacts are written cleanly, the next exact blocker is again the managed runtime seam `framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`.
+  Timestamp: 2026-05-19T09:20:00+05:30
+
 - Step: Post-Dispatch Framework Boundary Checkpoint GREEN
   Action: Extended the direct keyboard APK path so Linuxoid now carries the JNI-selected `SettingsActivity->onCreate(Landroid/os/Bundle;)V` target through staged DEX resolution and a first real `invoke-super` execution step, then threads the resulting exact post-dispatch blocker through launch, first-app-start, runtime, window, and Self-Healing Android Device reports.
   Result: The real keyboard APK path now reports `native_loading_state: managed_activity_post_dispatch_blocked`, `native_post_dispatch_blocker: framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`, `first_app_start_health: ready`, `primary_blocker_reason: framework-boundary-unimplemented:Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V`, and `next_blocker: bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context`, while still honestly not claiming visible app launch or full ActivityThread/framework execution.
@@ -64,6 +169,11 @@
   Action: Threaded the real `org.futo.inputmethod.latin/.uix.settings.SettingsActivity` target through `launch-apk --first-app-start-proof`, fixed real-APK DEX string decoding for staged MUTF-8 metadata, resolved `onCreate(Landroid/os/Bundle;)V` plus exact class/method/code-item lookup state from staged DEX, and pinned the keyboard-identity synthetic activity seam with the exact managed framework boundary `framework_boundary_reason: invoke_receiver_missing`.
   Result: Linuxoid now names the real keyboard managed-start seam and the exact next interpreter blocker instead of collapsing the path into generic `dex_unavailable` or `not_attempted` output, while the end-to-end real APK path still honestly blocks earlier at `libraries_failed_to_load` and `surface_not_ready_for_first_app_start`.
   Timestamp: 2026-05-18T22:20:00+05:30
+
+- Step: Nested ComponentActivity Bytecode Boundary GREEN
+  Action: Fixed the inline DEX invoked-method bridge so receiver and parameter registers are placed into the real high-register `ins` window, then extended the keyboard-shaped deterministic fixture so `Landroidx/activity/ComponentActivity;->onCreate(Landroid/os/Bundle;)V` can run through minimal `iget-object`, `invoke-virtual`, `move-result-object`, `invoke-interface`, `if-eqz`, nested `invoke-super`, and `invoke-static` seams with placeholder object-field materialization where needed.
+  Result: Linuxoid can now prove that one keyboard-shaped managed lifecycle seam crosses the first nested `ComponentActivity.onCreate(Bundle)` bytecode boundary and returns through the actual Linuxoid DEX path, while still naming `bridge_componentactivity_oncreate_bundle_super_call_into_managed_runtime_context` as the next exact blocker instead of pretending real ActivityThread or ART heap execution already exists.
+  Timestamp: 2026-05-19T21:55:00+05:30
 
 - Step: Keyboard APK Intake Checkpoint GREEN
   Action: Hardened the direct APK path so Linuxoid now reads stored and deflated ZIP entries, decodes a useful subset of binary `AndroidManifest.xml`, and pushes those decoded package/component/permission facts through the existing `inspect-apk-resources`, `inspect-apk-permissions`, and `launch-apk` flow without requiring plain-text fixture manifests.

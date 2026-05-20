@@ -821,7 +821,7 @@ std::string BuildInvokeHelperLifecycleOnCreateDexPayload(
       static_cast<std::uint16_t>(
           std::distance(ordered_types.begin(), type_it));
   constexpr std::uint16_t framework_method_index = 1u;
-  constexpr std::uint16_t helper_method_index = 2u;
+  constexpr std::uint16_t helper_method_index = 3u;
   return BuildDexPayloadWithEntrypoint(
       class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
       {0x106fu, framework_method_index, 0x0000u, 0x1070u, helper_method_index,
@@ -935,6 +935,2365 @@ std::string BuildUnsupportedConstructorLifecycleOnCreateDexPayload(
           .instructions = {0x00ffu},
           .registers_size = 1u,
           .access_flags = 0x10001u}});
+}
+
+std::string BuildNestedFrameworkBoundaryLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t perform_restore_method_index = 1u;
+  constexpr std::uint16_t object_getclass_method_index = 2u;
+  constexpr std::uint16_t iterator_method_index = 3u;
+  constexpr std::uint16_t iterator_hasnext_method_index = 4u;
+  constexpr std::uint16_t core_component_activity_method_index = 5u;
+  constexpr std::uint16_t report_fragment_method_index = 6u;
+  constexpr std::uint16_t defined_component_activity_method_index = 7u;
+  constexpr std::uint16_t report_fragment_clinit_field_index = 4u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x206fu, defined_component_activity_method_index, 0x0032u, 0x000eu},
+      "V", 4u, {"Landroid/os/Bundle;"}, 2u, 2u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Lorg/acra/scheduler/SchedulerStarter;",
+           .method_name = "performRestore",
+           .return_type_descriptor = "V",
+           .parameter_type_descriptors = {"Landroid/os/Bundle;"}},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/lang/Object;",
+           .method_name = "getClass",
+           .return_type_descriptor = "Ljava/lang/Class;"},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/concurrent/CopyOnWriteArraySet;",
+           .method_name = "iterator",
+           .return_type_descriptor = "Ljava/util/Iterator;"},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/Iterator;",
+           .method_name = "hasNext",
+           .return_type_descriptor = "Z"},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Landroidx/core/app/ComponentActivity;",
+           .method_name = "onCreate",
+           .return_type_descriptor = "V",
+           .parameter_type_descriptors = {"Landroid/os/Bundle;"}},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Landroidx/lifecycle/ReportFragment$Companion;",
+           .method_name = "injectIfNeededIn",
+           .return_type_descriptor = "V",
+           .parameter_type_descriptors = {
+               "Landroidx/core/app/ComponentActivity;"}}},
+      {DexReferencedFieldFixture{
+           .class_descriptor = "Landroidx/activity/ComponentActivity;",
+           .field_name = "savedStateRegistryController",
+           .field_type_descriptor = "Lorg/acra/scheduler/SchedulerStarter;"},
+       DexReferencedFieldFixture{
+           .class_descriptor = "Landroidx/activity/ComponentActivity;",
+           .field_name = "contextAwareHelper",
+           .field_type_descriptor =
+               "Landroidx/activity/contextaware/ContextAwareHelper;"},
+       DexReferencedFieldFixture{
+           .class_descriptor = "Landroidx/activity/contextaware/ContextAwareHelper;",
+           .field_name = "context",
+           .field_type_descriptor = "Landroidx/activity/ComponentActivity;"},
+       DexReferencedFieldFixture{
+           .class_descriptor = "Landroidx/activity/contextaware/ContextAwareHelper;",
+           .field_name = "listeners",
+           .field_type_descriptor = "Ljava/util/concurrent/CopyOnWriteArraySet;"},
+       DexReferencedFieldFixture{
+           .class_descriptor = "Landroidx/lifecycle/ReportFragment;",
+           .field_name = "$r8$clinit",
+           .field_type_descriptor = "I"}},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Landroidx/activity/ComponentActivity;",
+          .method_name = "onCreate",
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {"Landroid/os/Bundle;"},
+          .instructions = {0x2054u,
+                           0x0000u,
+                           0x206eu,
+                           perform_restore_method_index,
+                           0x0030u,
+                           0x2054u,
+                           0x0001u,
+                           0x106eu,
+                           object_getclass_method_index,
+                           0x0000u,
+                           0x025bu,
+                           0x0002u,
+                           0x0054u,
+                           0x0003u,
+                           0x106eu,
+                           iterator_method_index,
+                           0x0000u,
+                           0x000cu,
+                           0x1072u,
+                           iterator_hasnext_method_index,
+                           0x0000u,
+                           0x010au,
+                           0x0138u,
+                           0x0002u,
+                           0x206fu,
+                           core_component_activity_method_index,
+                           0x0032u,
+                           0x0360u,
+                           report_fragment_clinit_field_index,
+                           0x1071u,
+                           report_fragment_method_index,
+                           0x0002u,
+                           0x000eu},
+          .registers_size = 4u,
+          .ins_size = 2u,
+          .outs_size = 2u,
+          .access_flags = 0x1u}});
+}
+
+std::string BuildInvokeStaticLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_init_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "init",
+          .return_type_descriptor = "V",
+          .instructions = {0x000eu},
+          .registers_size = 0u,
+          .ins_size = 0u,
+          .outs_size = 0u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildConstStringLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t string_index = 0u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x011au, string_index, 0x1012u, 0x000fu}, "I", 2u);
+}
+
+std::string BuildIfNezLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1112u, 0x0139u, 0x0003u, 0x00ffu, 0x000eu}, "V", 2u);
+}
+
+std::string BuildIfLtzLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0xf012u, 0x003au, 0x0003u, 0x00ffu, 0x000eu}, "V", 1u);
+}
+
+std::string BuildIfGtzLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1012u, 0x003cu, 0x0003u, 0x00ffu, 0x000eu}, "V", 2u);
+}
+
+std::string BuildIfLtLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x2012u, 0x1112u, 0x0134u, 0x0003u, 0x00ffu, 0x000eu}, "V", 2u);
+}
+
+std::string BuildIfNeLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x2012u, 0x1112u, 0x0133u, 0x0003u, 0x00ffu, 0x000eu}, "V", 2u);
+}
+
+std::string BuildIfNeObjectLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in if-ne object lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0022u,
+       string_writer_type_index,
+       0x0122u,
+       string_writer_type_index,
+       0x1033u,
+       0x0003u,
+       0x00ffu,
+       0x000eu},
+      "V", 2u);
+}
+
+std::string BuildIfGeLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x2012u, 0x1112u, 0x1035u, 0x0003u, 0x00ffu, 0x000eu}, "V", 2u);
+}
+
+std::string BuildGotoLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0228u, 0x00ffu, 0x000eu}, "V", 0u);
+}
+
+std::string BuildIfGtLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x2012u, 0x1112u, 0x1036u, 0x0003u, 0x00ffu, 0x000eu}, "V", 2u);
+}
+
+std::string BuildAndLong2AddrLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x3012u,  // const/4 v0, #3
+       0x0081u,  // int-to-long v0, v0
+       0x1212u,  // const/4 v2, #1
+       0x2281u,  // int-to-long v2, v2
+       0x20c0u,  // and-long/2addr v0, v2
+       0x000fu}, // return v0
+      "I", 4u);
+}
+
+std::string BuildLongToIntLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1012u,  // const/4 v0, #1
+       0x0081u,  // int-to-long v0, v0
+       0x0284u,  // long-to-int v2, v0
+       0x020fu}, // return v2
+      "I", 3u);
+}
+
+std::string BuildSgetBooleanLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t enabled_field_index = 0u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0063u, enabled_field_index, 0x000eu}, "V", 1u, {}, 0u, 0u, {}, {
+          DexReferencedFieldFixture{
+              .class_descriptor = "Lcom/example/launchapk/Flags;",
+              .field_name = "enabled",
+              .field_type_descriptor = "Z"}});
+}
+
+std::string BuildIgetBooleanLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t holder_type_index = 1u;
+  constexpr std::uint16_t enabled_field_index = 0u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0022u, holder_type_index, 0x0155u, enabled_field_index, 0x000eu},
+      "V", 2u, {}, 0u, 0u, {}, {
+          DexReferencedFieldFixture{
+              .class_descriptor = "Lcom/example/launchapk/Flags;",
+              .field_name = "enabled",
+              .field_type_descriptor = "Z"}});
+}
+
+std::string BuildIgetWideLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t holder_type_index = 1u;
+  constexpr std::uint16_t value_field_index = 0u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0022u,  // new-instance v0, type@WideCarrier
+       holder_type_index,
+       0x0153u,  // iget-wide v1, v0, field@value
+       value_field_index,
+       0x1084u,  // long-to-int v0, v1
+       0x000fu}, // return v0
+      "I", 3u, {}, 0u, 0u, {}, {
+          DexReferencedFieldFixture{
+              .class_descriptor = "Lcom/example/launchapk/WideCarrier;",
+              .field_name = "value",
+              .field_type_descriptor = "J"}});
+}
+
+std::string BuildIputWideLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t holder_type_index = 1u;
+  constexpr std::uint16_t value_field_index = 0u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0022u,  // new-instance v0, type@WideCarrier
+       holder_type_index,
+       0x1112u,  // const/4 v1, #1
+       0x1181u,  // int-to-long v1, v1
+       0x015au,  // iput-wide v1, v0, field@value
+       value_field_index,
+       0x0153u,  // iget-wide v1, v0, field@value
+       value_field_index,
+       0x1084u,  // long-to-int v0, v1
+       0x000fu}, // return v0
+      "I", 3u, {}, 0u, 0u, {}, {
+          DexReferencedFieldFixture{
+              .class_descriptor = "Lcom/example/launchapk/WideCarrier;",
+              .field_name = "value",
+              .field_type_descriptor = "J"}});
+}
+
+std::string BuildSputBooleanLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t enabled_field_index = 0u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1012u, 0x006au, enabled_field_index, 0x0063u, enabled_field_index,
+       0x0039u, 0x0003u, 0x00ffu, 0x000eu},
+      "V", 2u, {}, 0u, 0u, {}, {
+          DexReferencedFieldFixture{
+              .class_descriptor = "Lcom/example/launchapk/Flags;",
+              .field_name = "enabled",
+              .field_type_descriptor = "Z"}});
+}
+
+std::string BuildUnsupportedInvokeStaticLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_init_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "init",
+          .return_type_descriptor = "V",
+          .instructions = {0x00ffu},
+          .registers_size = 0u,
+          .ins_size = 0u,
+          .outs_size = 0u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticAssetManagerOpenLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t framework_get_assets_method_index = 1u;
+  constexpr std::uint16_t framework_open_method_index = 2u;
+  constexpr std::uint16_t helper_init_method_index = 3u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u,
+      {
+          DexReferencedMethodFixture{
+              .class_descriptor = "Landroid/content/Context;",
+              .method_name = "getAssets",
+              .return_type_descriptor = "Landroid/content/res/AssetManager;"},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Landroid/content/res/AssetManager;",
+              .method_name = "open",
+              .return_type_descriptor = "Ljava/io/InputStream;",
+              .parameter_type_descriptors = {"Ljava/lang/String;"}},
+      },
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "init",
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {"Landroid/content/Context;"},
+          .instructions = {0x106eu, framework_get_assets_method_index, 0x0001u,
+                           0x000cu, 0x011au, 0x0000u, 0x206eu,
+                           framework_open_method_index, 0x0010u, 0x000eu},
+          .registers_size = 2u,
+          .ins_size = 1u,
+          .outs_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticInputStreamReaderLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto reader_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/InputStreamReader;");
+  Expect(reader_it != ordered_types.end(),
+         "expected InputStreamReader descriptor in inline reader lifecycle fixture");
+  const std::uint16_t reader_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), reader_it));
+
+  constexpr std::uint16_t framework_get_assets_method_index = 1u;
+  constexpr std::uint16_t framework_open_method_index = 2u;
+  constexpr std::uint16_t reader_constructor_method_index = 3u;
+  constexpr std::uint16_t helper_init_method_index = 4u;
+  constexpr std::uint16_t charset_field_index = 0u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u,
+      {
+          DexReferencedMethodFixture{
+              .class_descriptor = "Landroid/content/Context;",
+              .method_name = "getAssets",
+              .return_type_descriptor = "Landroid/content/res/AssetManager;"},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Landroid/content/res/AssetManager;",
+              .method_name = "open",
+              .return_type_descriptor = "Ljava/io/InputStream;",
+              .parameter_type_descriptors = {"Ljava/lang/String;"}},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Ljava/io/InputStreamReader;",
+              .method_name = "<init>",
+              .return_type_descriptor = "V",
+              .parameter_type_descriptors = {"Ljava/io/InputStream;",
+                                             "Ljava/nio/charset/Charset;"}}},
+      {DexReferencedFieldFixture{
+          .class_descriptor = "Lcom/example/launchapk/Charsets;",
+          .field_name = "utf8",
+          .field_type_descriptor = "Ljava/nio/charset/Charset;"}},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "init",
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {"Landroid/content/Context;"},
+          .instructions = {0x106eu,
+                           framework_get_assets_method_index,
+                           0x0002u,
+                           0x000cu,
+                           0x011au,
+                           0x0000u,
+                           0x206eu,
+                           framework_open_method_index,
+                           0x0012u,
+                           0x000cu,
+                           0x0162u,
+                           charset_field_index,
+                           0x0222u,
+                           reader_type_index,
+                           0x3070u,
+                           reader_constructor_method_index,
+                           0x0102u,
+                           0x000eu},
+          .registers_size = 3u,
+          .ins_size = 1u,
+          .outs_size = 3u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticBufferedReaderLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto input_stream_reader_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/InputStreamReader;");
+  Expect(input_stream_reader_it != ordered_types.end(),
+         "expected InputStreamReader descriptor in inline buffered-reader lifecycle fixture");
+  const std::uint16_t input_stream_reader_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), input_stream_reader_it));
+
+  const auto buffered_reader_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/BufferedReader;");
+  Expect(buffered_reader_it != ordered_types.end(),
+         "expected BufferedReader descriptor in inline buffered-reader lifecycle fixture");
+  const std::uint16_t buffered_reader_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), buffered_reader_it));
+
+  constexpr std::uint16_t framework_get_assets_method_index = 1u;
+  constexpr std::uint16_t framework_open_method_index = 2u;
+  constexpr std::uint16_t reader_constructor_method_index = 3u;
+  constexpr std::uint16_t buffered_reader_constructor_method_index = 4u;
+  constexpr std::uint16_t helper_init_method_index = 5u;
+  constexpr std::uint16_t charset_field_index = 0u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u,
+      {
+          DexReferencedMethodFixture{
+              .class_descriptor = "Landroid/content/Context;",
+              .method_name = "getAssets",
+              .return_type_descriptor = "Landroid/content/res/AssetManager;"},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Landroid/content/res/AssetManager;",
+              .method_name = "open",
+              .return_type_descriptor = "Ljava/io/InputStream;",
+              .parameter_type_descriptors = {"Ljava/lang/String;"}},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Ljava/io/InputStreamReader;",
+              .method_name = "<init>",
+              .return_type_descriptor = "V",
+              .parameter_type_descriptors = {"Ljava/io/InputStream;",
+                                             "Ljava/nio/charset/Charset;"}},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Ljava/io/BufferedReader;",
+              .method_name = "<init>",
+              .return_type_descriptor = "V",
+              .parameter_type_descriptors = {"Ljava/io/Reader;", "I"}}},
+      {DexReferencedFieldFixture{
+          .class_descriptor = "Lcom/example/launchapk/Charsets;",
+          .field_name = "utf8",
+          .field_type_descriptor = "Ljava/nio/charset/Charset;"}},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "init",
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {"Landroid/content/Context;"},
+          .instructions = {0x106eu,
+                           framework_get_assets_method_index,
+                           0x0004u,
+                           0x000cu,
+                           0x011au,
+                           0x0000u,
+                           0x206eu,
+                           framework_open_method_index,
+                           0x0014u,
+                           0x000cu,
+                           0x0162u,
+                           charset_field_index,
+                           0x0222u,
+                           input_stream_reader_type_index,
+                           0x3070u,
+                           reader_constructor_method_index,
+                           0x0102u,
+                           0x0322u,
+                           buffered_reader_type_index,
+                           0x0013u,
+                           0x0001u,
+                           0x3070u,
+                           buffered_reader_constructor_method_index,
+                           0x0023u,
+                           0x000eu},
+          .registers_size = 5u,
+          .ins_size = 1u,
+          .outs_size = 3u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticStringWriterLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto input_stream_reader_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/InputStreamReader;");
+  Expect(input_stream_reader_it != ordered_types.end(),
+         "expected InputStreamReader descriptor in inline string-writer lifecycle fixture");
+  const std::uint16_t input_stream_reader_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), input_stream_reader_it));
+
+  const auto buffered_reader_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/BufferedReader;");
+  Expect(buffered_reader_it != ordered_types.end(),
+         "expected BufferedReader descriptor in inline string-writer lifecycle fixture");
+  const std::uint16_t buffered_reader_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), buffered_reader_it));
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline string-writer lifecycle fixture");
+  const std::uint16_t string_writer_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), string_writer_it));
+
+  constexpr std::uint16_t framework_get_assets_method_index = 1u;
+  constexpr std::uint16_t framework_open_method_index = 2u;
+  constexpr std::uint16_t reader_constructor_method_index = 3u;
+  constexpr std::uint16_t buffered_reader_constructor_method_index = 4u;
+  constexpr std::uint16_t string_writer_constructor_method_index = 5u;
+  constexpr std::uint16_t helper_init_method_index = 6u;
+  constexpr std::uint16_t charset_field_index = 0u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u,
+      {
+          DexReferencedMethodFixture{
+              .class_descriptor = "Landroid/content/Context;",
+              .method_name = "getAssets",
+              .return_type_descriptor = "Landroid/content/res/AssetManager;"},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Landroid/content/res/AssetManager;",
+              .method_name = "open",
+              .return_type_descriptor = "Ljava/io/InputStream;",
+              .parameter_type_descriptors = {"Ljava/lang/String;"}},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Ljava/io/InputStreamReader;",
+              .method_name = "<init>",
+              .return_type_descriptor = "V",
+              .parameter_type_descriptors = {"Ljava/io/InputStream;",
+                                             "Ljava/nio/charset/Charset;"}},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Ljava/io/BufferedReader;",
+              .method_name = "<init>",
+              .return_type_descriptor = "V",
+              .parameter_type_descriptors = {"Ljava/io/Reader;", "I"}},
+          DexReferencedMethodFixture{
+              .class_descriptor = "Ljava/io/StringWriter;",
+              .method_name = "<init>",
+              .return_type_descriptor = "V"}},
+      {DexReferencedFieldFixture{
+          .class_descriptor = "Lcom/example/launchapk/Charsets;",
+          .field_name = "utf8",
+          .field_type_descriptor = "Ljava/nio/charset/Charset;"}},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "init",
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {"Landroid/content/Context;"},
+          .instructions = {0x106eu,
+                           framework_get_assets_method_index,
+                           0x0005u,
+                           0x000cu,
+                           0x011au,
+                           0x0000u,
+                           0x206eu,
+                           framework_open_method_index,
+                           0x0015u,
+                           0x000cu,
+                           0x0162u,
+                           charset_field_index,
+                           0x0222u,
+                           input_stream_reader_type_index,
+                           0x3070u,
+                           reader_constructor_method_index,
+                           0x0102u,
+                           0x0322u,
+                           buffered_reader_type_index,
+                           0x0013u,
+                           0x0001u,
+                           0x3070u,
+                           buffered_reader_constructor_method_index,
+                           0x0023u,
+                           0x0422u,
+                           string_writer_type_index,
+                           0x1070u,
+                           string_writer_constructor_method_index,
+                           0x0004u,
+                           0x000eu},
+          .registers_size = 6u,
+          .ins_size = 1u,
+          .outs_size = 3u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticHashMapLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto hash_map_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/util/HashMap;");
+  Expect(hash_map_it != ordered_types.end(),
+         "expected HashMap descriptor in inline hashmap lifecycle fixture");
+  const std::uint16_t hash_map_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), hash_map_it));
+
+  constexpr std::uint16_t hash_map_constructor_method_index = 1u;
+  constexpr std::uint16_t helper_init_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/util/HashMap;",
+          .method_name = "<init>",
+          .return_type_descriptor = "V"}},
+      {}, {DexDefinedMethodFixture{
+               .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+               .method_name = "init",
+               .return_type_descriptor = "V",
+               .instructions = {0x0022u,
+                                hash_map_type_index,
+                                0x1070u,
+                                hash_map_constructor_method_index,
+                                0x0000u,
+                                0x000eu},
+               .registers_size = 1u,
+               .outs_size = 1u,
+               .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticLinkedHashMapLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto linked_hash_map_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/util/LinkedHashMap;");
+  Expect(linked_hash_map_it != ordered_types.end(),
+         "expected LinkedHashMap descriptor in inline linked-hashmap lifecycle fixture");
+  const std::uint16_t linked_hash_map_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), linked_hash_map_it));
+
+  constexpr std::uint16_t linked_hash_map_constructor_method_index = 1u;
+  constexpr std::uint16_t helper_init_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/util/LinkedHashMap;",
+          .method_name = "<init>",
+          .return_type_descriptor = "V"}},
+      {}, {DexDefinedMethodFixture{
+               .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+               .method_name = "init",
+               .return_type_descriptor = "V",
+               .instructions = {0x0022u,
+                                linked_hash_map_type_index,
+                                0x1070u,
+                                linked_hash_map_constructor_method_index,
+                                0x0000u,
+                                0x000eu},
+               .registers_size = 1u,
+               .outs_size = 1u,
+               .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticLinkedHashSetLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto linked_hash_set_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/util/LinkedHashSet;");
+  Expect(linked_hash_set_it != ordered_types.end(),
+         "expected LinkedHashSet descriptor in inline linked-hashset lifecycle fixture");
+  const std::uint16_t linked_hash_set_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), linked_hash_set_it));
+
+  constexpr std::uint16_t linked_hash_set_constructor_method_index = 1u;
+  constexpr std::uint16_t helper_init_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/util/LinkedHashSet;",
+          .method_name = "<init>",
+          .return_type_descriptor = "V"}},
+      {}, {DexDefinedMethodFixture{
+               .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+               .method_name = "init",
+               .return_type_descriptor = "V",
+               .instructions = {0x0022u,
+                                linked_hash_set_type_index,
+                                0x1070u,
+                                linked_hash_set_constructor_method_index,
+                                0x0000u,
+                                0x000eu},
+               .registers_size = 1u,
+               .outs_size = 1u,
+               .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticArrayListLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto array_list_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/util/ArrayList;");
+  Expect(array_list_it != ordered_types.end(),
+         "expected ArrayList descriptor in inline arraylist lifecycle fixture");
+  const std::uint16_t array_list_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), array_list_it));
+
+  constexpr std::uint16_t array_list_constructor_method_index = 1u;
+  constexpr std::uint16_t helper_init_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/util/ArrayList;",
+          .method_name = "<init>",
+          .return_type_descriptor = "V"}},
+      {}, {DexDefinedMethodFixture{
+               .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+               .method_name = "init",
+               .return_type_descriptor = "V",
+               .instructions = {0x0022u,
+                                array_list_type_index,
+                                0x1070u,
+                                array_list_constructor_method_index,
+                                0x0000u,
+                                0x000eu},
+               .registers_size = 1u,
+               .outs_size = 1u,
+               .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticArrayListCapacityLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto array_list_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/util/ArrayList;");
+  Expect(array_list_it != ordered_types.end(),
+         "expected ArrayList descriptor in inline arraylist-capacity lifecycle fixture");
+  const std::uint16_t array_list_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), array_list_it));
+
+  constexpr std::uint16_t array_list_constructor_method_index = 1u;
+  constexpr std::uint16_t helper_init_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_init_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u,
+      0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/util/ArrayList;",
+          .method_name = "<init>",
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {"I"}}},
+      {}, {DexDefinedMethodFixture{
+               .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+               .method_name = "init",
+               .return_type_descriptor = "V",
+               .instructions = {0x4112u,
+                                0x0022u,
+                                array_list_type_index,
+                                0x2070u,
+                                array_list_constructor_method_index,
+                                0x0010u,
+                                0x000eu},
+               .registers_size = 2u,
+               .outs_size = 2u,
+               .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeInterfaceIterableIteratorLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto linked_hash_set_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/util/LinkedHashSet;");
+  Expect(linked_hash_set_it != ordered_types.end(),
+         "expected LinkedHashSet descriptor in inline iterable-iterator lifecycle fixture");
+  const std::uint16_t linked_hash_set_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), linked_hash_set_it));
+
+  constexpr std::uint16_t linked_hash_set_constructor_method_index = 1u;
+  constexpr std::uint16_t iterable_iterator_method_index = 2u;
+  constexpr std::uint16_t helper_method_index = 3u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u, {},
+      0u, 0u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/LinkedHashSet;",
+           .method_name = "<init>",
+           .return_type_descriptor = "V"},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/lang/Iterable;",
+           .method_name = "iterator",
+           .return_type_descriptor = "Ljava/util/Iterator;"}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidIterableIterator",
+          .return_type_descriptor = "I",
+          .instructions = {0x0022u,
+                           linked_hash_set_type_index,
+                           0x1070u,
+                           linked_hash_set_constructor_method_index,
+                           0x0000u,
+                           0x1072u,
+                           iterable_iterator_method_index,
+                           0x0000u,
+                           0x010cu,
+                           0x1012u,
+                           0x000fu},
+          .registers_size = 2u,
+          .outs_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticPackedSwitchLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidPackedSwitch",
+          .return_type_descriptor = "I",
+          .instructions = {
+              0x1012u,  // const/4 v0, #1
+              0x002bu,  // packed-switch v0, +7 code units
+              0x0007u,
+              0x0000u,
+              0x0012u,  // const/4 v0, #0
+              0x000fu,  // return v0
+              0x1012u,  // const/4 v0, #1
+              0x000fu,  // return v0
+              0x0100u,  // packed-switch-payload ident
+              0x0001u,  // size
+              0x0001u,  // first_key low
+              0x0000u,  // first_key high
+              0x0005u,  // target offset low (pc 1 -> pc 6)
+              0x0000u   // target offset high
+          },
+          .registers_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticSingletonListLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline singletonList lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  constexpr std::uint16_t string_writer_constructor_method_index = 1u;
+  constexpr std::uint16_t singleton_list_method_index = 2u;
+  constexpr std::uint16_t helper_method_index = 3u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/io/StringWriter;",
+           .method_name = "<init>",
+           .return_type_descriptor = "V"},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/Collections;",
+           .method_name = "singletonList",
+           .return_type_descriptor = "Ljava/util/List;",
+           .parameter_type_descriptors = {"Ljava/lang/Object;"}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidSingletonList",
+          .return_type_descriptor = "I",
+          .instructions = {0x0022u,  // new-instance v0, StringWriter
+                           string_writer_type_index,
+                           0x1070u,  // invoke-direct {v0}, StringWriter.<init>()
+                           string_writer_constructor_method_index,
+                           0x0000u,
+                           0x1071u,  // invoke-static {v0}, Collections.singletonList(Object)
+                           singleton_list_method_index,
+                           0x0000u,
+                           0x010cu,  // move-result-object v1
+                           0x1012u,  // const/4 v0, #1
+                           0x000fu}, // return v0
+          .registers_size = 2u,
+          .outs_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeInterfaceListSizeLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline list-size lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  constexpr std::uint16_t string_writer_constructor_method_index = 1u;
+  constexpr std::uint16_t singleton_list_method_index = 2u;
+  constexpr std::uint16_t list_size_method_index = 3u;
+  constexpr std::uint16_t helper_method_index = 4u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/io/StringWriter;",
+           .method_name = "<init>",
+           .return_type_descriptor = "V"},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/Collections;",
+           .method_name = "singletonList",
+           .return_type_descriptor = "Ljava/util/List;",
+           .parameter_type_descriptors = {"Ljava/lang/Object;"}},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/List;",
+           .method_name = "size",
+           .return_type_descriptor = "I"}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidListSize",
+          .return_type_descriptor = "I",
+          .instructions = {0x0022u,  // new-instance v0, StringWriter
+                           string_writer_type_index,
+                           0x1070u,  // invoke-direct {v0}, StringWriter.<init>()
+                           string_writer_constructor_method_index,
+                           0x0000u,
+                           0x1071u,  // invoke-static {v0}, Collections.singletonList(Object)
+                           singleton_list_method_index,
+                           0x0000u,
+                           0x010cu,  // move-result-object v1
+                           0x1072u,  // invoke-interface {v1}, List.size()
+                           list_size_method_index,
+                           0x0001u,
+                           0x000au,  // move-result v0
+                           0x000fu}, // return v0
+          .registers_size = 2u,
+          .outs_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeInterfaceListIteratorLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline list-iterator lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  constexpr std::uint16_t string_writer_constructor_method_index = 1u;
+  constexpr std::uint16_t singleton_list_method_index = 2u;
+  constexpr std::uint16_t list_iterator_method_index = 3u;
+  constexpr std::uint16_t iterator_hasnext_method_index = 4u;
+  constexpr std::uint16_t iterator_next_method_index = 5u;
+  constexpr std::uint16_t helper_method_index = 6u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/io/StringWriter;",
+           .method_name = "<init>",
+           .return_type_descriptor = "V"},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/Collections;",
+           .method_name = "singletonList",
+           .return_type_descriptor = "Ljava/util/List;",
+           .parameter_type_descriptors = {"Ljava/lang/Object;"}},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/List;",
+           .method_name = "iterator",
+           .return_type_descriptor = "Ljava/util/Iterator;"},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/Iterator;",
+           .method_name = "hasNext",
+           .return_type_descriptor = "Z"},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/Iterator;",
+           .method_name = "next",
+           .return_type_descriptor = "Ljava/lang/Object;"}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidListIterator",
+          .return_type_descriptor = "I",
+          .instructions = {0x0022u,  // new-instance v0, StringWriter
+                           string_writer_type_index,
+                           0x1070u,  // invoke-direct {v0}, StringWriter.<init>()
+                           string_writer_constructor_method_index,
+                           0x0000u,
+                           0x1071u,  // invoke-static {v0}, Collections.singletonList(Object)
+                           singleton_list_method_index,
+                           0x0000u,
+                           0x000cu,  // move-result-object v0
+                           0x1072u,  // invoke-interface {v0}, List.iterator()
+                           list_iterator_method_index,
+                           0x0000u,
+                           0x010cu,  // move-result-object v1
+                           0x1072u,  // invoke-interface {v1}, Iterator.hasNext()
+                           iterator_hasnext_method_index,
+                           0x0001u,
+                           0x000au,  // move-result v0
+                           0x1072u,  // invoke-interface {v1}, Iterator.next()
+                           iterator_next_method_index,
+                           0x0001u,
+                           0x010cu,  // move-result-object v1
+                           0x000fu}, // return v0
+          .registers_size = 2u,
+          .outs_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticConst16LifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidReturnConst16",
+          .return_type_descriptor = "I",
+          .instructions = {0x0013u, 0x0001u, 0x000fu},
+          .registers_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticNewArrayLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_array_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "[Ljava/lang/String;");
+  Expect(string_array_it != ordered_types.end(),
+         "expected String array descriptor in inline new-array lifecycle fixture");
+  const std::uint16_t string_array_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), string_array_it));
+
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u, 0u,
+      {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidBuildStringArray",
+          .return_type_descriptor = "V",
+          .instructions = {0x1012u, 0x0123u, string_array_type_index, 0x000eu},
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticAgetObjectLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_array_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "[Ljava/lang/String;");
+  Expect(string_array_it != ordered_types.end(),
+         "expected String array descriptor in inline aget-object lifecycle fixture");
+  const std::uint16_t string_array_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_array_it));
+
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000cu, 0x000eu}, "V", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidReadStringArrayElement",
+          .return_type_descriptor = "Ljava/lang/String;",
+          .instructions = {0x1012u,
+                           0x0212u,
+                           0x0123u,
+                           string_array_type_index,
+                           0x0346u,
+                           0x0201u,
+                           0x0311u},
+          .registers_size = 4u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticAgetObjectPlaceholderFieldLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto holder_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Lcom/example/launchapk/ArrayHolder;");
+  Expect(holder_it != ordered_types.end(),
+         "expected ArrayHolder descriptor in placeholder aget-object lifecycle fixture");
+  const std::uint16_t holder_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), holder_it));
+
+  constexpr std::uint16_t helper_method_index = 1u;
+  constexpr std::uint16_t array_field_index = 0u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u, 0u,
+      {},
+      {DexReferencedFieldFixture{
+          .class_descriptor = "Lcom/example/launchapk/ArrayHolder;",
+          .field_name = "values",
+          .field_type_descriptor = "[Ljava/lang/String;"}},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidReadPlaceholderArrayElement",
+          .return_type_descriptor = "Ljava/lang/String;",
+          .instructions = {0x0022u,
+                           holder_type_index,
+                           0x0154u,
+                           array_field_index,
+                           0x0212u,
+                           0x0346u,
+                           0x0201u,
+                           0x0311u},
+          .registers_size = 4u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticCheckCastLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline check-cast lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  const auto object_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/lang/Object;");
+  Expect(object_it != ordered_types.end(),
+         "expected Object descriptor in inline check-cast lifecycle fixture");
+  const std::uint16_t object_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), object_it));
+
+  constexpr std::uint16_t string_writer_constructor_method_index = 1u;
+  constexpr std::uint16_t helper_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000cu, 0x000eu}, "V", 1u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/io/StringWriter;",
+          .method_name = "<init>",
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidCheckCastWriter",
+          .return_type_descriptor = "Ljava/lang/Object;",
+          .instructions = {0x0022u,
+                           string_writer_type_index,
+                           0x1070u,
+                           string_writer_constructor_method_index,
+                           0x0000u,
+                           0x001fu,
+                           object_type_index,
+                           0x0011u},
+          .registers_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticInstanceOfLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline instance-of lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  const auto object_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/lang/Object;");
+  Expect(object_it != ordered_types.end(),
+         "expected Object descriptor in inline instance-of lifecycle fixture");
+  const std::uint16_t object_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), object_it));
+
+  constexpr std::uint16_t string_writer_constructor_method_index = 1u;
+  constexpr std::uint16_t helper_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/io/StringWriter;",
+          .method_name = "<init>",
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidInstanceOfWriter",
+          .return_type_descriptor = "I",
+          .instructions = {0x0022u,
+                           string_writer_type_index,
+                           0x1070u,
+                           string_writer_constructor_method_index,
+                           0x0000u,
+                           0x0120u,
+                           object_type_index,
+                           0x010fu},
+          .registers_size = 2u,
+          .outs_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticAtomicReferenceGetAndSetLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto atomic_reference_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/util/concurrent/atomic/AtomicReference;");
+  Expect(atomic_reference_it != ordered_types.end(),
+         "expected AtomicReference descriptor in inline getAndSet lifecycle fixture");
+  const std::uint16_t atomic_reference_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), atomic_reference_it));
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline getAndSet lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  constexpr std::uint16_t string_writer_constructor_method_index = 1u;
+  constexpr std::uint16_t atomic_reference_get_and_set_method_index = 2u;
+  constexpr std::uint16_t helper_method_index = 3u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/io/StringWriter;",
+           .method_name = "<init>",
+           .return_type_descriptor = "V",
+           .parameter_type_descriptors = {}},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/concurrent/atomic/AtomicReference;",
+           .method_name = "getAndSet",
+           .return_type_descriptor = "Ljava/lang/Object;",
+           .parameter_type_descriptors = {"Ljava/lang/Object;"}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidSwapAtomicReference",
+          .return_type_descriptor = "I",
+          .instructions = {0x0022u,
+                           atomic_reference_type_index,
+                           0x0122u,
+                           string_writer_type_index,
+                           0x1070u,
+                           string_writer_constructor_method_index,
+                           0x0001u,
+                           0x206eu,
+                           atomic_reference_get_and_set_method_index,
+                           0x0010u,
+                           0x000cu,
+                           0x1012u,
+                           0x000fu},
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticAtomicReferenceSetLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto atomic_reference_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/util/concurrent/atomic/AtomicReference;");
+  Expect(atomic_reference_it != ordered_types.end(),
+         "expected AtomicReference descriptor in inline set lifecycle fixture");
+  const std::uint16_t atomic_reference_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), atomic_reference_it));
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline set lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  constexpr std::uint16_t string_writer_constructor_method_index = 1u;
+  constexpr std::uint16_t atomic_reference_set_method_index = 2u;
+  constexpr std::uint16_t helper_method_index = 3u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/io/StringWriter;",
+           .method_name = "<init>",
+           .return_type_descriptor = "V",
+           .parameter_type_descriptors = {}},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/util/concurrent/atomic/AtomicReference;",
+           .method_name = "set",
+           .return_type_descriptor = "V",
+           .parameter_type_descriptors = {"Ljava/lang/Object;"}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidStoreAtomicReference",
+          .return_type_descriptor = "I",
+          .instructions = {0x0022u,
+                           atomic_reference_type_index,
+                           0x0122u,
+                           string_writer_type_index,
+                           0x1070u,
+                           string_writer_constructor_method_index,
+                           0x0001u,
+                           0x206eu,
+                           atomic_reference_set_method_index,
+                           0x0010u,
+                           0x1012u,
+                           0x000fu},
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticSystemArrayCopyLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_array_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "[Ljava/lang/String;");
+  Expect(string_array_it != ordered_types.end(),
+         "expected String array descriptor in inline System.arraycopy lifecycle fixture");
+  const std::uint16_t string_array_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_array_it));
+
+  constexpr std::uint16_t system_arraycopy_method_index = 1u;
+  constexpr std::uint16_t helper_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/lang/System;",
+          .method_name = "arraycopy",
+          .return_type_descriptor = "V",
+          .parameter_type_descriptors = {"Ljava/lang/Object;", "I",
+                                         "Ljava/lang/Object;", "I", "I"}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidArrayCopy",
+          .return_type_descriptor = "I",
+          .instructions = {0x1012u,  // const/4 v0, #int 1
+                           0x0112u,  // const/4 v1, #int 0
+                           0x0223u,  // new-array v2, v0, type@string[]
+                           string_array_type_index,
+                           0x0323u,  // new-array v3, v0, type@string[]
+                           string_array_type_index,
+                           0x5071u,  // invoke-static {v2, v1, v3, v1, v0}
+                           system_arraycopy_method_index,
+                           0x1312u,
+                           0x0446u,  // aget-object v4, v3, v1
+                           0x0103u,
+                           0x1012u,  // const/4 v0, #int 1
+                           0x000fu}, // return v0
+          .registers_size = 5u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticReaderReadLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto char_array_it =
+      std::find(ordered_types.begin(), ordered_types.end(), "[C");
+  Expect(char_array_it != ordered_types.end(),
+         "expected char array descriptor in inline reader-read lifecycle fixture");
+  const std::uint16_t char_array_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), char_array_it));
+
+  const auto reader_it =
+      std::find(ordered_types.begin(), ordered_types.end(), "Ljava/io/Reader;");
+  Expect(reader_it != ordered_types.end(),
+         "expected Reader descriptor in inline reader-read lifecycle fixture");
+  const std::uint16_t reader_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), reader_it));
+
+  constexpr std::uint16_t helper_method_index = 2u;
+  constexpr std::uint16_t reader_read_method_index = 1u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/io/Reader;",
+          .method_name = "read",
+          .return_type_descriptor = "I",
+          .parameter_type_descriptors = {"[C"}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidReadChars",
+          .return_type_descriptor = "I",
+          .instructions = {0x1012u,
+                           0x0123u,
+                           char_array_type_index,
+                           0x0222u,
+                           reader_type_index,
+                           0x206eu,
+                           reader_read_method_index,
+                           0x0012u,
+                           0x000au,
+                           0x000fu},
+          .registers_size = 3u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticStringWriterToStringLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline toString lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  constexpr std::uint16_t helper_method_index = 3u;
+  constexpr std::uint16_t string_writer_constructor_method_index = 1u;
+  constexpr std::uint16_t string_writer_to_string_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/io/StringWriter;",
+           .method_name = "<init>",
+           .return_type_descriptor = "V",
+           .parameter_type_descriptors = {}},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/io/StringWriter;",
+           .method_name = "toString",
+           .return_type_descriptor = "Ljava/lang/String;",
+           .parameter_type_descriptors = {}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidStringify",
+          .return_type_descriptor = "V",
+          .instructions = {0x0022u,
+                           string_writer_type_index,
+                           0x1070u,
+                           string_writer_constructor_method_index,
+                           0x0000u,
+                           0x106eu,
+                           string_writer_to_string_method_index,
+                           0x0000u,
+                           0x000eu},
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticCloseableCloseLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto string_writer_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/io/StringWriter;");
+  Expect(string_writer_it != ordered_types.end(),
+         "expected StringWriter descriptor in inline Closeable.close lifecycle fixture");
+  const std::uint16_t string_writer_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), string_writer_it));
+
+  constexpr std::uint16_t helper_method_index = 3u;
+  constexpr std::uint16_t string_writer_constructor_method_index = 1u;
+  constexpr std::uint16_t closeable_close_method_index = 2u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/io/StringWriter;",
+           .method_name = "<init>",
+           .return_type_descriptor = "V",
+           .parameter_type_descriptors = {}},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/io/Closeable;",
+           .method_name = "close",
+           .return_type_descriptor = "V",
+           .parameter_type_descriptors = {}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidCloseWriter",
+          .return_type_descriptor = "I",
+          .instructions = {0x0022u,
+                           string_writer_type_index,
+                           0x1070u,
+                           string_writer_constructor_method_index,
+                           0x0000u,
+                           0x1072u,
+                           closeable_close_method_index,
+                           0x0000u,
+                           0x1012u,
+                           0x000fu},
+          .registers_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticStringGetBytesLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto charset_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/nio/charset/Charset;");
+  Expect(charset_it != ordered_types.end(),
+         "expected Charset descriptor in inline String.getBytes lifecycle fixture");
+  const std::uint16_t charset_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), charset_it));
+
+  constexpr std::uint16_t string_index = 0u;
+  constexpr std::uint16_t helper_method_index = 2u;
+  constexpr std::uint16_t get_bytes_method_index = 1u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u, {},
+      0u, 0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/lang/String;",
+          .method_name = "getBytes",
+          .return_type_descriptor = "[B",
+          .parameter_type_descriptors = {"Ljava/nio/charset/Charset;"}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidStringGetBytes",
+          .return_type_descriptor = "[B",
+          .instructions = {0x001au,
+                           string_index,
+                           0x0122u,
+                           charset_type_index,
+                           0x206eu,
+                           get_bytes_method_index,
+                           0x0010u,
+                           0x000cu,
+                           0x0011u},
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticStringGetBytesArrayLengthLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto charset_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Ljava/nio/charset/Charset;");
+  Expect(charset_it != ordered_types.end(),
+         "expected Charset descriptor in inline String.getBytes length lifecycle fixture");
+  const std::uint16_t charset_type_index = static_cast<std::uint16_t>(
+      std::distance(ordered_types.begin(), charset_it));
+
+  constexpr std::uint16_t string_index = 0u;
+  constexpr std::uint16_t helper_method_index = 2u;
+  constexpr std::uint16_t get_bytes_method_index = 1u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u, {},
+      0u, 0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/lang/String;",
+          .method_name = "getBytes",
+          .return_type_descriptor = "[B",
+          .parameter_type_descriptors = {"Ljava/nio/charset/Charset;"}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidStringGetBytesLength",
+          .return_type_descriptor = "I",
+          .instructions = {0x001au,
+                           string_index,
+                           0x0122u,
+                           charset_type_index,
+                           0x206eu,
+                           get_bytes_method_index,
+                           0x0010u,
+                           0x000cu,
+                           0x0121u,
+                           0x010fu},
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticStringToCharArrayLengthLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t string_index = 0u;
+  constexpr std::uint16_t helper_method_index = 2u;
+  constexpr std::uint16_t to_char_array_method_index = 1u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u, {},
+      0u, 0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/lang/String;",
+          .method_name = "toCharArray",
+          .return_type_descriptor = "[C",
+          .parameter_type_descriptors = {}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidStringToCharArrayLength",
+          .return_type_descriptor = "I",
+          .instructions = {0x001au,
+                           string_index,
+                           0x106eu,
+                           to_char_array_method_index,
+                           0x0000u,
+                           0x000cu,
+                           0x0121u,
+                           0x010fu},
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticIntToLongLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidIntToLong",
+          .return_type_descriptor = "V",
+          .instructions = {0x1012u, 0x0181u, 0x000eu},
+          .registers_size = 3u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticConstWide16LifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidConstWide16",
+          .return_type_descriptor = "I",
+          .instructions = {0x0016u,  // const-wide/16 v0, #1
+                           0x0001u,
+                           0x000fu},  // return v0
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticCmpLongLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidCmpLong",
+          .return_type_descriptor = "I",
+          .instructions = {0x0116u,  // const-wide/16 v1, #2
+                           0x0002u,
+                           0x0316u,  // const-wide/16 v3, #1
+                           0x0001u,
+                           0x0031u,  // cmp-long v0, v1, v3
+                           0x0301u,
+                           0x000fu},  // return v0
+          .registers_size = 5u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticOrLongLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidOrLong",
+          .return_type_descriptor = "I",
+          .instructions = {0x1012u,  // const/4 v0, #1
+                           0x0181u,  // int-to-long v1, v0
+                           0x2312u,  // const/4 v3, #2
+                           0x3481u,  // int-to-long v4, v3
+                           0x01a1u,  // or-long v1, v1, v4
+                           0x0401u,
+                           0x010fu},  // return v1
+          .registers_size = 6u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticSubLongLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidSubLong",
+          .return_type_descriptor = "I",
+          .instructions = {0x5012u,  // const/4 v0, #5
+                           0x0181u,  // int-to-long v1, v0
+                           0x2312u,  // const/4 v3, #2
+                           0x3481u,  // int-to-long v4, v3
+                           0x019cu,  // sub-long v1, v1, v4
+                           0x0401u,
+                           0x010fu},  // return v1
+          .registers_size = 6u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticSubLong2AddrLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidSubLong2Addr",
+          .return_type_descriptor = "I",
+          .instructions = {0x5012u,  // const/4 v0, #5
+                           0x0181u,  // int-to-long v1, v0
+                           0x2312u,  // const/4 v3, #2
+                           0x3481u,  // int-to-long v4, v3
+                           0x41bcu,  // sub-long/2addr v1, v4
+                           0x010fu},  // return v1
+          .registers_size = 6u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticAddLong2AddrLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidAddLong2Addr",
+          .return_type_descriptor = "I",
+          .instructions = {0x1012u,  // const/4 v0, #1
+                           0x0181u,  // int-to-long v1, v0
+                           0x2212u,  // const/4 v2, #2
+                           0x2381u,  // int-to-long v3, v2
+                           0x31bbu,  // add-long/2addr v1, v3
+                           0x010fu},  // return v1
+          .registers_size = 5u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticSubInt2AddrLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidSubInt2Addr",
+          .return_type_descriptor = "I",
+          .instructions = {0x3012u,  // const/4 v0, #3
+                           0x2112u,  // const/4 v1, #2
+                           0x10b1u,  // sub-int/2addr v0, v1
+                           0x000fu},  // return v0
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticAddInt2AddrLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidAddInt2Addr",
+          .return_type_descriptor = "I",
+          .instructions = {0x1012u,  // const/4 v0, #1
+                           0x2112u,  // const/4 v1, #2
+                           0x10b0u,  // add-int/2addr v0, v1
+                           0x000fu},  // return v0
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticAddIntLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidAddInt",
+          .return_type_descriptor = "I",
+          .instructions = {0x1012u,  // const/4 v0, #1
+                           0x2112u,  // const/4 v1, #2
+                           0x0290u,  // add-int v2, v0, v1
+                           0x0100u,
+                           0x020fu},  // return v2
+          .registers_size = 3u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticMoveLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u, {}, 0u, 0u,
+      {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidMoveInt",
+          .return_type_descriptor = "I",
+          .instructions = {0x1112u,  // const/4 v1, #int 1
+                           0x1001u,  // move v0, v1
+                           0x000fu}, // return v0
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticSubIntLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u, {}, 0u, 0u,
+      {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidSubInt",
+          .return_type_descriptor = "I",
+          .instructions = {0x2012u,  // const/4 v0, #2
+                           0x1112u,  // const/4 v1, #1
+                           0x0291u,  // sub-int v2, v0, v1
+                           0x0100u,
+                           0x020fu},  // return v2
+          .registers_size = 3u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticRsubIntLit16LifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidRsubIntLit16",
+          .return_type_descriptor = "I",
+          .instructions = {0x1012u,  // const/4 v0, #1
+                           0x01d1u,  // rsub-int/lit16 v1, v0, #2
+                           0x0002u,
+                           0x010fu},  // return v1
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticMathMinLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t math_min_method_index = 1u;
+  constexpr std::uint16_t helper_method_index = 2u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/lang/Math;",
+          .method_name = "min",
+          .return_type_descriptor = "I",
+          .parameter_type_descriptors = {"I", "I"}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidMathMin",
+          .return_type_descriptor = "I",
+          .instructions = {0x2012u,  // const/4 v0, #2
+                           0x1112u,  // const/4 v1, #1
+                           0x2071u,  // invoke-static {v0, v1}
+                           math_min_method_index,
+                           0x0010u,
+                           0x000au,
+                           0x000fu},  // return v0
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticRangeLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t helper_method_index = 1u;
+  constexpr std::uint16_t callee_method_index = 2u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {}, {},
+      {DexDefinedMethodFixture{
+           .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+           .method_name = "linuxoidInvokeRange",
+           .return_type_descriptor = "I",
+           .instructions = {0x0177u,
+                            callee_method_index,
+                            0x0000u,
+                            0x000au,
+                            0x000fu},
+           .registers_size = 1u,
+           .access_flags = 0x9u},
+       DexDefinedMethodFixture{
+           .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+           .method_name = "linuxoidRangeCallee",
+           .return_type_descriptor = "I",
+           .instructions = {0x1012u, 0x000fu},
+           .registers_size = 1u,
+           .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticThreadCurrentThreadLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t current_thread_method_index = 1u;
+  constexpr std::uint16_t helper_method_index = 2u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x000eu}, "V", 1u, {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+          .class_descriptor = "Ljava/lang/Thread;",
+          .method_name = "currentThread",
+          .return_type_descriptor = "Ljava/lang/Thread;",
+          .parameter_type_descriptors = {}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidThreadCurrentThread",
+          .return_type_descriptor = "V",
+          .instructions = {0x0071u,
+                           current_thread_method_index,
+                           0x0000u,
+                           0x000cu,
+                           0x000eu},
+          .registers_size = 1u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticThreadGetIdLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  constexpr std::uint16_t current_thread_method_index = 1u;
+  constexpr std::uint16_t get_id_method_index = 2u;
+  constexpr std::uint16_t helper_method_index = 3u;
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x1071u, helper_method_index, 0x0000u, 0x1012u, 0x000fu}, "I", 2u,
+      {}, 0u, 0u,
+      {DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/lang/Thread;",
+           .method_name = "currentThread",
+           .return_type_descriptor = "Ljava/lang/Thread;",
+           .parameter_type_descriptors = {}},
+       DexReferencedMethodFixture{
+           .class_descriptor = "Ljava/lang/Thread;",
+           .method_name = "getId",
+           .return_type_descriptor = "J",
+           .parameter_type_descriptors = {}}},
+      {},
+      {DexDefinedMethodFixture{
+          .class_descriptor = "Lcom/example/launchapk/LayoutManager;",
+          .method_name = "linuxoidThreadGetId",
+          .return_type_descriptor = "I",
+          .instructions = {0x0071u,
+                           current_thread_method_index,
+                           0x0000u,
+                           0x000cu,
+                           0x106eu,
+                           get_id_method_index,
+                           0x0000u,
+                           0x000bu,
+                           0x000fu},
+          .registers_size = 2u,
+          .access_flags = 0x9u}});
+}
+
+std::string BuildInvokeStaticInlineConstructorLifecycleOnCreateDexPayload(
+    const std::vector<std::string>& class_descriptors,
+    const std::string& requested_entrypoint_class_descriptor) {
+  std::vector<std::string> ordered_types = class_descriptors;
+  std::sort(ordered_types.begin(), ordered_types.end());
+  ordered_types.erase(
+      std::unique(ordered_types.begin(), ordered_types.end()),
+      ordered_types.end());
+
+  const auto state_carrier_it =
+      std::find(ordered_types.begin(), ordered_types.end(),
+                "Lcom/example/launchapk/StateCarrier;");
+  Expect(state_carrier_it != ordered_types.end(),
+         "expected StateCarrier descriptor in inline invoke-direct lifecycle fixture");
+  const std::uint16_t state_carrier_type_index =
+      static_cast<std::uint16_t>(
+          std::distance(ordered_types.begin(), state_carrier_it));
+
+  constexpr std::uint16_t helper_method_index = 1u;
+  constexpr std::uint16_t constructor_method_index = 2u;
+  constexpr std::uint16_t state_value_field_index = 0u;
+
+  return BuildDexPayloadWithEntrypoint(
+      class_descriptors, requested_entrypoint_class_descriptor, "onCreate",
+      {0x0071u, helper_method_index, 0x0000u, 0x000au, 0x000fu}, "I", 1u,
+      {}, 0u, 0u, {},
+      {DexReferencedFieldFixture{
+          .class_descriptor = "Lcom/example/launchapk/StateCarrier;",
+          .field_name = "value",
+          .field_type_descriptor = "I"}},
+      {DexDefinedMethodFixture{
+           .class_descriptor = "Lcom/example/launchapk/MainActivity;",
+           .method_name = "linuxoidBuildCarrierValue",
+           .return_type_descriptor = "I",
+           .instructions = {0x0022u,
+                            state_carrier_type_index,
+                            0x1070u,
+                            constructor_method_index,
+                            0x0000u,
+                            0x0152u,
+                            state_value_field_index,
+                            0x010fu},
+           .registers_size = 2u,
+           .access_flags = 0x9u},
+       DexDefinedMethodFixture{
+           .class_descriptor = "Lcom/example/launchapk/StateCarrier;",
+           .method_name = "<init>",
+           .return_type_descriptor = "V",
+           .instructions = {0x1112u, 0x0159u, state_value_field_index, 0x000eu},
+           .registers_size = 2u,
+           .access_flags = 0x10001u}});
 }
 
 std::string BuildUnsupportedOpcodeDexPayload(
@@ -3804,6 +6163,50 @@ void TestBinderServiceManagerFixtureWritesStableArtifacts() {
   Expect(rendered.find("\"limitation_flags\": [\"linuxoid_local_foundation_only\"") !=
              std::string::npos,
          "expected limitation flags in json");
+
+  fs::remove_all(root);
+}
+
+void TestBinderServiceManagerFixtureHandlesKeyboardLikeLongPayloads() {
+  namespace fs = std::filesystem;
+  const fs::path root =
+      fs::temp_directory_path() /
+      "linuxoid-binder-service-manager-keyboard-long-payload-test";
+  fs::remove_all(root);
+
+  const fs::path artifact_root =
+      root / "users/0/packages/org.futo.inputmethod.latin/vc11654-0.1.28/"
+             "launch-apk/default";
+  const fs::path staged_apk_path = artifact_root / "base.apk";
+
+  const auto report = wfa::RunBinderServiceManagerFixture(
+      {.package_name = "org.futo.inputmethod.latin",
+       .launcher_component =
+           "org.futo.inputmethod.latin/.uix.settings.SettingsActivity",
+       .apk_path = staged_apk_path.string(),
+       .artifact_root = artifact_root.string(),
+       .session_id = "org.futo.inputmethod.latin:vc11654-0.1.28:binder",
+       .owner_process_identity =
+           "linuxoid-launch-apk:org.futo.inputmethod.latin"});
+
+  Expect(report.manager_ready,
+         "expected binder-shaped service manager ready for keyboard-like payload");
+  Expect(report.transport_round_trips == 7,
+         "expected deterministic binder transport round trips for keyboard-like payload");
+  Expect(fs::exists(report.transport_log_path),
+         "expected binder transport log artifact for keyboard-like payload");
+  Expect(fs::exists(report.metadata_path),
+         "expected binder metadata artifact for keyboard-like payload");
+
+  const std::string transport = ReadTextFile(report.transport_log_path);
+  Expect(transport.find("\"message_kind\": \"transaction_request\"") !=
+             std::string::npos,
+         "expected transaction request in keyboard-like transport log");
+  Expect(transport.find("org.futo.inputmethod.latin/.uix.settings.SettingsActivity") !=
+             std::string::npos,
+         "expected keyboard component preserved in transport payload");
+  Expect(transport.find(staged_apk_path.string()) != std::string::npos,
+         "expected long staged apk path preserved in transport payload");
 
   fs::remove_all(root);
 }
@@ -10950,6 +13353,3103 @@ void TestLaunchApkFirstAppStartCheckpointReportsUnsupportedConstructorBoundary()
   fs::remove_all(fixture.launch.root);
 }
 
+void TestLaunchApkFirstAppStartCheckpointExecutesInvokeStaticMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-invoke-static-v2", true,
+      {{"classes.dex",
+        BuildInvokeStaticLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected invoke-static checkpoint command to execute app-local static method");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for invoke-static execution");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static returned state in first app start json");
+  Expect(output.find("\"app_invoked_method_class_descriptor\": "
+                     "\"Lcom/example/launchapk/LayoutManager;\"") !=
+             std::string::npos,
+         "expected invoke-static class descriptor in first app start json");
+  Expect(output.find("\"app_invoked_method_name\": \"init\"") !=
+             std::string::npos,
+         "expected invoke-static method name in first app start json");
+  Expect(output.find("\"app_invoked_method_signature\": \"()V\"") !=
+             std::string::npos,
+         "expected invoke-static method signature in first app start json");
+  Expect(output.find("\"bytecode_execution_state\": "
+                     "\"returned\"") != std::string::npos,
+         "expected returned execution state after invoke-static execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected invoke-static lifecycle method to reach return");
+  Expect(output.find("\"invoke-static-unimplemented:") == std::string::npos,
+         "expected invoke-static path to advance beyond the old unimplemented blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointReportsUnsupportedInvokeStaticCallee() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-invoke-static-unsupported", true,
+      {{"classes.dex",
+        BuildUnsupportedInvokeStaticLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"blocked\"") != std::string::npos,
+         "expected blocked app method invocation state for unsupported invoke-static callee");
+  Expect(output.find("\"app_invoked_method_class_descriptor\": "
+                     "\"Lcom/example/launchapk/LayoutManager;\"") !=
+             std::string::npos,
+         "expected invoke-static callee class descriptor in first app start json");
+  Expect(output.find("\"app_invoked_method_name\": \"init\"") !=
+             std::string::npos,
+         "expected invoke-static callee method name in first app start json");
+  Expect(output.find("\"app_invoked_method_signature\": \"()V\"") !=
+             std::string::npos,
+         "expected invoke-static callee method signature in first app start json");
+  Expect(output.find("\"bytecode_execution_state\": "
+                     "\"unsupported_opcode\"") != std::string::npos,
+         "expected unsupported opcode execution state from invoke-static callee");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"unsupported-dex-opcode:opcode-0xff\"") !=
+             std::string::npos,
+         "expected exact unsupported invoke-static callee blocker");
+  Expect(output.find("\"invoke-static-unimplemented:") == std::string::npos,
+         "expected unsupported invoke-static callee to advance beyond the old top-level blocker");
+  Expect(output.find("\"next_blocker\": "
+                     "\"extend_minimal_dex_interpreter_for_opcode_0xff\"") !=
+             std::string::npos,
+         "expected actionable unsupported invoke-static callee next blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointReportsMissingCodeItemInvokeBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-assetmanager-open", true,
+      {{"classes.dex",
+        BuildInvokeStaticAssetManagerOpenLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected AssetManager.open lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after AssetManager.open stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected returned app method invocation state after AssetManager.open stub");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed AssetManager.open(String) with a placeholder InputStream object") !=
+             std::string::npos,
+         "expected AssetManager.open stub diagnostic in first app start json");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after AssetManager.open stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineInvokeDirectConstructorMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-invoke-direct", true,
+      {{"classes.dex",
+        BuildInvokeStaticInlineConstructorLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/StateCarrier;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline invoke-direct lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline invoke-direct checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline constructor helper execution");
+  Expect(output.find("\"app_invoked_method_class_descriptor\": "
+                     "\"Lcom/example/launchapk/MainActivity;\"") !=
+             std::string::npos,
+         "expected helper class descriptor in inline invoke-direct checkpoint");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidBuildCarrierValue\"") !=
+             std::string::npos,
+         "expected helper method name in inline invoke-direct checkpoint");
+  Expect(output.find("\"app_invoked_method_signature\": \"()I\"") !=
+             std::string::npos,
+         "expected helper method signature in inline invoke-direct checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-instance+invoke-direct+iput+iget\"") !=
+             std::string::npos,
+         "expected inline invoke-direct object/register/field operation in json");
+  Expect(output.find("\"object_register_field_state\": "
+                     "\"object-placeholder\"") != std::string::npos,
+         "expected placeholder object/register/field state in inline invoke-direct checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Lcom/example/launchapk/StateCarrier;\"") !=
+             std::string::npos,
+         "expected StateCarrier object descriptor in inline invoke-direct checkpoint");
+  Expect(output.find("\"field_name\": \"value\"") != std::string::npos,
+         "expected StateCarrier value field in inline invoke-direct checkpoint");
+  Expect(output.find("\"field_signature\": \"I\"") != std::string::npos,
+         "expected int field signature in inline invoke-direct checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state in inline invoke-direct checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected inline invoke-direct helper result to propagate to return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInputStreamReaderConstructorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inputstreamreader", true,
+      {{"classes.dex",
+        BuildInvokeStaticInputStreamReaderLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/Charsets;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/InputStreamReader;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected InputStreamReader lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after InputStreamReader constructor stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after InputStreamReader constructor helper");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed InputStreamReader.<init>(InputStream, Charset) to keep the first real app path moving") !=
+             std::string::npos,
+         "expected InputStreamReader constructor stub diagnostic in first app start json");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-instance+invoke-direct\"") !=
+             std::string::npos,
+         "expected constructor object operation in InputStreamReader checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Ljava/io/InputStreamReader;\"") !=
+             std::string::npos,
+         "expected InputStreamReader object descriptor in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after InputStreamReader constructor stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesBufferedReaderConstructorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-bufferedreader", true,
+      {{"classes.dex",
+        BuildInvokeStaticBufferedReaderLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/Charsets;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/BufferedReader;",
+             "Ljava/io/InputStreamReader;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected BufferedReader lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after BufferedReader constructor stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after BufferedReader constructor helper");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed BufferedReader.<init>(Reader, int) to keep the first real app path moving") !=
+             std::string::npos,
+         "expected BufferedReader constructor stub diagnostic in first app start json");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-instance+invoke-direct\"") !=
+             std::string::npos,
+         "expected constructor object operation in BufferedReader checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Ljava/io/BufferedReader;\"") !=
+             std::string::npos,
+         "expected BufferedReader object descriptor in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after BufferedReader constructor stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesStringWriterConstructorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-stringwriter", true,
+      {{"classes.dex",
+        BuildInvokeStaticStringWriterLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/Charsets;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/BufferedReader;",
+             "Ljava/io/InputStreamReader;",
+             "Ljava/io/StringWriter;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected StringWriter lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after StringWriter constructor stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after StringWriter constructor helper");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed StringWriter.<init>() to keep the first real app path moving") !=
+             std::string::npos,
+         "expected StringWriter constructor stub diagnostic in first app start json");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-instance+invoke-direct\"") !=
+             std::string::npos,
+         "expected constructor object operation in StringWriter checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Ljava/io/StringWriter;\"") !=
+             std::string::npos,
+         "expected StringWriter object descriptor in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after StringWriter constructor stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesHashMapConstructorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-hashmap", true,
+      {{"classes.dex",
+        BuildInvokeStaticHashMapLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/util/HashMap;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected HashMap lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after HashMap constructor stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after HashMap constructor helper");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed HashMap.<init>() to keep the first real app path moving") !=
+             std::string::npos,
+         "expected HashMap constructor stub diagnostic in first app start json");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-instance+invoke-direct\"") !=
+             std::string::npos,
+         "expected constructor object operation in HashMap checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Ljava/util/HashMap;\"") !=
+             std::string::npos,
+         "expected HashMap object descriptor in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after HashMap constructor stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesLinkedHashMapConstructorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-linkedhashmap", true,
+      {{"classes.dex",
+        BuildInvokeStaticLinkedHashMapLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/util/LinkedHashMap;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected LinkedHashMap lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after LinkedHashMap constructor stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after LinkedHashMap constructor helper");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed LinkedHashMap.<init>() to keep the first real app path moving") !=
+             std::string::npos,
+         "expected LinkedHashMap constructor stub diagnostic in first app start json");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-instance+invoke-direct\"") !=
+             std::string::npos,
+         "expected constructor object operation in LinkedHashMap checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Ljava/util/LinkedHashMap;\"") !=
+             std::string::npos,
+         "expected LinkedHashMap object descriptor in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after LinkedHashMap constructor stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesLinkedHashSetConstructorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-linkedhashset", true,
+      {{"classes.dex",
+        BuildInvokeStaticLinkedHashSetLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/util/LinkedHashSet;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected LinkedHashSet lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after LinkedHashSet constructor stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after LinkedHashSet constructor helper");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed LinkedHashSet.<init>() to keep the first real app path moving") !=
+             std::string::npos,
+         "expected LinkedHashSet constructor stub diagnostic in first app start json");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-instance+invoke-direct\"") !=
+             std::string::npos,
+         "expected constructor object operation in LinkedHashSet checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Ljava/util/LinkedHashSet;\"") !=
+             std::string::npos,
+         "expected LinkedHashSet object descriptor in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after LinkedHashSet constructor stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesArrayListConstructorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-arraylist", true,
+      {{"classes.dex",
+        BuildInvokeStaticArrayListLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/util/ArrayList;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected ArrayList lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after ArrayList constructor stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after ArrayList constructor helper");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed ArrayList.<init>() to keep the first real app path moving") !=
+             std::string::npos,
+         "expected ArrayList constructor stub diagnostic in first app start json");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-instance+invoke-direct\"") !=
+             std::string::npos,
+         "expected constructor object operation in ArrayList checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Ljava/util/ArrayList;\"") !=
+             std::string::npos,
+         "expected ArrayList object descriptor in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after ArrayList constructor stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesArrayListCapacityConstructorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-arraylist-capacity", true,
+      {{"classes.dex",
+        BuildInvokeStaticArrayListCapacityLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/util/ArrayList;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected ArrayList capacity lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after ArrayList(int) constructor stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after ArrayList(int) constructor helper");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed ArrayList.<init>(int) to keep the first real app path moving") !=
+             std::string::npos,
+         "expected ArrayList(int) constructor stub diagnostic in first app start json");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-instance+invoke-direct\"") !=
+             std::string::npos,
+         "expected constructor object operation in ArrayList(int) checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Ljava/util/ArrayList;\"") !=
+             std::string::npos,
+         "expected ArrayList object descriptor in ArrayList(int) checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after ArrayList(int) constructor stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIterableIteratorBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-iterable-iterator", true,
+      {{"classes.dex",
+        BuildInvokeInterfaceIterableIteratorLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/util/LinkedHashSet;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected Iterable.iterator lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health after Iterable.iterator stub");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after Iterable.iterator helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidIterableIterator\"") !=
+             std::string::npos,
+         "expected helper name in Iterable.iterator checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed Iterable.iterator() with a placeholder Iterator object") !=
+             std::string::npos,
+         "expected Iterable.iterator stub diagnostic in first app start json");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected Iterable.iterator helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to fall back to the explicit ActivityThread blocker after Iterable.iterator stub");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlinePackedSwitchMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-packed-switch", true,
+      {{"classes.dex",
+        BuildInvokeStaticPackedSwitchLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline packed-switch lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline packed-switch checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline packed-switch helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidPackedSwitch\"") !=
+             std::string::npos,
+         "expected helper name in inline packed-switch checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected packed-switch helper to keep the lifecycle bytecode path returned");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected packed-switch helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineSingletonListMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-singleton-list", true,
+      {{"classes.dex",
+        BuildInvokeStaticSingletonListLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/StringWriter;",
+             "Ljava/util/List;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline singletonList lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline singletonList checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline singletonList helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidSingletonList\"") !=
+             std::string::npos,
+         "expected helper name in inline singletonList checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed Collections.singletonList(Object) with a placeholder single-element List object") !=
+             std::string::npos,
+         "expected singletonList stub diagnostic in checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"invoke-static+singleton-list\"") !=
+             std::string::npos,
+         "expected singletonList object state in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected singletonList helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointMaterializesSingletonListArgument() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-singleton-list-placeholder",
+      true,
+      {{"classes.dex",
+        BuildDexPayloadWithEntrypoint(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/util/List;"},
+            "Lcom/example/launchapk/MainActivity;", "onCreate",
+            {0x1071u, 0x0001u, 0x0000u, 0x010cu, 0x1012u, 0x000fu}, "I", 2u,
+            {}, 0u, 0u,
+            {DexReferencedMethodFixture{
+                .class_descriptor = "Ljava/util/Collections;",
+                .method_name = "singletonList",
+                .return_type_descriptor = "Ljava/util/List;",
+                .parameter_type_descriptors = {"Ljava/lang/Object;"}}},
+            {}, {})}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected singletonList placeholder lifecycle checkpoint command to succeed");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe materialized a placeholder singletonList argument to keep the first real app path moving") !=
+             std::string::npos,
+         "expected placeholder singletonList argument diagnostic in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected placeholder singletonList helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected placeholder singletonList checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineListSizeMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-list-size", true,
+      {{"classes.dex",
+        BuildInvokeInterfaceListSizeLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/StringWriter;",
+             "Ljava/util/List;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline list-size lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline list-size checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline list-size helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidListSize\"") !=
+             std::string::npos,
+         "expected helper name in inline list-size checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed List.size() from placeholder list state") !=
+             std::string::npos,
+         "expected List.size stub diagnostic in checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"invoke-interface+list-size\"") !=
+             std::string::npos,
+         "expected list-size object state in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected list-size helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected list-size checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineListIteratorMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-list-iterator", true,
+      {{"classes.dex",
+        BuildInvokeInterfaceListIteratorLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/StringWriter;",
+             "Ljava/util/Iterator;",
+             "Ljava/util/List;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline list-iterator lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline list-iterator checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline list-iterator helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidListIterator\"") !=
+             std::string::npos,
+         "expected helper name in inline list-iterator checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed List.iterator() with a placeholder Iterator object bound to placeholder list state") !=
+             std::string::npos,
+         "expected List.iterator stub diagnostic in checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed Iterator.next() from placeholder collection state") !=
+             std::string::npos,
+         "expected Iterator.next stub diagnostic in checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"invoke-interface+iterator-next\"") !=
+             std::string::npos,
+         "expected iterator-next object state in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected list-iterator helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected list-iterator checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineConst16Method() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-const16", true,
+      {{"classes.dex",
+        BuildInvokeStaticConst16LifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline const16 lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline const16 checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline const16 helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidReturnConst16\"") !=
+             std::string::npos,
+         "expected helper name in inline const16 checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state in inline const16 checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected inline const16 helper result to propagate to return value");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineNewArrayMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-new-array", true,
+      {{"classes.dex",
+        BuildInvokeStaticNewArrayLifecycleOnCreateDexPayload(
+            {"[Ljava/lang/String;",
+             "Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline new-array lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline new-array checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline new-array helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidBuildStringArray\"") !=
+             std::string::npos,
+         "expected helper name in inline new-array checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"new-array\"") !=
+             std::string::npos,
+         "expected new-array object operation in checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"[Ljava/lang/String;\"") !=
+             std::string::npos,
+         "expected array descriptor in inline new-array checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state in inline new-array checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineAgetObjectMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-aget-object", true,
+      {{"classes.dex",
+        BuildInvokeStaticAgetObjectLifecycleOnCreateDexPayload(
+            {"[Ljava/lang/String;",
+             "Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/lang/String;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline aget-object lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline aget-object checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline aget-object helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidReadStringArrayElement\"") !=
+             std::string::npos,
+         "expected helper name in inline aget-object checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"aget-object\"") !=
+             std::string::npos,
+         "expected aget-object operation in checkpoint");
+  Expect(output.find("\"object_class_descriptor\": "
+                     "\"Ljava/lang/String;\"") !=
+             std::string::npos,
+         "expected String element descriptor in inline aget-object checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state in inline aget-object checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointMaterializesPlaceholderAgetObjectArrayLength() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-aget-object-placeholder-array",
+      true,
+      {{"classes.dex",
+        BuildInvokeStaticAgetObjectPlaceholderFieldLifecycleOnCreateDexPayload(
+            {"[Ljava/lang/String;",
+             "Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/ArrayHolder;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/lang/String;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected placeholder-array aget-object lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for placeholder-array aget-object checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after placeholder-array aget-object helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidReadPlaceholderArrayElement\"") !=
+             std::string::npos,
+         "expected helper name in placeholder-array aget-object checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe materialized a deterministic placeholder object-array length") !=
+             std::string::npos,
+         "expected placeholder array length materialization diagnostic in checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"aget-object\"") !=
+             std::string::npos,
+         "expected aget-object operation in placeholder-array checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state in placeholder-array aget-object checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineCheckCastMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-check-cast", true,
+      {{"classes.dex",
+        BuildInvokeStaticCheckCastLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/StringWriter;",
+             "Ljava/lang/Object;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline check-cast lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline check-cast checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline check-cast helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidCheckCastWriter\"") !=
+             std::string::npos,
+         "expected helper name in inline check-cast checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"check-cast\"") !=
+             std::string::npos,
+         "expected check-cast object operation in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineInstanceOfMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-instance-of", true,
+      {{"classes.dex",
+        BuildInvokeStaticInstanceOfLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/StringWriter;",
+             "Ljava/lang/Object;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline instance-of lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline instance-of checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline instance-of helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidInstanceOfWriter\"") !=
+             std::string::npos,
+         "expected helper name in inline instance-of checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"instance-of\"") !=
+             std::string::npos,
+         "expected instance-of object operation in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected instance-of helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineAtomicReferenceGetAndSetMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-atomicreference-getandset",
+      true,
+      {{"classes.dex",
+        BuildInvokeStaticAtomicReferenceGetAndSetLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/StringWriter;",
+             "Ljava/util/concurrent/atomic/AtomicReference;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline AtomicReference.getAndSet lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline AtomicReference.getAndSet checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline AtomicReference.getAndSet helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidSwapAtomicReference\"") !=
+             std::string::npos,
+         "expected helper name in inline AtomicReference.getAndSet checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed AtomicReference.getAndSet(Object) with a placeholder previous value and stored the new object") !=
+             std::string::npos,
+         "expected AtomicReference.getAndSet stub diagnostic in checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"invoke-virtual+iget-object+iput-object\"") !=
+             std::string::npos,
+         "expected AtomicReference object-register-field operation in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected AtomicReference helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineAtomicReferenceSetMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-atomicreference-set", true,
+      {{"classes.dex",
+        BuildInvokeStaticAtomicReferenceSetLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/StringWriter;",
+             "Ljava/util/concurrent/atomic/AtomicReference;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline AtomicReference.set lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline AtomicReference.set checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline AtomicReference.set helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidStoreAtomicReference\"") !=
+             std::string::npos,
+         "expected helper name in inline AtomicReference.set checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed AtomicReference.set(Object) and stored the new object") !=
+             std::string::npos,
+         "expected AtomicReference.set stub diagnostic in checkpoint");
+  Expect(output.find("\"object_register_field_operation\": "
+                     "\"invoke-virtual+iput-object\"") !=
+             std::string::npos,
+         "expected AtomicReference.set object-register-field operation in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected AtomicReference.set helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineSystemArrayCopyMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-system-arraycopy", true,
+      {{"classes.dex",
+        BuildInvokeStaticSystemArrayCopyLifecycleOnCreateDexPayload(
+            {"[Ljava/lang/String;", "Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;", "Ljava/lang/String;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline System.arraycopy lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline System.arraycopy checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline System.arraycopy helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidArrayCopy\"") != std::string::npos,
+         "expected helper name in inline System.arraycopy checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed System.arraycopy(Object, int, Object, int, int) with deterministic placeholder array copies") !=
+             std::string::npos,
+         "expected System.arraycopy stub diagnostic in checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected System.arraycopy helper to keep the lifecycle bytecode path returned");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected System.arraycopy helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineReaderReadMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-reader-read", true,
+      {{"classes.dex",
+        BuildInvokeStaticReaderReadLifecycleOnCreateDexPayload(
+            {"[C",
+             "Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/Reader;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline reader-read lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline reader-read checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline reader-read helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidReadChars\"") !=
+             std::string::npos,
+         "expected helper name in inline reader-read checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed Reader.read(char[]) to keep the first real app path moving") !=
+             std::string::npos,
+         "expected Reader.read stub diagnostic in checkpoint");
+  Expect(output.find("\"returned_value\": \"-1\"") != std::string::npos,
+         "expected reader-read helper result to propagate EOF sentinel");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineStringWriterToStringMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-stringwriter-tostring", true,
+      {{"classes.dex",
+        BuildInvokeStaticStringWriterToStringLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/StringWriter;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline StringWriter.toString lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline StringWriter.toString checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline StringWriter.toString helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidStringify\"") !=
+             std::string::npos,
+         "expected helper name in inline StringWriter.toString checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed StringWriter.toString() with a placeholder String object") !=
+             std::string::npos,
+         "expected StringWriter.toString stub diagnostic in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineCloseableCloseMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-closeable-close", true,
+      {{"classes.dex",
+        BuildInvokeStaticCloseableCloseLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/Closeable;",
+             "Ljava/io/StringWriter;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline Closeable.close lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline Closeable.close checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline Closeable.close helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidCloseWriter\"") !=
+             std::string::npos,
+         "expected helper name in inline Closeable.close checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed Closeable.close() to keep the first real app path moving") !=
+             std::string::npos,
+         "expected Closeable.close stub diagnostic in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected Closeable.close helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineStringGetBytesMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-string-getbytes", true,
+      {{"classes.dex",
+        BuildInvokeStaticStringGetBytesLifecycleOnCreateDexPayload(
+            {"[B",
+             "Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/lang/String;",
+             "Ljava/nio/charset/Charset;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline String.getBytes lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline String.getBytes checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline String.getBytes helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidStringGetBytes\"") !=
+             std::string::npos,
+         "expected helper name in inline String.getBytes checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed String.getBytes(Charset) with a placeholder byte array object") !=
+             std::string::npos,
+         "expected String.getBytes stub diagnostic in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineStringGetBytesArrayLengthMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-string-getbytes-array-length",
+      true,
+      {{"classes.dex",
+        BuildInvokeStaticStringGetBytesArrayLengthLifecycleOnCreateDexPayload(
+            {"[B",
+             "Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/lang/String;",
+             "Ljava/nio/charset/Charset;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline String.getBytes array-length lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline String.getBytes array-length checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline String.getBytes array-length helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidStringGetBytesLength\"") !=
+             std::string::npos,
+         "expected helper name in inline String.getBytes array-length checkpoint");
+  Expect(output.find("\"last_executed_opcode\": \"return\"") !=
+             std::string::npos,
+         "expected return to remain the last executed opcode after array-length");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected placeholder byte-array length to propagate to return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineStringToCharArrayLengthMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-string-tochararray-array-length",
+      true,
+      {{"classes.dex",
+        BuildInvokeStaticStringToCharArrayLengthLifecycleOnCreateDexPayload(
+            {"[C",
+             "Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/lang/String;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline String.toCharArray array-length lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline String.toCharArray array-length checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline String.toCharArray array-length helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidStringToCharArrayLength\"") !=
+             std::string::npos,
+         "expected helper name in inline String.toCharArray array-length checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed String.toCharArray() with a placeholder char array object") !=
+             std::string::npos,
+         "expected String.toCharArray stub diagnostic in checkpoint");
+  Expect(output.find("\"last_executed_opcode\": \"return\"") !=
+             std::string::npos,
+         "expected return to remain the last executed opcode after char-array length");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected placeholder char-array length to propagate to return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineIntToLongMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-int-to-long", true,
+      {{"classes.dex",
+        BuildInvokeStaticIntToLongLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline int-to-long lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline int-to-long checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline int-to-long helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidIntToLong\"") !=
+             std::string::npos,
+         "expected helper name in inline int-to-long checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineConstWide16Method() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-const-wide16", true,
+      {{"classes.dex",
+        BuildInvokeStaticConstWide16LifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline const-wide/16 lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline const-wide/16 checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline const-wide/16 helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidConstWide16\"") !=
+             std::string::npos,
+         "expected helper name in inline const-wide/16 checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected inline const-wide/16 helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineCmpLongMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-cmp-long", true,
+      {{"classes.dex",
+        BuildInvokeStaticCmpLongLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline cmp-long lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline cmp-long checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline cmp-long helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidCmpLong\"") !=
+             std::string::npos,
+         "expected helper name in inline cmp-long checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected inline cmp-long helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineInvokeStaticRangeMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-invoke-static-range", true,
+      {{"classes.dex",
+        BuildInvokeStaticRangeLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline invoke-static/range lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline invoke-static/range checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected outer invoke-static state after inline invoke-static/range helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidInvokeRange\"") !=
+             std::string::npos,
+         "expected helper name in inline invoke-static/range checkpoint");
+  Expect(output.find("\"invoked_method_name\": "
+                     "\"linuxoidRangeCallee\"") !=
+             std::string::npos,
+         "expected nested invoke-static/range callee name in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected invoke-static/range helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineThreadCurrentThreadMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-thread-currentthread", true,
+      {{"classes.dex",
+        BuildInvokeStaticThreadCurrentThreadLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/lang/Thread;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline Thread.currentThread lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline Thread.currentThread checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline Thread.currentThread helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidThreadCurrentThread\"") !=
+             std::string::npos,
+         "expected helper name in inline Thread.currentThread checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed java.lang.Thread.currentThread() with a placeholder Thread object") !=
+             std::string::npos,
+         "expected Thread.currentThread stub diagnostic in checkpoint");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineThreadGetIdMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-thread-getid", true,
+      {{"classes.dex",
+        BuildInvokeStaticThreadGetIdLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/lang/Thread;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline Thread.getId lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline Thread.getId checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline Thread.getId helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidThreadGetId\"") !=
+             std::string::npos,
+         "expected helper name in inline Thread.getId checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed java.lang.Thread.getId() with a deterministic placeholder thread id") !=
+             std::string::npos,
+         "expected Thread.getId stub diagnostic in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected Thread.getId helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineOrLongMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-or-long", true,
+      {{"classes.dex",
+        BuildInvokeStaticOrLongLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline or-long lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline or-long checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline or-long helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidOrLong\"") !=
+             std::string::npos,
+         "expected helper name in inline or-long checkpoint");
+  Expect(output.find("\"returned_value\": \"3\"") != std::string::npos,
+         "expected inline or-long helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineSubLongMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-sub-long", true,
+      {{"classes.dex",
+        BuildInvokeStaticSubLongLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline sub-long lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline sub-long checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline sub-long helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidSubLong\"") !=
+             std::string::npos,
+         "expected helper name in inline sub-long checkpoint");
+  Expect(output.find("\"returned_value\": \"3\"") != std::string::npos,
+         "expected inline sub-long helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineSubLong2AddrMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-sub-long-2addr", true,
+      {{"classes.dex",
+        BuildInvokeStaticSubLong2AddrLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline sub-long/2addr lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline sub-long/2addr checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline sub-long/2addr helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidSubLong2Addr\"") !=
+             std::string::npos,
+         "expected helper name in inline sub-long/2addr checkpoint");
+  Expect(output.find("\"returned_value\": \"3\"") != std::string::npos,
+         "expected inline sub-long/2addr helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineAddLong2AddrMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-add-long-2addr", true,
+      {{"classes.dex",
+        BuildInvokeStaticAddLong2AddrLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline add-long/2addr lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline add-long/2addr checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline add-long/2addr helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidAddLong2Addr\"") !=
+             std::string::npos,
+         "expected helper name in inline add-long/2addr checkpoint");
+  Expect(output.find("\"returned_value\": \"3\"") != std::string::npos,
+         "expected inline add-long/2addr helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineAddInt2AddrMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-add-int-2addr", true,
+      {{"classes.dex",
+        BuildInvokeStaticAddInt2AddrLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline add-int/2addr lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline add-int/2addr checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline add-int/2addr helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidAddInt2Addr\"") !=
+             std::string::npos,
+         "expected helper name in inline add-int/2addr checkpoint");
+  Expect(output.find("\"returned_value\": \"3\"") != std::string::npos,
+         "expected inline add-int/2addr helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineSubInt2AddrMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-sub-int-2addr", true,
+      {{"classes.dex",
+        BuildInvokeStaticSubInt2AddrLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline sub-int/2addr lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline sub-int/2addr checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline sub-int/2addr helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidSubInt2Addr\"") !=
+             std::string::npos,
+         "expected helper name in inline sub-int/2addr checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected inline sub-int/2addr helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineAddIntMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-add-int", true,
+      {{"classes.dex",
+        BuildInvokeStaticAddIntLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline add-int lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline add-int checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline add-int helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidAddInt\"") !=
+             std::string::npos,
+         "expected helper name in inline add-int checkpoint");
+  Expect(output.find("\"returned_value\": \"3\"") != std::string::npos,
+         "expected inline add-int helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineMoveMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-move", true,
+      {{"classes.dex",
+        BuildInvokeStaticMoveLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline move lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline move checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline move helper");
+  Expect(output.find("\"app_invoked_method_name\": \"linuxoidMoveInt\"") !=
+             std::string::npos,
+         "expected helper name in inline move checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected inline move helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineSubIntMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-sub-int", true,
+      {{"classes.dex",
+        BuildInvokeStaticSubIntLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline sub-int lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline sub-int checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline sub-int helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidSubInt\"") !=
+             std::string::npos,
+         "expected helper name in inline sub-int checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected inline sub-int helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineRsubIntLit16Method() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-rsub-int-lit16", true,
+      {{"classes.dex",
+        BuildInvokeStaticRsubIntLit16LifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline rsub-int/lit16 lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline rsub-int/lit16 checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline rsub-int/lit16 helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidRsubIntLit16\"") !=
+             std::string::npos,
+         "expected helper name in inline rsub-int/lit16 checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected inline rsub-int/lit16 helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesInlineMathMinMethod() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-inline-math-min", true,
+      {{"classes.dex",
+        BuildInvokeStaticMathMinLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/LayoutManager;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected inline Math.min lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for inline Math.min checkpoint");
+  Expect(output.find("\"app_method_invocation_state\": "
+                     "\"invoke-static-returned\"") != std::string::npos,
+         "expected invoke-static-returned state after inline Math.min helper");
+  Expect(output.find("\"app_invoked_method_name\": "
+                     "\"linuxoidMathMin\"") !=
+             std::string::npos,
+         "expected helper name in inline Math.min checkpoint");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe stubbed java.lang.Math.min(int, int) with deterministic integer math") !=
+             std::string::npos,
+         "expected Math.min stub diagnostic in checkpoint");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected inline Math.min helper result to propagate return value");
+  Expect(output.find("\"blocking_reason\": "
+                     "\"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected checkpoint to stay honest about the remaining ActivityThread blocker");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesConstStringLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-const-string", true,
+      {{"classes.dex",
+        BuildConstStringLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected const-string lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for const-string checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after const-string execution");
+  Expect(output.find("\"first_executed_opcode\": \"const-string\"") !=
+             std::string::npos,
+         "expected const-string to be the first executed opcode");
+  Expect(output.find("\"last_executed_opcode\": \"return\"") !=
+             std::string::npos,
+         "expected return to remain the last executed opcode after const-string");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected const-string lifecycle method to reach return");
+  Expect(output.find(
+             "Self-Healing Android Device DEX probe materialized a placeholder java.lang.String for const-string") !=
+             std::string::npos,
+         "expected const-string placeholder diagnostic in first app start json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIfNezLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-if-nez", true,
+      {{"classes.dex",
+        BuildIfNezLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected if-nez lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for if-nez checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after if-nez execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected if-nez lifecycle method to reach return");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected if-nez branch to land on return-void");
+  Expect(output.find("unsupported-dex-opcode:opcode-0xff") ==
+             std::string::npos,
+         "expected if-nez branch to skip the unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIfLtzLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-if-ltz", true,
+      {{"classes.dex",
+        BuildIfLtzLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected if-ltz lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for if-ltz checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after if-ltz execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected if-ltz lifecycle method to reach return");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected if-ltz branch to land on return-void");
+  Expect(output.find("unsupported-dex-opcode:opcode-0xff") ==
+             std::string::npos,
+         "expected if-ltz branch to skip the unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIfGtzLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-if-gtz", true,
+      {{"classes.dex",
+        BuildIfGtzLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected if-gtz lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for if-gtz checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after if-gtz execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected if-gtz lifecycle method to reach return");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected if-gtz branch to land on return-void");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "expected if-gtz branch to skip the unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIfLtLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-if-lt", true,
+      {{"classes.dex",
+        BuildIfLtLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected if-lt lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for if-lt checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after if-lt execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected if-lt lifecycle method to reach return");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected if-lt branch to land on return-void");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "expected if-lt branch to skip the unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIfNeLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-if-ne", true,
+      {{"classes.dex",
+        BuildIfNeLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected if-ne lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for if-ne checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after if-ne execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected if-ne lifecycle method to reach return");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected if-ne branch to land on return-void");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "expected if-ne branch to skip the unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIfNeObjectLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-if-ne-object", true,
+      {{"classes.dex",
+        BuildIfNeObjectLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Ljava/io/StringWriter;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected if-ne object lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for if-ne object checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after if-ne object execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected if-ne object lifecycle method to reach return");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected if-ne object branch to land on return-void");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "expected if-ne object branch to skip the unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIfGeLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-if-ge", true,
+      {{"classes.dex",
+        BuildIfGeLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected if-ge lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for if-ge checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after if-ge execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected if-ge lifecycle method to reach return");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected if-ge branch to land on return-void");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "expected if-ge branch to skip the unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIfGtLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-if-gt", true,
+      {{"classes.dex",
+        BuildIfGtLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected if-gt lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for if-gt checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after if-gt execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected if-gt lifecycle method to reach return");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected if-gt branch to land on return-void");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "expected if-gt branch to skip the unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesAndLong2AddrLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-and-long-2addr", true,
+      {{"classes.dex",
+        BuildAndLong2AddrLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected and-long/2addr lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for and-long/2addr checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after and-long/2addr execution");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected and-long/2addr result to propagate return value");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected and-long/2addr lifecycle method to reach return");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "did not expect unsupported opcode blocker in and-long/2addr checkpoint");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesLongToIntLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-long-to-int", true,
+      {{"classes.dex",
+        BuildLongToIntLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected long-to-int lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for long-to-int checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after long-to-int execution");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected long-to-int result to propagate return value");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected long-to-int lifecycle method to reach return");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "did not expect unsupported opcode blocker in long-to-int checkpoint");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesGotoLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-goto", true,
+      {{"classes.dex",
+        BuildGotoLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected goto lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for goto checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after goto execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected goto lifecycle method to reach return");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected goto to land on return-void");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "expected goto to skip the unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesSgetBooleanLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-sget-boolean", true,
+      {{"classes.dex",
+        BuildSgetBooleanLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/Flags;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected sget-boolean lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for sget-boolean checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after sget-boolean execution");
+  Expect(output.find("\"first_executed_opcode\": \"sget-boolean\"") !=
+             std::string::npos,
+         "expected sget-boolean to be the first executed opcode");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected return-void after sget-boolean execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected sget-boolean lifecycle method to reach return");
+  Expect(output.find("unsupported-dex-opcode:opcode-0x63") ==
+             std::string::npos,
+         "expected sget-boolean path to advance beyond the old unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIgetBooleanLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-iget-boolean", true,
+      {{"classes.dex",
+        BuildIgetBooleanLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/Flags;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected iget-boolean lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for iget-boolean checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after iget-boolean execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected iget-boolean lifecycle method to reach return");
+  Expect(output.find("unsupported-dex-opcode") == std::string::npos,
+         "did not expect unsupported opcode blocker in iget-boolean checkpoint");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIgetWideLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-iget-wide", true,
+      {{"classes.dex",
+        BuildIgetWideLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Lcom/example/launchapk/WideCarrier;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected iget-wide lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for iget-wide checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after iget-wide execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected iget-wide lifecycle method to reach return");
+  Expect(output.find("unsupported-dex-opcode:opcode-0x53") ==
+             std::string::npos,
+         "expected iget-wide path to advance beyond the old unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesIputWideLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-iput-wide", true,
+      {{"classes.dex",
+        BuildIputWideLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/WideCarrier;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected iput-wide lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for iput-wide checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after iput-wide execution");
+  Expect(output.find("\"returned_value\": \"1\"") != std::string::npos,
+         "expected iput-wide result to propagate return value");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected iput-wide lifecycle method to reach return");
+  Expect(output.find("unsupported-dex-opcode:opcode-0x5a") ==
+             std::string::npos,
+         "expected iput-wide path to advance beyond the old unsupported opcode boundary");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointExecutesSputBooleanLifecycleStep() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-sput-boolean", true,
+      {{"classes.dex",
+        BuildSputBooleanLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/Flags;",
+             "Lcom/example/launchapk/MainActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected sput-boolean lifecycle checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for sput-boolean checkpoint");
+  Expect(output.find("\"bytecode_execution_state\": \"returned\"") !=
+             std::string::npos,
+         "expected returned execution state after sput-boolean execution");
+  Expect(output.find("\"first_executed_opcode\": \"const/4\"") !=
+             std::string::npos,
+         "expected const/4 to seed the sput-boolean path");
+  Expect(output.find("\"last_executed_opcode\": \"return-void\"") !=
+             std::string::npos,
+         "expected return-void after sput-boolean execution");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected sput-boolean lifecycle method to reach return");
+  Expect(output.find("unsupported-dex-opcode:opcode-0x6a") ==
+             std::string::npos,
+         "expected sput-boolean path to advance beyond the old unsupported opcode boundary");
+  Expect(output.find("unsupported-dex-opcode:opcode-0xff") ==
+             std::string::npos,
+         "expected sput-boolean write and readback to skip the fallback unsupported opcode");
+
+  fs::remove_all(fixture.launch.root);
+}
+
 void TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary() {
   namespace fs = std::filesystem;
   const auto fixture = CreateJavaKotlinApkProofFixture(
@@ -10995,6 +16495,60 @@ void TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary() {
              "\"extend_minimal_dex_interpreter_for_opcode_0xff\"") !=
              std::string::npos,
          "expected actionable unsupported opcode next blocker in first app start json");
+
+  fs::remove_all(fixture.launch.root);
+}
+
+void TestLaunchApkFirstAppStartCheckpointCrossesNestedComponentActivityBoundary() {
+  namespace fs = std::filesystem;
+  const auto fixture = CreateJavaKotlinApkProofFixture(
+      "linuxoid-first-app-start-checkpoint-nested-component-activity", true,
+      {{"classes.dex",
+        BuildNestedFrameworkBoundaryLifecycleOnCreateDexPayload(
+            {"Lcom/example/launchapk/App;",
+             "Lcom/example/launchapk/MainActivity;",
+             "Landroidx/activity/ComponentActivity;"},
+            "Lcom/example/launchapk/MainActivity;")}});
+  const ScopedEnvironmentVariable runtime_root_override(
+      "LINUXOID_ART_RUNTIME_ROOT_OVERRIDE", fixture.runtime_root.string());
+  const fs::path compatctl = ResolveBuildDirFromTestBinary() / "compatctl";
+
+  int exit_code = 0;
+  const std::string output = ReadCommandOutput(
+      compatctl.string() + " launch-apk --first-app-start-proof " +
+          fixture.launch.apk_path.string() + " " +
+          fixture.launch.staging_root.string(),
+      &exit_code);
+
+  Expect(exit_code == 0,
+         "expected nested ComponentActivity checkpoint command to succeed");
+  Expect(output.find("\"first_app_start_health\": \"ready\"") !=
+             std::string::npos,
+         "expected ready first app start health for nested ComponentActivity checkpoint");
+  Expect(output.find("\"invoked_method_class_descriptor\": "
+                     "\"Landroidx/activity/ComponentActivity;\"") !=
+             std::string::npos,
+         "expected nested ComponentActivity framework boundary class");
+  Expect(output.find("\"invoked_method_name\": \"onCreate\"") !=
+             std::string::npos,
+         "expected nested ComponentActivity framework boundary method");
+  Expect(output.find(
+             "\"invoked_method_signature\": \"(Landroid/os/Bundle;)V\"") !=
+             std::string::npos,
+         "expected nested ComponentActivity framework boundary signature");
+  Expect(output.find("\"framework_boundary_state\": \"framework-stubbed\"") !=
+             std::string::npos,
+         "expected nested ComponentActivity boundary to be crossed with explicit stubs");
+  Expect(output.find("\"framework_boundary_reason\": "
+                     "\"placeholder_object_field_materialized_for_minimal_checkpoint\"") !=
+             std::string::npos,
+         "expected first stubbed nested boundary reason in checkpoint json");
+  Expect(output.find("\"reached_return\": true") != std::string::npos,
+         "expected nested ComponentActivity seam to return to the caller");
+  Expect(output.find(
+             "\"blocking_reason\": \"needs-real-activitythread-context\"") !=
+             std::string::npos,
+         "expected post-boundary blocker to remain the real ActivityThread seam");
 
   fs::remove_all(fixture.launch.root);
 }
@@ -11116,7 +16670,7 @@ void TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid() {
 
 void TestLaunchApkFirstAppStartProofTargetsKeyboardSettingsActivityFixture() {
   namespace fs = std::filesystem;
-  const auto fixture = CreateNativeApkLaunchFixtureWithManifest(
+  auto fixture = CreateNativeApkLaunchFixtureWithManifest(
       "linuxoid-keyboard-managed-activity-start",
       BuildKeyboardSettingsActivityManifestXml(), true,
       {{"classes.dex",
@@ -11124,6 +16678,10 @@ void TestLaunchApkFirstAppStartProofTargetsKeyboardSettingsActivityFixture() {
             {"Lorg/futo/inputmethod/latin/App;",
              "Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;"},
             "Lorg/futo/inputmethod/latin/uix/settings/SettingsActivity;")}});
+  fixture.staging_root =
+      fixture.root /
+      "linuxoid/with/a/keyboard-shaped/staging/root/that/keeps/the/"
+      "binder-transport-payloads-honest/staging";
   const auto runtime_root =
       CreateArtRuntimeRootFixture(fixture.root / "art-runtime");
   const ScopedEnvironmentVariable runtime_root_override(
@@ -15855,7 +21413,74 @@ int main() {
     TestLaunchApkJavaProofHealsMalformedFiles();
     TestLaunchApkFirstAppStartCheckpointExecutesFirstDexInstruction();
     TestLaunchApkFirstAppStartCheckpointReportsUnsupportedConstructorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesInvokeStaticMethod();
+    TestLaunchApkFirstAppStartCheckpointReportsUnsupportedInvokeStaticCallee();
+    TestLaunchApkFirstAppStartCheckpointReportsMissingCodeItemInvokeBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineInvokeDirectConstructorMethod();
+    TestLaunchApkFirstAppStartCheckpointExecutesInputStreamReaderConstructorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesBufferedReaderConstructorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesStringWriterConstructorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesHashMapConstructorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesLinkedHashMapConstructorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesLinkedHashSetConstructorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesArrayListConstructorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesArrayListCapacityConstructorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesIterableIteratorBoundary();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlinePackedSwitchMethod();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineSingletonListMethod();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineListSizeMethod();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineListIteratorMethod();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineConst16Method();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineNewArrayMethod();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineAgetObjectMethod();
+    TestLaunchApkFirstAppStartCheckpointMaterializesPlaceholderAgetObjectArrayLength();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineCheckCastMethod();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineInstanceOfMethod();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineAtomicReferenceGetAndSetMethod();
+    TestLaunchApkFirstAppStartCheckpointExecutesInlineAtomicReferenceSetMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineSystemArrayCopyMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineReaderReadMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineStringWriterToStringMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineCloseableCloseMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineStringGetBytesMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineStringGetBytesArrayLengthMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineStringToCharArrayLengthMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineIntToLongMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineConstWide16Method();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineCmpLongMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineInvokeStaticRangeMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineThreadCurrentThreadMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineThreadGetIdMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineOrLongMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineSubLongMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineSubLong2AddrMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineAddLong2AddrMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineAddInt2AddrMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineSubInt2AddrMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineAddIntMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineMoveMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineSubIntMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineRsubIntLit16Method();
+  TestLaunchApkFirstAppStartCheckpointExecutesInlineMathMinMethod();
+  TestLaunchApkFirstAppStartCheckpointExecutesConstStringLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIfNezLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIfLtzLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIfGtzLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIfLtLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIfNeLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIfNeObjectLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIfGeLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIfGtLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesAndLong2AddrLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesLongToIntLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesGotoLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesSgetBooleanLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIgetBooleanLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIgetWideLifecycleStep();
+  TestLaunchApkFirstAppStartCheckpointExecutesIputWideLifecycleStep();
+    TestLaunchApkFirstAppStartCheckpointExecutesSputBooleanLifecycleStep();
     TestLaunchApkFirstAppStartCheckpointReportsUnsupportedOpcodeBoundary();
+    TestLaunchApkFirstAppStartCheckpointCrossesNestedComponentActivityBoundary();
     TestLaunchApkFirstAppStartCheckpointBlocksWithoutRuntimeRoot();
     TestLaunchApkFirstAppStartCheckpointReportsUpstreamNativeLoadBlocker();
     TestLaunchApkFirstAppStartCheckpointBlocksWhenDexInvalid();
